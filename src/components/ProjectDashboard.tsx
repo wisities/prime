@@ -36,6 +36,7 @@ import {
   Download,
   Cloud,
   HardDrive,
+  Users,
 } from 'lucide-react';
 
 interface ProjectDashboardProps {
@@ -45,6 +46,7 @@ interface ProjectDashboardProps {
   onUpdateProjects: (updated: BiddingProject[]) => void;
   onOpenTorImporterForProject: (projectId: string) => void;
   onResetProjectsToDefault: () => void;
+  onOpenUserManagement?: () => void;
 }
 
 export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
@@ -54,6 +56,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   onUpdateProjects,
   onOpenTorImporterForProject,
   onResetProjectsToDefault,
+  onOpenUserManagement,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | ProposalStatus>('all');
@@ -514,6 +517,17 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
           >
             <Save size={16} /> สำรองข้อมูล (JSON)
           </button>
+          {onOpenUserManagement && (
+            <button
+              type="button"
+              className="btn btn-secondary hero-btn"
+              onClick={onOpenUserManagement}
+              title="จัดการรายชื่อ Gmail ที่ได้รับสิทธิ์เข้าใช้งานระบบ"
+              style={{ backgroundColor: 'rgba(241, 184, 68, 0.2)', borderColor: 'rgba(241, 184, 68, 0.4)', color: '#FEF08A' }}
+            >
+              <Users size={16} /> จัดการสิทธิ์เข้าใช้งาน
+            </button>
+          )}
           <button
             type="button"
             className="btn btn-secondary hero-btn"

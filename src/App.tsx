@@ -570,6 +570,7 @@ export const App: React.FC = () => {
           onUpdateProjects={handleUpdateProjects}
           onOpenTorImporterForProject={handleOpenTorImporterForProject}
           onResetProjectsToDefault={handleResetProjectsToDefault}
+          onOpenUserManagement={() => setShowUserMgmtModal(true)}
         />
       ) : (
         /* PROPOSAL EDITOR VIEW */
@@ -795,35 +796,35 @@ export const App: React.FC = () => {
               />
             )}
           </main>
-
-          {/* Modals */}
-          <AuditModal
-            data={proposal}
-            isOpen={showAuditModal}
-            onClose={() => setShowAuditModal(false)}
-          />
-
-          <LiveDocxPreviewModal
-            data={proposal}
-            isOpen={showPreviewModal}
-            onClose={() => setShowPreviewModal(false)}
-            isExporting={isExporting}
-            onExport={handleExportDocx}
-          />
-
-          <TorImportModal
-            isOpen={showTorImportModal}
-            onClose={() => setShowTorImportModal(false)}
-            onImport={handleImportTorScopes}
-          />
-
-          <UserManagementModal
-            isOpen={showUserMgmtModal}
-            onClose={() => setShowUserMgmtModal(false)}
-            currentUserEmail={currentUser?.email}
-          />
         </div>
       )}
+
+      {/* Global Modals (Accessible in both Dashboard and Editor views) */}
+      <AuditModal
+        data={proposal}
+        isOpen={showAuditModal}
+        onClose={() => setShowAuditModal(false)}
+      />
+
+      <LiveDocxPreviewModal
+        data={proposal}
+        isOpen={showPreviewModal}
+        onClose={() => setShowPreviewModal(false)}
+        isExporting={isExporting}
+        onExport={handleExportDocx}
+      />
+
+      <TorImportModal
+        isOpen={showTorImportModal}
+        onClose={() => setShowTorImportModal(false)}
+        onImport={handleImportTorScopes}
+      />
+
+      <UserManagementModal
+        isOpen={showUserMgmtModal}
+        onClose={() => setShowUserMgmtModal(false)}
+        currentUserEmail={currentUser?.email}
+      />
     </div>
   );
 };
