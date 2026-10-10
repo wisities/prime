@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 import { Section5Company, PastProject } from '../types/proposal';
-import { MASTER_PROJECTS_LIBRARY } from '../data/defaultData';
-import { Building2, Plus, Trash2, Library, Filter, Calendar, AlertTriangle, CheckCircle, Upload, Image, FileText, Paperclip, FileCheck, BookmarkCheck } from 'lucide-react';
+import {
+  getMasterProjectsLibrary,
+  deleteMasterProject,
+  clearAllMasterProjects,
+  resetMasterProjectsLibrary,
+} from '../services/masterLibraryService';
+import { Building2, Plus, Trash2, Library, Filter, Calendar, AlertTriangle, CheckCircle, Upload, Image, FileText, Paperclip, FileCheck, BookmarkCheck, RotateCcw } from 'lucide-react';
 
 interface Section5EditorProps {
   section5: Section5Company;
@@ -10,7 +15,34 @@ interface Section5EditorProps {
 
 export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChange }) => {
   const [showLibraryModal, setShowLibraryModal] = useState(false);
+  const [projectsLibrary, setProjectsLibrary] = useState<PastProject[]>(getMasterProjectsLibrary());
   const currentYearBE = 2568;
+
+  const handleOpenLibrary = () => {
+    setProjectsLibrary(getMasterProjectsLibrary());
+    setShowLibraryModal(true);
+  };
+
+  const handleDeleteFromLibrary = (id: string, name: string) => {
+    if (confirm(`ยืนยันการลบโครงการ "${name}" ออกจากคลังข้อมูลกลางถาวร?`)) {
+      const updated = deleteMasterProject(id);
+      setProjectsLibrary(updated);
+    }
+  };
+
+  const handleClearAllLibrary = () => {
+    if (confirm('ยืนยันการล้างข้อมูลผลงานโครงการทั้งหมดในคลังกลาง? (คุณสามารถกดปุ่มคืนค่าตัวอย่างเดิมได้ในภายหลัง)')) {
+      const updated = clearAllMasterProjects();
+      setProjectsLibrary(updated);
+    }
+  };
+
+  const handleResetLibrary = () => {
+    if (confirm('ต้องการคืนค่าผลงานโครงการตัวอย่างเดิมกลับมาใช่หรือไม่?')) {
+      const updated = resetMasterProjectsLibrary();
+      setProjectsLibrary(updated);
+    }
+  };
 
   const handleFieldChange = (field: keyof Section5Company, value: any) => {
     onChange({ ...section5, [field]: value });
@@ -287,7 +319,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button
               type="button"
-              onClick={() => setShowLibraryModal(true)}
+              onClick={handleOpenLibrary}
               className="btn btn-outline"
               style={{ color: 'var(--primary-800)', borderColor: 'var(--primary-600)' }}
             >
@@ -730,52 +762,132 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
       {/* Master Library Selection Modal */}
       {showLibraryModal && (
         <div className="modal-overlay" onClick={() => setShowLibraryModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--primary-900)' }}>
-                เลือกผลงานจากคลังข้อมูลกลาง (Prime Digital Past Track Records)
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowLibraryModal(false)}
-                style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer' }}
-              >
-                ✕
-              </button>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '820px' }}>
+            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--primary-900)', margin: 0 }}>
+                  คลังข้อมูลผลงานโครงการกลาง (Prime Digital Past Track Records)
+                </h3>
+                <div style={{ fontSize: '0.8rem', color: 'var(--slate-500)', marginTop: '2px' }}>
+                  มีทั้งหมด {projectsLibrary.length} โครงการ (สามารถเลือกเข้าเล่ม หรือลบรายการที่ไม่ต้องการได้)
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {projectsLibrary.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={handleClearAllLibrary}
+                    className="btn btn-outline"
+                    style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem', color: '#DC2626', borderColor: '#FCA5A5' }}
+                    title="ล้างข้อมูลผลงานทั้งหมดในคลังกลาง"
+                  >
+                    <Trash2 size={13} /> ล้างคลังทั้งหมด
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleResetLibrary}
+                    className="btn btn-outline"
+                    style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem', color: '#2563EB', borderColor: '#93C5FD' }}
+                    title="คืนค่าผลงานตัวอย่างเดิม"
+                  >
+                    <RotateCcw size={13} /> คืนค่าตัวอย่างเดิม
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowLibraryModal(false)}
+                  style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', padding: '4px' }}
+                >
+                  ✕
+                </button>
+              </div>
             </div>
-            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-              {MASTER_PROJECTS_LIBRARY.map((item) => (
+
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', maxHeight: '65vh', overflowY: 'auto' }}>
+              {projectsLibrary.length === 0 ? (
                 <div
-                  key={item.id}
                   style={{
-                    border: '1px solid var(--slate-200)',
+                    textAlign: 'center',
+                    padding: '2.5rem 1rem',
+                    backgroundColor: '#F8FAFC',
                     borderRadius: '8px',
-                    padding: '0.85rem 1rem',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    backgroundColor: '#FFFFFF',
+                    border: '1px dashed #CBD5E1',
                   }}
                 >
-                  <div style={{ flex: 1, paddingRight: '1rem' }}>
-                    <div style={{ fontWeight: 600, color: 'var(--slate-900)' }}>{item.projectName}</div>
-                    <div style={{ fontSize: '0.825rem', color: 'var(--primary-700)', marginTop: '2px' }}>
-                      {item.clientName} | แล้วเสร็จปี พ.ศ. <strong>{item.completionYearBE}</strong> | มูลค่า {item.contractValue.toLocaleString()} บาท
-                    </div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--slate-500)', marginTop: '2px' }}>
-                      {item.description}
-                    </div>
+                  <Building2 size={36} color="#94A3B8" style={{ margin: '0 auto 0.5rem' }} />
+                  <div style={{ fontWeight: 600, color: '#475569', fontSize: '0.95rem' }}>
+                    ไม่มีข้อมูลผลงานโครงการในคลังกลางแล้ว
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: '#64748B', marginTop: '0.25rem' }}>
+                    คุณได้ล้างข้อมูลโครงการจำลองออกเรียบร้อยแล้ว หรือสามารถกดปุ่มเพื่อคืนค่าตัวอย่างกลับมาได้
                   </div>
                   <button
                     type="button"
-                    onClick={() => handleAddFromLibrary(item)}
-                    className="btn btn-outline"
-                    style={{ borderColor: 'var(--primary-600)', color: 'var(--primary-700)', whiteSpace: 'nowrap' }}
+                    onClick={handleResetLibrary}
+                    className="btn btn-primary"
+                    style={{ marginTop: '0.85rem', fontSize: '0.825rem', padding: '0.45rem 1rem' }}
                   >
-                    + เลือกเข้าเล่มนี้
+                    <RotateCcw size={14} /> คืนค่าตัวอย่างผลงานเดิม
                   </button>
                 </div>
-              ))}
+              ) : (
+                projectsLibrary.map((item) => (
+                  <div
+                    key={item.id}
+                    style={{
+                      border: '1px solid var(--slate-200)',
+                      borderRadius: '8px',
+                      padding: '0.85rem 1rem',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      backgroundColor: '#FFFFFF',
+                      gap: '0.75rem',
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0, paddingRight: '0.5rem' }}>
+                      <div style={{ fontWeight: 600, color: 'var(--slate-900)' }}>{item.projectName}</div>
+                      <div style={{ fontSize: '0.825rem', color: 'var(--primary-700)', marginTop: '2px' }}>
+                        {item.clientName} | แล้วเสร็จปี พ.ศ. <strong>{item.completionYearBE}</strong> | มูลค่า {item.contractValue.toLocaleString()} บาท
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--slate-500)', marginTop: '2px' }}>
+                        {item.description}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                      <button
+                        type="button"
+                        onClick={() => handleAddFromLibrary(item)}
+                        className="btn btn-outline"
+                        style={{ borderColor: 'var(--primary-600)', color: 'var(--primary-700)', whiteSpace: 'nowrap', fontSize: '0.825rem', padding: '0.4rem 0.8rem' }}
+                      >
+                        + เลือกเข้าเล่มนี้
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteFromLibrary(item.id, item.projectName)}
+                        className="btn btn-outline"
+                        style={{
+                          borderColor: '#FECACA',
+                          color: '#DC2626',
+                          backgroundColor: '#FEF2F2',
+                          padding: '0.4rem 0.55rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                        title="ลบออกจากคลังข้อมูลกลาง"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
