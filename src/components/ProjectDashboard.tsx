@@ -8,6 +8,7 @@ import {
   saveProject,
 } from '../services/projectStorageService';
 import { isSupabaseConfigured } from '../services/supabaseClient';
+import { extractProjectMetadataFromFile } from '../services/torDocReader';
 import {
   FileText,
   ExternalLink,
@@ -73,6 +74,16 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   const [uploadCategory, setUploadCategory] = useState<'announcement' | 'tor' | 'other'>('announcement');
   const fileUploadInputRef = useRef<HTMLInputElement>(null);
   const jsonImportInputRef = useRef<HTMLInputElement>(null);
+  const smartFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Smart File Extraction State
+  const [isAnalyzingDoc, setIsAnalyzingDoc] = useState(false);
+  const [docAnalysisMsg, setDocAnalysisMsg] = useState<{
+    type: 'success' | 'info' | 'error';
+    text: string;
+    details?: string[];
+  } | null>(null);
+  const [isDraggingDoc, setIsDraggingDoc] = useState(false);
 
   // Cloud Diagnostic Modal State
   const [showCloudDiagnostic, setShowCloudDiagnostic] = useState(false);
@@ -328,6 +339,122 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     setIsCreatingNew(true);
   };
 
+  // Process Smart File (PDF/Word) for Auto-Extraction
+  const handleProcessSmartFile = async (file: File) => {
+    if (!file) return;
+    const isPdf = file.name.toLowerCase().endsWith('.pdf');
+    const isDocx = file.name.toLowerCase().endsWith('.docx');
+
+    if (!isPdf && !isDocx) {
+      setDocAnalysisMsg({
+        type: 'error',
+        text: 'กรุณาอัปโหลดไฟล์เอกสารนามสกุล .PDF หรือ .DOCX เท่านั้น',
+      });
+      return;
+    }
+
+    setIsAnalyzingDoc(true);
+    setDocAnalysisMsg({
+      type: 'info',
+      text: `กำลังอ่านและสกัดข้อมูลจาก "${file.name}"...`,
+    });
+
+    try {
+      const { metadata } = await extractProjectMetadataFromFile(file);
+
+      const baseProj: BiddingProject = editingProject || {
+        id: `proj-${Date.now()}`,
+        projectCode: metadata.projectCode || `EGP-${new Date().getFullYear() + 543 - 2500}-${Math.floor(10000 + Math.random() * 90000)}`,
+        projectTitle: metadata.projectTitle || file.name.replace(/\.[^/.]+$/, ''),
+        clientAgency: metadata.clientAgency || '',
+        budgetAmount: metadata.budgetAmount || 5000000,
+        egpUrl: metadata.egpUrl || '',
+        announcementDate: metadata.announcementDate || new Date().toISOString().split('T')[0],
+        submissionDeadline: metadata.submissionDeadline || '',
+        status: 'draft',
+        statusNote: 'สร้างโครงการอัตโนมัติจากไฟล์เอกสาร e-GP',
+        attachments: [],
+        proposalData: projects.length > 0 ? JSON.parse(JSON.stringify(projects[0].proposalData)) : {
+          cover: {
+            projectTitle: metadata.projectTitle || '',
+            projectCode: metadata.projectCode || '',
+            clientAgency: metadata.clientAgency || '',
+            clientDepartment: '',
+            submitterCompany: 'บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด',
+            submitterSubtext: 'Prime Digital Consultant Co., Ltd.',
+            submissionDate: '',
+            budgetFormatted: `${(metadata.budgetAmount || 5000000).toLocaleString()} บาท`,
+            includeBackCover: true,
+            includeTOC: true,
+          },
+          section1: { background: '', objectives: [], expectedBenefits: [], targetAudience: '', projectScopeOverview: '', scopeItems: [] },
+          section2: { methodologyStrategy: '', milestones: [] },
+          section3: { frameworkOverview: '', conceptualDiagramCaption: '' },
+          section4: { teamOverview: '', teamMembers: [], riskManagementOverview: '', riskItems: [], complianceMatrixOverview: '' },
+          section5: { companyName: '', establishedYearBE: 2558, registeredCapital: '', companyProfile: '', visionMission: '', specializations: [], certifications: [], maxYearsFilter: 3, pastProjects: [] },
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Read file to base64 so we can attach it
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        const isTor = file.name.toLowerCase().includes('tor') || file.name.includes('ขอบเขต');
+        const newAttachment: ProjectAttachment = {
+          id: `att-${Date.now()}`,
+          name: file.name,
+          size: file.size,
+          category: isTor ? 'tor' : 'announcement',
+          type: file.type || (isPdf ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
+          uploadedAt: new Date().toISOString(),
+          dataUrl,
+        };
+
+        const updatedProj: BiddingProject = {
+          ...baseProj,
+          projectCode: metadata.projectCode || baseProj.projectCode,
+          projectTitle: metadata.projectTitle || baseProj.projectTitle,
+          clientAgency: metadata.clientAgency || baseProj.clientAgency,
+          budgetAmount: metadata.budgetAmount !== undefined ? metadata.budgetAmount : baseProj.budgetAmount,
+          announcementDate: metadata.announcementDate || baseProj.announcementDate,
+          submissionDeadline: metadata.submissionDeadline || baseProj.submissionDeadline,
+          egpUrl: metadata.egpUrl || baseProj.egpUrl,
+          attachments: [...baseProj.attachments.filter((a) => a.name !== file.name), newAttachment],
+        };
+
+        setEditingProject(updatedProj);
+        if (!editingProject) {
+          setIsCreatingNew(true);
+        }
+
+        const foundItems: string[] = [];
+        if (metadata.projectCode) foundItems.push(`รหัสโครงการ: ${metadata.projectCode}`);
+        if (metadata.projectTitle) foundItems.push(`ชื่อโครงการ: ${metadata.projectTitle.substring(0, 45)}...`);
+        if (metadata.clientAgency) foundItems.push(`หน่วยงาน: ${metadata.clientAgency}`);
+        if (metadata.budgetAmount) foundItems.push(`งบประมาณ: ฿${metadata.budgetAmount.toLocaleString()} บาท`);
+        if (metadata.announcementDate) foundItems.push(`วันที่ประกาศ: ${metadata.announcementDate}`);
+        if (metadata.submissionDeadline) foundItems.push(`วันเวลายื่นข้อเสนอ: ${metadata.submissionDeadline}`);
+
+        setDocAnalysisMsg({
+          type: 'success',
+          text: `สกัดข้อมูลสำเร็จ! ระบบกรอกข้อมูลอัตโนมัติจากไฟล์ "${file.name}" ให้เรียบร้อยแล้ว`,
+          details: foundItems.length > 0 ? foundItems : ['แนบไฟล์เข้าสู่โครงการเรียบร้อยแล้ว'],
+        });
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      console.error('Error extracting metadata from file:', err);
+      setDocAnalysisMsg({
+        type: 'error',
+        text: `เกิดข้อผิดพลาดในการอ่านไฟล์: ${err.message || 'ไม่สามารถประมวลผลเอกสารได้'}`,
+      });
+    } finally {
+      setIsAnalyzingDoc(false);
+    }
+  };
+
   // Handle file attachment upload
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -537,6 +664,30 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             title="โหลดตัวอย่างโครงการเริ่มต้นของ Prime Digital"
           >
             <RotateCcw size={16} /> โหลดตัวอย่าง
+          </button>
+          {/* Hidden Smart File Input */}
+          <input
+            type="file"
+            ref={smartFileInputRef}
+            style={{ display: 'none' }}
+            accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleProcessSmartFile(file);
+              e.target.value = '';
+            }}
+          />
+          <button
+            type="button"
+            className="btn btn-primary hero-btn-cta"
+            onClick={() => smartFileInputRef.current?.click()}
+            title="ลากหรือเลือกไฟล์ประกาศ e-GP / TOR เพื่อสกัดข้อมูลและสร้างโครงการอัตโนมัติ"
+            style={{
+              background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+              boxShadow: '0 2px 8px rgba(5, 150, 105, 0.35)',
+            }}
+          >
+            <Sparkles size={18} /> สกัดข้อมูลไฟล์ e-GP
           </button>
           <button
             type="button"
@@ -981,6 +1132,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                 onClick={() => {
                   setEditingProject(null);
                   setIsCreatingNew(false);
+                  setDocAnalysisMsg(null);
                 }}
                 title="ปิดหน้าต่าง"
               >
@@ -990,6 +1142,68 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
             <form onSubmit={handleSaveProjectModal}>
               <div className="modal-body">
+                {/* Smart Dropzone for e-GP Announcement / TOR */}
+                <div
+                  className={`smart-dropzone ${isDraggingDoc ? 'dragging' : ''}`}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDraggingDoc(true);
+                  }}
+                  onDragLeave={() => setIsDraggingDoc(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDraggingDoc(false);
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) handleProcessSmartFile(file);
+                  }}
+                  onClick={() => smartFileInputRef.current?.click()}
+                  title="คลิกเพื่อเลือกไฟล์ หรือลากไฟล์ประกาศมาวาง"
+                >
+                  <div className="smart-dropzone-icon">
+                    {isAnalyzingDoc ? (
+                      <Clock size={22} className="animate-spin" />
+                    ) : (
+                      <Sparkles size={22} />
+                    )}
+                  </div>
+                  <div className="smart-dropzone-title">
+                    {isAnalyzingDoc
+                      ? '🔍 กำลังอ่านและสกัดข้อมูลจากเอกสารทางการ...'
+                      : '⚡ ลากไฟล์ประกาศจัดจ้าง หรือ TOR (PDF / Word) มาวางที่นี่'}
+                  </div>
+                  <div className="smart-dropzone-desc">
+                    {isAnalyzingDoc
+                      ? 'ระบบกำลังวิเคราะห์รหัสโครงการ, ชื่อโครงการ, หน่วยงาน, งบประมาณ และวันเวลายื่นข้อเสนอ...'
+                      : 'ระบบจะสแกนและกรอกรหัส e-GP, ชื่อโครงการ, หน่วยงาน, งบประมาณ และวันเวลายื่นข้อเสนอให้อัตโนมัติ (คลิกเพื่อเลือกไฟล์)'}
+                  </div>
+                  <div className="smart-dropzone-badges">
+                    <span className="smart-dropzone-badge">📄 ประกาศจัดจ้าง e-GP (.PDF)</span>
+                    <span className="smart-dropzone-badge">📝 เอกสาร TOR (.PDF / .DOCX)</span>
+                    <span className="smart-dropzone-badge">✨ Auto-fill & แนบไฟล์ทันที</span>
+                  </div>
+                </div>
+
+                {/* Analysis Result Alert */}
+                {docAnalysisMsg && (
+                  <div className={`analysis-alert ${docAnalysisMsg.type}`}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 600 }}>
+                      {docAnalysisMsg.type === 'success' && <CheckCircle2 size={16} />}
+                      {docAnalysisMsg.type === 'error' && <AlertCircle size={16} />}
+                      {docAnalysisMsg.type === 'info' && <Clock size={16} />}
+                      <span>{docAnalysisMsg.text}</span>
+                    </div>
+                    {docAnalysisMsg.details && docAnalysisMsg.details.length > 0 && (
+                      <div className="analysis-alert-details">
+                        {docAnalysisMsg.details.map((item, idx) => (
+                          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                            <span style={{ color: '#059669' }}>✔</span> {item}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Section 1: Core Project Info */}
                 <div className="modal-section-card">
                   <div className="modal-section-header">
@@ -1218,6 +1432,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                     onClick={() => {
                       setEditingProject(null);
                       setIsCreatingNew(false);
+                      setDocAnalysisMsg(null);
                     }}
                   >
                     ยกเลิก

@@ -207,3 +207,160 @@ ${rawText.substring(0, 30000)}
     deliverable: '',
   }));
 }
+
+export interface ExtractedProjectMetadata {
+  projectCode?: string;
+  projectTitle?: string;
+  clientAgency?: string;
+  budgetAmount?: number;
+  announcementDate?: string;
+  submissionDeadline?: string;
+  egpUrl?: string;
+  confidenceScore?: number;
+}
+
+const THAI_MONTHS: Record<string, string> = {
+  'มกราคม': '01', 'ม.ค.': '01',
+  'กุมภาพันธ์': '02', 'ก.พ.': '02',
+  'มีนาคม': '03', 'มี.ค.': '03',
+  'เมษายน': '04', 'เม.ย.': '04',
+  'พฤษภาคม': '05', 'พ.ค.': '05',
+  'มิถุนายน': '06', 'มิ.ย.': '06',
+  'กรกฎาคม': '07', 'ก.ค.': '07',
+  'สิงหาคม': '08', 'ส.ค.': '08',
+  'กันยายน': '09', 'ก.ย.': '09',
+  'ตุลาคม': '10', 'ต.ค.': '10',
+  'พฤศจิกายน': '11', 'พ.ย.': '11',
+  'ธันวาคม': '12', 'ธ.ค.': '12',
+};
+
+function formatThaiDateToIso(dayStr: string, monthStr: string, yearStr: string): string | null {
+  const day = parseInt(dayStr, 10);
+  const month = THAI_MONTHS[monthStr.trim()];
+  let year = parseInt(yearStr, 10);
+  if (!month || isNaN(day) || isNaN(year)) return null;
+  if (year > 2400) year -= 543;
+  return `${year}-${month}-${String(day).padStart(2, '0')}`;
+}
+
+/**
+ * Extracts key metadata (projectCode, title, agency, budget, dates)
+ * from raw text of Thai government procurement announcements / TORs.
+ */
+export function extractProjectMetadataFromText(rawText: string): ExtractedProjectMetadata {
+  const result: ExtractedProjectMetadata = {};
+  const cleanText = rawText.replace(/\r/g, '');
+  const lines = cleanText.split('\n').map((l) => l.trim()).filter(Boolean);
+  const first100Lines = lines.slice(0, 100).join('\n');
+
+  // 1. Project Code (เลขที่โครงการ / รหัสโครงการ / 11-digit e-GP code)
+  const codeRegex = /(?:เลขที่โครงการ|รหัสโครงการ|เลขที่ประกาศ|รหัสประกาศ)\s*[:]?\s*([0-9A-Za-z/-]{6,25})/i;
+  const codeMatch = cleanText.match(codeRegex);
+  if (codeMatch && codeMatch[1]) {
+    result.projectCode = codeMatch[1].trim();
+  } else {
+    // Fallback: 11-digit e-GP code (usually starts with 6x like 67, 68, 69)
+    const egp11Match = first100Lines.match(/(?:\b|\D)(6\d{10})(?:\b|\D)/);
+    if (egp11Match) {
+      result.projectCode = egp11Match[1];
+    }
+  }
+
+  // 2. Project Title (เรื่อง ประกวดราคา... / โครงการ...)
+  const titleRegex = /(?:เรื่อง|โครงการ)\s*(?:[:]\s*)?(?:ประกวดราคา(?:จ้าง|ซื้อ|เช่า)?(?:ด้วยวิธีประกวดราคาอิเล็กทรอนิกส์\s*\(e-bidding\))?|จ้าง|ซื้อ|เช่า)?\s*([^\n\r]{10,250})/i;
+  const titleMatch = cleanText.match(titleRegex);
+  if (titleMatch && titleMatch[1]) {
+    let title = titleMatch[1].trim();
+    // Clean trailing boilerplate
+    title = title.replace(/\s*(?:ด้วยวิธี|ตามประกาศ|ประจำปีงบประมาณ|วงเงินงบประมาณ).*$/i, '').trim();
+    if (title.length > 5) {
+      result.projectTitle = title.startsWith('โครงการ') ? title : `โครงการ${title}`;
+    }
+  }
+
+  // 3. Client Agency (กรม, สำนักงาน, กระทรวง, องค์การ, มหาวิทยาลัย, เทศบาล)
+  const agencyRegex = /(?:หน่วยงาน|ผู้ว่าจ้าง|เจ้าของโครงการ)\s*[:]?\s*([^\n\r]{5,100})/i;
+  const agencyMatch = cleanText.match(agencyRegex);
+  if (agencyMatch && agencyMatch[1]) {
+    result.clientAgency = agencyMatch[1].trim();
+  } else {
+    // Scan early lines for standard government entity names
+    for (const line of lines.slice(0, 25)) {
+      const match = line.match(/^(?:ประกาศ)?\s*(กรม[^\s]+|สำนักงาน[^\s]+|กระทรวง[^\s]+|มหาวิทยาลัย[^\s]+|องค์การ[^\s]+|เทศบาล[^\s]+|กรุงเทพมหานคร[^\s]*|การประปา[^\s]+|การไฟฟ้า[^\s]+)(?:\s+[^\n\r]+)?$/);
+      if (match) {
+        result.clientAgency = line.replace(/^ประกาศ\s*/, '').trim();
+        break;
+      }
+    }
+  }
+
+  // 4. Budget Amount (วงเงินงบประมาณ / ราคากลาง)
+  const budgetRegex = /(?:วงเงินงบประมาณ(?:ที่ได้รับจัดสรร)?|งบประมาณ(?:ที่ได้รับจัดสรร)?|ราคากลาง|วงเงิน)\s*(?:เป็นเงิน|จำนวน)?\s*([0-9,]+(?:\.[0-9]{2})?)\s*บาท/i;
+  const budgetMatch = cleanText.match(budgetRegex);
+  if (budgetMatch && budgetMatch[1]) {
+    const num = parseFloat(budgetMatch[1].replace(/,/g, ''));
+    if (!isNaN(num) && num > 0) {
+      result.budgetAmount = num;
+    }
+  }
+
+  // 5. Announcement Date (ประกาศ ณ วันที่ DD Month YYYY)
+  const announceDateRegex = /(?:ประกาศ ณ วันที่|ลงวันที่|ประกาศวันที่|วันที่)\s*(\d{1,2})\s+([ก-๙.]+)\s+(?:พ\.ศ\.\s*)?(\d{4})/i;
+  const announceMatch = cleanText.match(announceDateRegex);
+  if (announceMatch) {
+    const isoDate = formatThaiDateToIso(announceMatch[1], announceMatch[2], announceMatch[3]);
+    if (isoDate) result.announcementDate = isoDate;
+  }
+
+  // 6. Submission Deadline (ยื่นข้อเสนอในวันที่ DD Month YYYY ระหว่างเวลา HH.mm น. ถึง HH.mm น.)
+  const deadlineRegex = /(?:ยื่นข้อเสนอ|เสนอราคา).{0,50}?ในวันที่\s*(\d{1,2})\s+([ก-๙.]+)\s+(?:พ\.ศ\.\s*)?(\d{4})(?:\s*(?:ระหว่างเวลา|เวลา)\s*([0-9.:]+)(?:\s*(?:ถึง|-)\s*([0-9.:]+))?\s*น\.)?/i;
+  const deadlineMatch = cleanText.match(deadlineRegex);
+  if (deadlineMatch) {
+    const isoDate = formatThaiDateToIso(deadlineMatch[1], deadlineMatch[2], deadlineMatch[3]);
+    if (isoDate) {
+      // Pick end time if range (e.g. 09.00 ถึง 12.00 -> 12:00)
+      let timeStr = '12:00';
+      const targetTime = deadlineMatch[5] || deadlineMatch[4];
+      if (targetTime) {
+        const timeClean = targetTime.replace('.', ':');
+        const parts = timeClean.split(':');
+        if (parts.length >= 2) {
+          timeStr = `${parts[0].padStart(2, '0')}:${parts[1].padEnd(2, '0')}`;
+        }
+      }
+      result.submissionDeadline = `${isoDate}T${timeStr}`;
+    }
+  }
+
+  // 7. e-GP URL if referenced in text
+  const urlRegex = /(https?:\/\/(?:process\d\.gprocurement\.go\.th|www\.gprocurement\.go\.th)[^\s'"<>]+)/i;
+  const urlMatch = cleanText.match(urlRegex);
+  if (urlMatch) {
+    result.egpUrl = urlMatch[1];
+  }
+
+  return result;
+}
+
+/**
+ * Reads a PDF or DOCX file, extracts full text, and extracts metadata.
+ */
+export async function extractProjectMetadataFromFile(
+  file: File
+): Promise<{ metadata: ExtractedProjectMetadata; rawText: string }> {
+  let rawText = '';
+  const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf';
+  const isDocx = file.name.toLowerCase().endsWith('.docx') || file.type.includes('wordprocessingml');
+
+  if (isPdf) {
+    rawText = await readPdfFile(file);
+  } else if (isDocx) {
+    rawText = await readDocxFile(file);
+  } else {
+    rawText = await file.text();
+  }
+
+  const metadata = extractProjectMetadataFromText(rawText);
+  return { metadata, rawText };
+}
+
