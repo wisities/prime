@@ -92,6 +92,7 @@ export interface TeamMember {
   education: string;
   certifications: string;
   experienceYears: number;
+  startWorkYearBE?: number; // ปี พ.ศ. ที่เริ่มทำงานสำหรับนับปีประสบการณ์
   responsibilities: string;
   highlightProjects: string;
   photoUrl?: string;

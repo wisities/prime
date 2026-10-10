@@ -1035,7 +1035,11 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
     teamRows.push(
       createDataRow([
         createDataCell(String(idx + 1), 6, { align: AlignmentType.CENTER, bold: true }),
-        createDataCell(`${member.name}\n(อายุงาน ${member.experienceYears} ปี)`, 20, { bold: true }),
+        createDataCell(
+          `${member.name}\n(อายุงาน ${member.experienceYears} ปี${member.startWorkYearBE ? ` / เริ่มงาน พ.ศ. ${member.startWorkYearBE}` : ''})`,
+          20,
+          { bold: true }
+        ),
         createDataCell(`${member.proposedRole}\n• หน้าที่: ${member.responsibilities}`, 24),
         createDataCell(`${member.education}\n• ใบรับรอง: ${member.certifications}`, 26),
         createDataCell(member.highlightProjects, 24),

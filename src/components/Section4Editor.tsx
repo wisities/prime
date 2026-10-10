@@ -6,7 +6,7 @@ import {
   clearAllMasterTeamMembers,
   resetMasterTeamLibrary,
 } from '../services/masterLibraryService';
-import { Users, ShieldAlert, Plus, Trash2, Library, ChevronDown, ChevronUp, TableProperties, CheckCheck, Sparkles, RotateCcw } from 'lucide-react';
+import { Users, ShieldAlert, Plus, Trash2, Library, ChevronDown, ChevronUp, TableProperties, CheckCheck, Sparkles, RotateCcw, Clock } from 'lucide-react';
 
 interface Section4EditorProps {
   section4: Section4TeamAndRisk;
@@ -75,6 +75,8 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
   const complyCount = scopeItems.filter((s) => (s.complianceStatus || 'comply') === 'comply').length;
   const exceedCount = scopeItems.filter((s) => s.complianceStatus === 'exceed').length;
 
+  const currentYearBE = new Date().getFullYear() + 543;
+
   const handleTeamMemberChange = (id: string, field: keyof TeamMember, value: any) => {
     const updated = section4.teamMembers.map((m) =>
       m.id === id ? { ...m, [field]: value } : m
@@ -82,13 +84,35 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
     onChange({ ...section4, teamMembers: updated });
   };
 
+  const handleStartWorkYearChange = (id: string, yearValue: string) => {
+    const yearNum = parseInt(yearValue, 10);
+    const updated = section4.teamMembers.map((m) => {
+      if (m.id !== id) return m;
+      if (!isNaN(yearNum) && yearNum >= 2480 && yearNum <= currentYearBE + 1) {
+        const calculatedYears = Math.max(0, currentYearBE - yearNum);
+        return {
+          ...m,
+          startWorkYearBE: yearNum,
+          experienceYears: calculatedYears,
+        };
+      }
+      return {
+        ...m,
+        startWorkYearBE: isNaN(yearNum) ? undefined : yearNum,
+      };
+    });
+    onChange({ ...section4, teamMembers: updated });
+  };
+
   const handleAddMember = () => {
+    const defaultStartYear = currentYearBE - 5;
     const newMember: TeamMember = {
       id: `member-${Date.now()}`,
       name: 'นาย/นางสาว (ระบุชื่อ-นามสกุล)',
       proposedRole: 'วิศวกรซอฟต์แวร์ / ผู้เชี่ยวชาญ',
       education: 'ปริญญาตรี วิทยาการคอมพิวเตอร์',
       certifications: 'ใบรับรองมาตรฐานวิชาชีพ',
+      startWorkYearBE: defaultStartYear,
       experienceYears: 5,
       responsibilities: 'รับผิดชอบงานตามที่ได้รับมอบหมาย',
       highlightProjects: 'มีประสบการณ์ในโครงการภาครัฐที่เกี่ยวข้อง',
@@ -191,7 +215,7 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                   <span
                     style={{
                       backgroundColor: 'var(--primary-100)',
@@ -209,10 +233,26 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
                     className="form-input"
                     style={{ fontWeight: 600, width: '280px' }}
                     value={member.name}
+                    placeholder="นาย/นางสาว (ระบุชื่อ-นามสกุล)"
                     onChange={(e) => handleTeamMemberChange(member.id, 'name', e.target.value)}
                   />
-                  <span style={{ fontSize: '0.85rem', color: 'var(--slate-500)' }}>
-                    (ประสบการณ์ {member.experienceYears} ปี)
+                  <span
+                    style={{
+                      fontSize: '0.825rem',
+                      fontWeight: 600,
+                      color: 'var(--primary-700)',
+                      backgroundColor: '#EFF6FF',
+                      border: '1px solid #BFDBFE',
+                      padding: '0.25rem 0.6rem',
+                      borderRadius: '6px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                    }}
+                  >
+                    <Clock size={13} />
+                    ประสบการณ์ {member.experienceYears} ปี
+                    {member.startWorkYearBE ? ` (เริ่มงานปี พ.ศ. ${member.startWorkYearBE})` : ''}
                   </span>
                 </div>
 
@@ -226,12 +266,13 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
                 </button>
               </div>
 
-              <div className="grid-3" style={{ marginBottom: '0.85rem' }}>
+              <div className="grid-4" style={{ marginBottom: '0.85rem' }}>
                 <div>
                   <label className="form-label">ตำแหน่งที่เสนอในโครงการ</label>
                   <input
                     type="text"
                     className="form-input"
+                    placeholder="เช่น ผู้จัดการโครงการ"
                     value={member.proposedRole}
                     onChange={(e) => handleTeamMemberChange(member.id, 'proposedRole', e.target.value)}
                   />
@@ -241,15 +282,51 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
                   <input
                     type="text"
                     className="form-input"
+                    placeholder="เช่น ปริญญาตรี วิศวกรรมศาสตร์"
                     value={member.education}
                     onChange={(e) => handleTeamMemberChange(member.id, 'education', e.target.value)}
                   />
+                </div>
+                <div>
+                  <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>ปีที่เริ่มทำงาน (พ.ศ.)</span>
+                    <span style={{ fontSize: '0.725rem', color: '#2563EB', fontWeight: 600 }}>
+                      = {member.experienceYears} ปี
+                    </span>
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <input
+                      type="number"
+                      className="form-input"
+                      placeholder={`เช่น ${currentYearBE - member.experienceYears}`}
+                      value={member.startWorkYearBE || ''}
+                      onChange={(e) => handleStartWorkYearChange(member.id, e.target.value)}
+                      title="ระบุปี พ.ศ. ที่เริ่มทำงาน ระบบจะคำนวณปีประสบการณ์ให้อัตโนมัติ"
+                    />
+                    <div
+                      style={{
+                        padding: '0.45rem 0.65rem',
+                        backgroundColor: '#EFF6FF',
+                        border: '1px solid #BFDBFE',
+                        borderRadius: '6px',
+                        fontSize: '0.8rem',
+                        fontWeight: 700,
+                        color: '#1D4ED8',
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0,
+                      }}
+                      title={`คำนวณถึงปัจจุบัน (ปี พ.ศ. ${currentYearBE})`}
+                    >
+                      {member.experienceYears} ปี
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <label className="form-label">ใบรับรองมาตรฐานวิชาชีพ (Certs)</label>
                   <input
                     type="text"
                     className="form-input"
+                    placeholder="เช่น PMP, ITIL, AWS"
                     value={member.certifications}
                     onChange={(e) => handleTeamMemberChange(member.id, 'certifications', e.target.value)}
                   />

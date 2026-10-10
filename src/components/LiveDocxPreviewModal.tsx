@@ -500,7 +500,12 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                 <tbody>
                   {section4.teamMembers.map((m) => (
                     <tr key={m.id}>
-                      <td style={{ padding: '6px', border: '1px solid var(--slate-300)', fontWeight: 600 }}>{m.name}</td>
+                      <td style={{ padding: '6px', border: '1px solid var(--slate-300)', fontWeight: 600 }}>
+                        {m.name}
+                        <div style={{ fontSize: '0.75rem', color: 'var(--slate-500)', fontWeight: 'normal' }}>
+                          ประสบการณ์ {m.experienceYears} ปี{m.startWorkYearBE ? ` (เริ่มงาน พ.ศ. ${m.startWorkYearBE})` : ''}
+                        </div>
+                      </td>
                       <td style={{ padding: '6px', border: '1px solid var(--slate-300)' }}>{m.proposedRole}</td>
                       <td style={{ padding: '6px', border: '1px solid var(--slate-300)' }}>{m.education} ({m.certifications})</td>
                     </tr>
