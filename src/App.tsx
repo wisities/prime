@@ -14,6 +14,12 @@ import { Section5Editor } from './components/Section5Editor';
 import { AuditModal } from './components/AuditModal';
 import { LiveDocxPreviewModal } from './components/LiveDocxPreviewModal';
 import { TorImportModal } from './components/TorImportModal';
+import { LoginPage } from './components/LoginPage';
+import { AccessDeniedPage } from './components/AccessDeniedPage';
+import { UserManagementModal } from './components/UserManagementModal';
+import { checkEmailPermission, signOut } from './services/authService';
+import { supabase, isSupabaseConfigured } from './services/supabaseClient';
+import { User } from '@supabase/supabase-js';
 
 import {
   FileText,
@@ -36,6 +42,7 @@ import {
   ExternalLink,
   Calendar,
   Clock,
+  LogOut,
 } from 'lucide-react';
 
 import { loadAllProjects, saveProject } from './services/projectStorageService';
@@ -70,8 +77,76 @@ export const App: React.FC = () => {
     return loadInitialProjects()[0]?.id || 'proj-001';
   });
 
+  // Authentication & Access Control State
+  const [authStatus, setAuthStatus] = useState<'loading' | 'unauthenticated' | 'unauthorized' | 'authorized'>('loading');
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [showUserMgmtModal, setShowUserMgmtModal] = useState<boolean>(false);
+
+  // Check Supabase Auth Session and Allowed Users permission
+  useEffect(() => {
+    let isMounted = true;
+
+    const verifySession = async () => {
+      if (!isSupabaseConfigured() || !supabase) {
+        // หากยังไม่ได้ตั้งค่า Supabase ให้เปิดระบบเพื่อให้ผู้ใช้ทดสอบในเครื่องได้
+        if (isMounted) setAuthStatus('authorized');
+        return;
+      }
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          if (isMounted) setCurrentUser(session.user);
+          const hasPerm = await checkEmailPermission(session.user.email || '');
+          if (isMounted) {
+            setAuthStatus(hasPerm ? 'authorized' : 'unauthorized');
+          }
+        } else {
+          if (isMounted) {
+            setCurrentUser(null);
+            setAuthStatus('unauthenticated');
+          }
+        }
+      } catch (err) {
+        console.warn('Auth session check failed:', err);
+        if (isMounted) setAuthStatus('unauthenticated');
+      }
+    };
+
+    verifySession();
+
+    if (supabase) {
+      const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        if (session?.user) {
+          if (isMounted) setCurrentUser(session.user);
+          const hasPerm = await checkEmailPermission(session.user.email || '');
+          if (isMounted) {
+            setAuthStatus(hasPerm ? 'authorized' : 'unauthorized');
+          }
+        } else {
+          if (isMounted) {
+            setCurrentUser(null);
+            setAuthStatus('unauthenticated');
+          }
+        }
+      });
+
+      return () => {
+        isMounted = false;
+        authListener.subscription.unsubscribe();
+      };
+    }
+  }, []);
+
+  const handleSignOut = async () => {
+    await signOut();
+    setCurrentUser(null);
+    setAuthStatus('unauthenticated');
+  };
+
   // Load from Supabase Cloud or LocalStorage on mount
   useEffect(() => {
+    if (authStatus !== 'authorized') return;
     loadAllProjects().then(({ projects: loaded, source }) => {
       setProjects(loaded);
       setCloudStatus(source);
@@ -79,7 +154,7 @@ export const App: React.FC = () => {
         setActiveProjectId((curr) => (loaded.some((p) => p.id === curr) ? curr : loaded[0].id));
       }
     });
-  }, []);
+  }, [authStatus]);
 
   // Current active project
   const currentProject = projects.find((p) => p.id === activeProjectId) || projects[0] || DEFAULT_BIDDING_PROJECTS[0];
@@ -232,6 +307,46 @@ export const App: React.FC = () => {
     setShowTorImportModal(true);
   };
 
+  // Render Auth Gates
+  if (authStatus === 'loading') {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: '#0F2744',
+          color: '#FFFFFF',
+          fontFamily: "'Prompt', 'Sarabun', sans-serif",
+        }}
+      >
+        <div
+          style={{
+            width: '44px',
+            height: '44px',
+            border: '3px solid rgba(255, 255, 255, 0.2)',
+            borderTopColor: '#F1B844',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+          }}
+        />
+        <p style={{ marginTop: '1.25rem', fontSize: '0.95rem', color: '#CBD5E1' }}>
+          กำลังตรวจสอบสิทธิ์เข้าใช้งานระบบ...
+        </p>
+      </div>
+    );
+  }
+
+  if (authStatus === 'unauthenticated') {
+    return <LoginPage isSupabaseReady={isSupabaseConfigured()} />;
+  }
+
+  if (authStatus === 'unauthorized') {
+    return <AccessDeniedPage userEmail={currentUser?.email || ''} onSignOut={handleSignOut} />;
+  }
+
   return (
     <div>
       {/* Top Header */}
@@ -361,6 +476,86 @@ export const App: React.FC = () => {
                   <span>{isExporting ? 'กำลังสร้างเอกสาร...' : 'ดาวน์โหลด Word (.docx)'}</span>
                 </button>
               </>
+            )}
+
+            {/* User Access Control / Whitelist Button */}
+            <button
+              type="button"
+              onClick={() => setShowUserMgmtModal(true)}
+              className="btn btn-secondary"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                color: '#FFFFFF',
+                borderColor: 'rgba(255, 255, 255, 0.3)',
+              }}
+              title="จัดการรายชื่อ Gmail ที่ได้รับสิทธิ์เข้าใช้งานระบบ"
+            >
+              <Users size={15} />
+              <span>จัดการสิทธิ์</span>
+            </button>
+
+            {/* Current User Pill & Logout */}
+            {currentUser && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.45rem',
+                  paddingLeft: '0.65rem',
+                  borderLeft: '1px solid rgba(255, 255, 255, 0.25)',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    fontSize: '0.785rem',
+                    color: 'rgba(255, 255, 255, 0.95)',
+                    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+                    padding: '0.35rem 0.65rem',
+                    borderRadius: '20px',
+                  }}
+                  title={`เข้าสู่ระบบด้วย: ${currentUser.email}`}
+                >
+                  <div
+                    style={{
+                      width: '7px',
+                      height: '7px',
+                      borderRadius: '50%',
+                      backgroundColor: '#10B981',
+                    }}
+                  />
+                  <span style={{ maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {currentUser.email}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  title="ออกจากระบบ"
+                  style={{
+                    background: 'rgba(239, 68, 68, 0.2)',
+                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                    color: '#FECACA',
+                    borderRadius: '6px',
+                    padding: '0.35rem 0.6rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontSize: '0.75rem',
+                    fontWeight: 500,
+                  }}
+                >
+                  <LogOut size={13} />
+                  <span>ออก</span>
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -620,6 +815,12 @@ export const App: React.FC = () => {
             isOpen={showTorImportModal}
             onClose={() => setShowTorImportModal(false)}
             onImport={handleImportTorScopes}
+          />
+
+          <UserManagementModal
+            isOpen={showUserMgmtModal}
+            onClose={() => setShowUserMgmtModal(false)}
+            currentUserEmail={currentUser?.email}
           />
         </div>
       )}
