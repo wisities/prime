@@ -23,6 +23,8 @@ import {
   UploadCloud,
   Paperclip,
   Check,
+  Trash2,
+  Plus,
 } from 'lucide-react';
 
 interface TorImportModalProps {
@@ -172,13 +174,55 @@ export const TorImportModal: React.FC<TorImportModalProps> = ({
     }
   };
 
+  // แก้ไขข้อมูลของข้อกำหนดที่สกัดได้
+  const handleItemFieldChange = (index: number, field: keyof TorScopeItem, value: any) => {
+    setParsedItems((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+
+  // ลบข้อกำหนดที่ไม่ต้องการออกก่อนนำเข้า
+  const handleDeleteParsedItem = (index: number) => {
+    setParsedItems((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  // เพิ่มข้อกำหนดใหม่ด้วยตนเอง
+  const handleAddNewParsedItem = () => {
+    const newItem: TorScopeItem = {
+      id: `scope-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      clauseNumber: `${parsedItems.length + 1}`,
+      title: 'ระบุหัวข้อข้อกำหนดใหม่',
+      requirement: 'ระบุรายละเอียดข้อกำหนดตาม TOR...',
+      level: 1,
+      startMonth: 1,
+      startWeek: 1,
+      durationDays: 30,
+      durationWeeks: 4,
+      responsibleRole: 'ผู้จัดการโครงการ / ทีมที่ปรึกษา',
+      proposedMethodology: '',
+      toolsAndTechnology: '',
+      deliverable: '',
+    };
+    setParsedItems((prev) => [...prev, newItem]);
+  };
+
   const handleConfirmImport = () => {
     if (parsedItems.length === 0) {
       alert('ไม่พบรายการขอบเขตงานที่สามารถนำเข้าได้');
       return;
     }
-    if (confirm(`ยืนยันการนำเข้าขอบเขตงาน TOR จำนวน ${parsedItems.length} ข้อ? (จะนำไปแทนที่รายการเดิมและเชื่อมโยงสู่ Gantt Chart และส่วนที่ 3 อัตโนมัติ)`)) {
-      onImport(parsedItems);
+    const cleanItems = parsedItems.map((item, idx) => ({
+      ...item,
+      id: item.id || `scope-imported-${Date.now()}-${idx}`,
+      clauseNumber: item.clauseNumber?.trim() || `${idx + 1}`,
+      title: item.title?.trim() || item.clauseNumber || `ข้อกำหนดที่ ${idx + 1}`,
+      requirement: item.requirement?.trim() || item.title || '',
+    }));
+
+    if (confirm(`ยืนยันการนำเข้าขอบเขตงาน TOR จำนวน ${cleanItems.length} ข้อ? (จะนำไปแทนที่รายการเดิมและเชื่อมโยงสู่ Gantt Chart และส่วนที่ 3 อัตโนมัติ)`)) {
+      onImport(cleanItems);
       onClose();
     }
   };
@@ -424,28 +468,40 @@ export const TorImportModal: React.FC<TorImportModalProps> = ({
             </div>
           </div>
 
-          {/* Parsed Items Preview */}
+          {/* Parsed Items Preview & Editor */}
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
-              <span style={{ fontWeight: 600, color: 'var(--primary-900)', fontSize: '0.95rem' }}>
-                ผลการสกัดขอบเขตงาน ({parsedItems.length} ข้อ) {activeDocName && <span style={{ color: '#2563EB', fontSize: '0.825rem' }}>- จากไฟล์: {activeDocName}</span>}
-              </span>
-              <span style={{ fontSize: '0.8rem', color: 'var(--slate-500)' }}>
-                ตรวจสอบและแก้ไขเพิ่มเติมในระบบได้หลังจากนำเข้า
-              </span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div>
+                <span style={{ fontWeight: 600, color: 'var(--primary-900)', fontSize: '0.95rem' }}>
+                  ผลการสกัดขอบเขตงาน ({parsedItems.length} ข้อ) {activeDocName && <span style={{ color: '#2563EB', fontSize: '0.825rem' }}>- จากไฟล์: {activeDocName}</span>}
+                </span>
+                <div style={{ fontSize: '0.78rem', color: 'var(--slate-500)', marginTop: '2px' }}>
+                  ✏️ สามารถแก้ไขเลขข้อ, ชื่อหัวข้อ และข้อความรายละเอียดในแต่ละช่องได้โดยตรงก่อนนำเข้าสู่ระบบ
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={handleAddNewParsedItem}
+                  className="btn btn-outline"
+                  style={{ padding: '0.3rem 0.65rem', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <Plus size={13} /> เพิ่มข้อใหม่
+                </button>
+              </div>
             </div>
 
             <div
               style={{
-                maxHeight: '260px',
+                maxHeight: '380px',
                 overflowY: 'auto',
                 border: '1px solid var(--slate-200)',
                 borderRadius: '8px',
                 padding: '0.75rem',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '0.5rem',
-                backgroundColor: '#FFFFFF',
+                gap: '0.65rem',
+                backgroundColor: '#F8FAFC',
               }}
             >
               {parsedItems.length === 0 ? (
@@ -457,30 +513,123 @@ export const TorImportModal: React.FC<TorImportModalProps> = ({
               ) : (
                 parsedItems.map((item, idx) => (
                   <div
-                    key={idx}
+                    key={item.id || idx}
                     style={{
-                      paddingLeft: `${(item.level - 1) * 16}px`,
-                      borderBottom: '1px solid var(--slate-100)',
-                      paddingBottom: '0.4rem',
+                      padding: '0.65rem 0.75rem',
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: '6px',
+                      border: '1px solid var(--slate-200)',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                      marginLeft: `${Math.min((item.level - 1) * 14, 42)}px`,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.4rem',
                     }}
                   >
-                    <span
-                      style={{
-                        backgroundColor: 'var(--primary-100)',
-                        color: 'var(--primary-800)',
-                        fontSize: '0.7rem',
-                        fontWeight: 700,
-                        padding: '1px 5px',
-                        borderRadius: '3px',
-                        marginRight: '6px',
-                      }}
-                    >
-                      L{item.level}
-                    </span>
-                    <strong style={{ color: 'var(--primary-900)', marginRight: '6px' }}>{item.clauseNumber}</strong>
-                    <span style={{ fontWeight: 500 }}>{item.title}</span>
-                    <div style={{ fontSize: '0.775rem', color: 'var(--slate-500)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {item.requirement}
+                    {/* Top Row: Level + Clause Number + Title + Delete Button */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                      <select
+                        value={item.level}
+                        onChange={(e) => handleItemFieldChange(idx, 'level', parseInt(e.target.value) || 1)}
+                        style={{
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          padding: '0.22rem 0.45rem',
+                          borderRadius: '4px',
+                          border: '1px solid var(--primary-300)',
+                          backgroundColor: 'var(--primary-50)',
+                          color: 'var(--primary-800)',
+                          cursor: 'pointer',
+                          flexShrink: 0,
+                        }}
+                        title="เลือกระดับชั้น (L1-L5)"
+                      >
+                        <option value={1}>L1 (ข้อหลัก)</option>
+                        <option value={2}>L2 (ข้อย่อย 1)</option>
+                        <option value={3}>L3 (ข้อย่อย 2)</option>
+                        <option value={4}>L4 (ข้อย่อย 3)</option>
+                        <option value={5}>L5 (ข้อย่อย 4)</option>
+                      </select>
+
+                      <input
+                        type="text"
+                        value={item.clauseNumber}
+                        onChange={(e) => handleItemFieldChange(idx, 'clauseNumber', e.target.value)}
+                        placeholder="เลขข้อ เช่น 1.1"
+                        style={{
+                          width: '100px',
+                          padding: '0.25rem 0.5rem',
+                          fontSize: '0.825rem',
+                          fontWeight: 700,
+                          color: 'var(--primary-900)',
+                          border: '1px solid var(--slate-300)',
+                          borderRadius: '4px',
+                          backgroundColor: '#F8FAFC',
+                          flexShrink: 0,
+                        }}
+                        title="เลขข้อกำหนด"
+                      />
+
+                      <input
+                        type="text"
+                        value={item.title}
+                        onChange={(e) => handleItemFieldChange(idx, 'title', e.target.value)}
+                        placeholder="ชื่อหัวข้อข้อกำหนด..."
+                        style={{
+                          flex: 1,
+                          padding: '0.25rem 0.5rem',
+                          fontSize: '0.85rem',
+                          fontWeight: 500,
+                          border: '1px solid var(--slate-300)',
+                          borderRadius: '4px',
+                        }}
+                        title="ชื่อหัวข้อข้อกำหนด"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteParsedItem(idx)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#EF4444',
+                          cursor: 'pointer',
+                          padding: '0.3rem',
+                          borderRadius: '4px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          opacity: 0.8,
+                        }}
+                        title="ลบข้อนี้ออก"
+                        onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
+                        onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.8')}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+
+                    {/* Bottom Row: Editable Requirement text */}
+                    <div>
+                      <textarea
+                        value={item.requirement}
+                        onChange={(e) => handleItemFieldChange(idx, 'requirement', e.target.value)}
+                        placeholder="รายละเอียดข้อกำหนดตาม TOR (แก้ไข/ปรับปรุงข้อความในช่องนี้ได้โดยตรง)..."
+                        rows={2}
+                        style={{
+                          width: '100%',
+                          padding: '0.4rem 0.6rem',
+                          fontSize: '0.825rem',
+                          color: 'var(--slate-800)',
+                          border: '1px solid var(--slate-200)',
+                          borderRadius: '4px',
+                          fontFamily: 'inherit',
+                          lineHeight: '1.45',
+                          resize: 'vertical',
+                          minHeight: '48px',
+                          boxSizing: 'border-box',
+                          backgroundColor: '#FFFFFF',
+                        }}
+                      />
                     </div>
                   </div>
                 ))
