@@ -37,6 +37,8 @@ import {
   Cloud,
   HardDrive,
   Users,
+  X,
+  Building2,
 } from 'lucide-react';
 
 interface ProjectDashboardProps {
@@ -956,78 +958,109 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
       {/* Edit / Create Project Modal */}
       {editingProject && (
-        <div className="modal-overlay">
-          <div className="modal-container dashboard-project-modal">
+        <div className="modal-overlay" onClick={() => { setEditingProject(null); setIsCreatingNew(false); }}>
+          <div
+            className="modal-container dashboard-project-modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '820px' }}
+          >
+            {/* Modal Header */}
             <div className="modal-header">
               <div className="modal-title-group">
-                <Building size={20} className="modal-icon-header" />
-                <h2>{isCreatingNew ? 'สร้างโครงการประกวดราคาใหม่' : 'แก้ไขข้อมูลโครงการประกวดราคา'}</h2>
+                <div className="modal-header-badge">
+                  <Building2 size={22} color="#F1B844" />
+                </div>
+                <div className="modal-header-text">
+                  <h2>{isCreatingNew ? 'สร้างโครงการประกวดราคาใหม่' : 'แก้ไขข้อมูลโครงการประกวดราคา'}</h2>
+                  <p>ระบุข้อมูลประกาศจัดซื้อจัดจ้างภาครัฐ e-GP และรายละเอียดงบประมาณ</p>
+                </div>
               </div>
               <button
                 type="button"
-                className="close-btn"
+                className="modal-close-btn"
                 onClick={() => {
                   setEditingProject(null);
                   setIsCreatingNew(false);
                 }}
+                title="ปิดหน้าต่าง"
               >
-                ×
+                <X size={18} />
               </button>
             </div>
 
             <form onSubmit={handleSaveProjectModal}>
               <div className="modal-body">
-                <div className="form-grid-2">
-                  <div className="form-group">
-                    <label className="form-label required">รหัสโครงการ / รหัสประกาศ e-GP</label>
+                {/* Section 1: Core Project Info */}
+                <div className="modal-section-card">
+                  <div className="modal-section-header">
+                    <div className="modal-section-header-title">
+                      <Building size={16} /> ข้อมูลหลักของโครงการและหน่วยงานจัดจ้าง
+                    </div>
+                    <span className="modal-section-subtitle">ข้อมูลอ้างอิงจากระบบ e-GP</span>
+                  </div>
+
+                  <div className="form-grid-2">
+                    <div className="form-group">
+                      <label className="form-label">
+                        <span>รหัสโครงการ / รหัสประกาศ e-GP</span>
+                        <span className="req-star">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-input font-mono"
+                        placeholder="เช่น EGP-67-10492 หรือ รหัสโครงการ 11 หลัก"
+                        value={editingProject.projectCode}
+                        onChange={(e) =>
+                          setEditingProject({ ...editingProject, projectCode: e.target.value })
+                        }
+                        required
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">
+                        <span>สถานะการจัดทำข้อเสนอ</span>
+                        <span className="req-star">*</span>
+                      </label>
+                      <select
+                        className="form-input"
+                        value={editingProject.status}
+                        onChange={(e) =>
+                          setEditingProject({
+                            ...editingProject,
+                            status: e.target.value as ProposalStatus,
+                          })
+                        }
+                      >
+                        <option value="draft">📝 ร่าง (Draft) - อยู่ระหว่างจัดทำ</option>
+                        <option value="submitted">✅ ยื่นแล้ว (Submitted) - ยื่นข้อเสนอในระบบแล้ว</option>
+                        <option value="cancelled">❌ ยกเลิก (Cancelled) - ยกเลิกการประกวดราคา</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="form-group" style={{ marginTop: '0.85rem' }}>
+                    <label className="form-label">
+                      <span>ชื่อโครงการ (ตามประกาศจัดจ้างทางการ)</span>
+                      <span className="req-star">*</span>
+                    </label>
                     <input
                       type="text"
                       className="form-input"
-                      placeholder="เช่น EGP-67-10492"
-                      value={editingProject.projectCode}
+                      placeholder="เช่น โครงการพัฒนาระบบบริการประชาชนดิจิทัลและการบูรณาการข้อมูลอัจฉริยะ"
+                      value={editingProject.projectTitle}
                       onChange={(e) =>
-                        setEditingProject({ ...editingProject, projectCode: e.target.value })
+                        setEditingProject({ ...editingProject, projectTitle: e.target.value })
                       }
                       required
                     />
                   </div>
 
-                  <div className="form-group">
-                    <label className="form-label required">สถานะการจัดทำข้อเสนอ</label>
-                    <select
-                      className="form-input"
-                      value={editingProject.status}
-                      onChange={(e) =>
-                        setEditingProject({
-                          ...editingProject,
-                          status: e.target.value as ProposalStatus,
-                        })
-                      }
-                    >
-                      <option value="draft">ร่าง (Draft) - อยู่ระหว่างจัดทำ</option>
-                      <option value="submitted">ยื่นแล้ว (Submitted) - ยื่นข้อเสนอในระบบแล้ว</option>
-                      <option value="cancelled">ยกเลิก (Cancelled) - ยกเลิกการประกวดราคา</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label required">ชื่อโครงการ (ตามประกาศจัดจ้าง)</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="เช่น โครงการพัฒนาระบบบริการประชาชนดิจิทัลและการบูรณาการข้อมูลอัจฉริยะ"
-                    value={editingProject.projectTitle}
-                    onChange={(e) =>
-                      setEditingProject({ ...editingProject, projectTitle: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-
-                <div className="form-grid-2">
-                  <div className="form-group">
-                    <label className="form-label required">หน่วยงานผู้ว่าจ้าง / เจ้าของโครงการ</label>
+                  <div className="form-group" style={{ marginTop: '0.85rem', marginBottom: 0 }}>
+                    <label className="form-label">
+                      <span>หน่วยงานผู้ว่าจ้าง / เจ้าของโครงการ</span>
+                      <span className="req-star">*</span>
+                    </label>
                     <input
                       type="text"
                       className="form-input"
@@ -1039,104 +1072,160 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                       required
                     />
                   </div>
+                </div>
 
-                  <div className="form-group">
-                    <label className="form-label required">วงเงินงบประมาณ (บาท)</label>
+                {/* Section 2: Budget & Timeline */}
+                <div className="modal-section-card">
+                  <div className="modal-section-header">
+                    <div className="modal-section-header-title">
+                      <Calendar size={16} /> วงเงินงบประมาณและกำหนดการ e-GP
+                    </div>
+                    <span className="modal-section-subtitle">วงเงินและเวลาที่ต้องยื่นเสนอราคา</span>
+                  </div>
+
+                  <div className="form-grid-3">
+                    <div className="form-group">
+                      <label className="form-label">
+                        <span>วงเงินงบประมาณ (บาท)</span>
+                        <span className="req-star">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        className="form-input font-mono"
+                        placeholder="เช่น 7500000"
+                        value={editingProject.budgetAmount}
+                        onChange={(e) =>
+                          setEditingProject({
+                            ...editingProject,
+                            budgetAmount: parseFloat(e.target.value) || 0,
+                          })
+                        }
+                        required
+                      />
+                      {editingProject.budgetAmount > 0 && (
+                        <span className="field-highlight-hint">
+                          ฿ {editingProject.budgetAmount.toLocaleString('th-TH')} บาท
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">วันที่ประกาศจัดจ้าง</label>
+                      <input
+                        type="date"
+                        className="form-input"
+                        value={editingProject.announcementDate || ''}
+                        onChange={(e) =>
+                          setEditingProject({
+                            ...editingProject,
+                            announcementDate: e.target.value,
+                          })
+                        }
+                      />
+                      <span className="field-hint">วันที่เผยแพร่ TOR/ประกาศ</span>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">วันเวลายื่นข้อเสนอในระบบ</label>
+                      <input
+                        type="datetime-local"
+                        className="form-input font-mono"
+                        value={editingProject.submissionDeadline || ''}
+                        onChange={(e) =>
+                          setEditingProject({
+                            ...editingProject,
+                            submissionDeadline: e.target.value,
+                          })
+                        }
+                      />
+                      <span className="field-hint">ระบบจะคำนวณเวลานับถอยหลัง</span>
+                    </div>
+                  </div>
+
+                  <div className="form-group" style={{ marginTop: '0.85rem', marginBottom: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label className="form-label" style={{ marginBottom: 0 }}>
+                        <span>ลิงก์หน้าประกาศจัดจ้าง e-GP กรมบัญชีกลาง (URL)</span>
+                      </label>
+                      {editingProject.egpUrl && editingProject.egpUrl.startsWith('http') && (
+                        <a
+                          href={editingProject.egpUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            fontSize: '0.75rem',
+                            color: 'var(--primary-600)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.25rem',
+                            textDecoration: 'none',
+                            fontWeight: 600,
+                          }}
+                        >
+                          <ExternalLink size={12} /> ทดสอบเปิดลิงก์
+                        </a>
+                      )}
+                    </div>
                     <input
-                      type="number"
+                      type="url"
                       className="form-input font-mono"
-                      placeholder="เช่น 7500000"
-                      value={editingProject.budgetAmount}
+                      placeholder="https://process3.gprocurement.go.th/egp2procmain/..."
+                      value={editingProject.egpUrl || ''}
                       onChange={(e) =>
-                        setEditingProject({
-                          ...editingProject,
-                          budgetAmount: parseFloat(e.target.value) || 0,
-                        })
+                        setEditingProject({ ...editingProject, egpUrl: e.target.value })
                       }
-                      required
+                      style={{ marginTop: '0.35rem' }}
                     />
+                    <span className="field-hint">
+                      ใส่ลิงก์ระบบจัดซื้อจัดจ้างภาครัฐ เพื่อให้ทีมงานสามารถคลิกเปิดดูประกาศทางการได้ทันที
+                    </span>
                   </div>
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label">
-                    ลิงก์ไปหน้าประกาศจัดจ้าง e-GP กรมบัญชีกลาง (URL)
-                  </label>
-                  <input
-                    type="url"
-                    className="form-input font-mono"
-                    placeholder="https://process3.gprocurement.go.th/egp2procmain/..."
-                    value={editingProject.egpUrl || ''}
-                    onChange={(e) =>
-                      setEditingProject({ ...editingProject, egpUrl: e.target.value })
-                    }
-                  />
-                  <span className="field-hint">
-                    ใส่ลิงก์ระบบจัดซื้อจัดจ้างภาครัฐ เพื่อให้ทีมงานสามารถคลิกเปิดดูประกาศทางการได้ทันที
-                  </span>
-                </div>
-
-                <div className="form-grid-2">
-                  <div className="form-group">
-                    <label className="form-label">วันที่ประกาศจัดจ้าง</label>
-                    <input
-                      type="date"
-                      className="form-input"
-                      value={editingProject.announcementDate || ''}
-                      onChange={(e) =>
-                        setEditingProject({
-                          ...editingProject,
-                          announcementDate: e.target.value,
-                        })
-                      }
-                    />
+                {/* Section 3: Notes */}
+                <div className="modal-section-card">
+                  <div className="modal-section-header">
+                    <div className="modal-section-header-title">
+                      <FileText size={16} /> หมายเหตุและบันทึกความคืบหน้า
+                    </div>
                   </div>
 
-                  <div className="form-group">
-                    <label className="form-label">วันเวลาที่จะต้องยื่นข้อเสนอโครงการในระบบ</label>
-                    <input
-                      type="datetime-local"
-                      className="form-input font-mono"
-                      value={editingProject.submissionDeadline || ''}
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <textarea
+                      className="form-textarea"
+                      rows={2}
+                      placeholder="เช่น กำลังตรวจความสอดคล้องของ TOR ส่วนที่ 3, ยื่นเอกสารและหลักประกันสัญญาแล้ว..."
+                      value={editingProject.statusNote || ''}
                       onChange={(e) =>
-                        setEditingProject({
-                          ...editingProject,
-                          submissionDeadline: e.target.value,
-                        })
+                        setEditingProject({ ...editingProject, statusNote: e.target.value })
                       }
                     />
-                    <span className="field-hint">ระบบจะคำนวณเวลานับถอยหลังและแจ้งเตือนความเร่งด่วน</span>
+                    <span className="field-hint">บันทึกข้อความสรุปสถานะหรือสิ่งที่ต้องเตรียมสำหรับทีมงาน</span>
                   </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">หมายเหตุสถานะการจัดทำข้อเสนอ</label>
-                  <textarea
-                    className="form-textarea"
-                    rows={2}
-                    placeholder="เช่น กำลังตรวจความสอดคล้องของ TOR ส่วนที่ 3, ยื่นเอกสารและหลักประกันสัญญาแล้ว..."
-                    value={editingProject.statusNote || ''}
-                    onChange={(e) =>
-                      setEditingProject({ ...editingProject, statusNote: e.target.value })
-                    }
-                  />
                 </div>
               </div>
 
+              {/* Modal Footer */}
               <div className="modal-footer">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => {
-                    setEditingProject(null);
-                    setIsCreatingNew(false);
-                  }}
-                >
-                  ยกเลิก
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  <Save size={16} /> บันทึกข้อมูลโครงการ
-                </button>
+                <div className="modal-footer-hint">
+                  <Sparkles size={14} style={{ color: 'var(--gold-600)' }} />
+                  <span>สามารถแนบไฟล์ประกาศจัดจ้างและ TOR เพิ่มเติมได้ที่หน้ารายการโครงการ</span>
+                </div>
+                <div className="modal-footer-actions">
+                  <button
+                    type="button"
+                    className="btn-modal-cancel"
+                    onClick={() => {
+                      setEditingProject(null);
+                      setIsCreatingNew(false);
+                    }}
+                  >
+                    ยกเลิก
+                  </button>
+                  <button type="submit" className="btn-modal-submit">
+                    <Save size={16} /> {isCreatingNew ? 'สร้างและบันทึกโครงการ' : 'บันทึกข้อมูลโครงการ'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
