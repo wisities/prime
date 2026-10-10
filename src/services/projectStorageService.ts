@@ -155,6 +155,30 @@ export async function saveProject(project: BiddingProject): Promise<boolean> {
         console.error('Supabase project upsert error:', error);
         return false;
       }
+
+      // ซิงค์ไฟล์แนบทั้งหมดของโครงการลงตาราง project_attachments
+      if (project.attachments && project.attachments.length > 0) {
+        for (const att of project.attachments) {
+          try {
+            await supabase.from('project_attachments').upsert(
+              {
+                id: att.id,
+                project_id: project.id,
+                name: att.name,
+                size: att.size,
+                type: att.type || 'application/octet-stream',
+                category: att.category,
+                file_url: att.dataUrl || null,
+                uploaded_at: att.uploadedAt || new Date().toISOString(),
+              },
+              { onConflict: 'id' }
+            );
+          } catch (attErr) {
+            console.warn('Attachment upsert error:', attErr);
+          }
+        }
+      }
+
       return true;
     } catch (err) {
       console.error('Supabase save error:', err);

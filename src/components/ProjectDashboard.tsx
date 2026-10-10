@@ -75,6 +75,8 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   const fileUploadInputRef = useRef<HTMLInputElement>(null);
   const jsonImportInputRef = useRef<HTMLInputElement>(null);
   const smartFileInputRef = useRef<HTMLInputElement>(null);
+  const announcementFileInputRef = useRef<HTMLInputElement>(null);
+  const torFileInputRef = useRef<HTMLInputElement>(null);
 
   // Smart File Extraction State
   const [isAnalyzingDoc, setIsAnalyzingDoc] = useState(false);
@@ -339,51 +341,82 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     setIsCreatingNew(true);
   };
 
-  // Process Smart File (PDF/Word) for Auto-Extraction
-  const handleProcessSmartFile = async (file: File) => {
-    if (!file) return;
-    const isPdf = file.name.toLowerCase().endsWith('.pdf');
-    const isDocx = file.name.toLowerCase().endsWith('.docx');
-
-    if (!isPdf && !isDocx) {
-      setDocAnalysisMsg({
-        type: 'error',
-        text: 'กรุณาอัปโหลดไฟล์เอกสารนามสกุล .PDF หรือ .DOCX เท่านั้น',
-      });
-      return;
+  // Close Project Modal Safely (Prevents Accidental Loss)
+  const handleCloseProjectModal = () => {
+    const isDirty = Boolean(
+      (editingProject?.projectTitle && editingProject.projectTitle.trim() !== '') ||
+      (editingProject?.clientAgency && editingProject.clientAgency.trim() !== '') ||
+      (editingProject?.attachments && editingProject.attachments.length > 0)
+    );
+    if (isDirty) {
+      if (!window.confirm('คุณต้องการปิดหน้าต่างนี้ใช่หรือไม่? ข้อมูลหรือเอกสารที่ยังไม่ได้กดบันทึกจะหายไป')) {
+        return;
+      }
     }
+    setEditingProject(null);
+    setIsCreatingNew(false);
+    setDocAnalysisMsg(null);
+  };
+
+  // Toggle attachment category inside modal between announcement and tor
+  const handleToggleAttachmentCategory = (attId: string) => {
+    if (!editingProject) return;
+    const updatedAtts = editingProject.attachments.map((att) => {
+      if (att.id === attId) {
+        return {
+          ...att,
+          category: (att.category === 'announcement' ? 'tor' : 'announcement') as 'announcement' | 'tor',
+        };
+      }
+      return att;
+    });
+    setEditingProject({ ...editingProject, attachments: updatedAtts });
+  };
+
+  // Remove attachment inside modal
+  const handleRemoveModalAttachment = (attId: string) => {
+    if (!editingProject) return;
+    const updatedAtts = editingProject.attachments.filter((att) => att.id !== attId);
+    setEditingProject({ ...editingProject, attachments: updatedAtts });
+  };
+
+  // Process Smart Files (PDF/Word) - Supports BOTH Announcement and TOR files!
+  const handleProcessSmartFiles = async (
+    filesInput: FileList | File[],
+    forcedCategory?: 'announcement' | 'tor'
+  ) => {
+    const fileList = Array.from(filesInput);
+    if (fileList.length === 0) return;
 
     setIsAnalyzingDoc(true);
     setDocAnalysisMsg({
       type: 'info',
-      text: `กำลังอ่านและสกัดข้อมูลจาก "${file.name}"...`,
+      text: `กำลังอ่านและสกัดข้อมูลจาก ${fileList.length} ไฟล์...`,
     });
 
     try {
-      const { metadata } = await extractProjectMetadataFromFile(file);
-
       const baseProj: BiddingProject = editingProject || {
         id: `proj-${Date.now()}`,
-        projectCode: metadata.projectCode || `EGP-${new Date().getFullYear() + 543 - 2500}-${Math.floor(10000 + Math.random() * 90000)}`,
-        projectTitle: metadata.projectTitle || file.name.replace(/\.[^/.]+$/, ''),
-        clientAgency: metadata.clientAgency || '',
-        budgetAmount: metadata.budgetAmount || 5000000,
-        egpUrl: metadata.egpUrl || '',
-        announcementDate: metadata.announcementDate || new Date().toISOString().split('T')[0],
-        submissionDeadline: metadata.submissionDeadline || '',
+        projectCode: `EGP-${new Date().getFullYear() + 543 - 2500}-${Math.floor(10000 + Math.random() * 90000)}`,
+        projectTitle: '',
+        clientAgency: '',
+        budgetAmount: 5000000,
+        egpUrl: '',
+        announcementDate: new Date().toISOString().split('T')[0],
+        submissionDeadline: '',
         status: 'draft',
-        statusNote: 'สร้างโครงการอัตโนมัติจากไฟล์เอกสาร e-GP',
+        statusNote: 'สร้างโครงการอัตโนมัติจากไฟล์ประกาศจัดจ้าง/TOR e-GP',
         attachments: [],
         proposalData: projects.length > 0 ? JSON.parse(JSON.stringify(projects[0].proposalData)) : {
           cover: {
-            projectTitle: metadata.projectTitle || '',
-            projectCode: metadata.projectCode || '',
-            clientAgency: metadata.clientAgency || '',
+            projectTitle: '',
+            projectCode: '',
+            clientAgency: '',
             clientDepartment: '',
             submitterCompany: 'บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด',
             submitterSubtext: 'Prime Digital Consultant Co., Ltd.',
             submissionDate: '',
-            budgetFormatted: `${(metadata.budgetAmount || 5000000).toLocaleString()} บาท`,
+            budgetFormatted: '5,000,000 บาท',
             includeBackCover: true,
             includeTOC: true,
           },
@@ -397,55 +430,112 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         updatedAt: new Date().toISOString(),
       };
 
-      // Read file to base64 so we can attach it
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const dataUrl = event.target?.result as string;
-        const isTor = file.name.toLowerCase().includes('tor') || file.name.includes('ขอบเขต');
-        const newAttachment: ProjectAttachment = {
-          id: `att-${Date.now()}`,
+      const currentProj: BiddingProject = { ...baseProj };
+      const currentAttachments: ProjectAttachment[] = [...(currentProj.attachments || [])];
+      const extractedSummary: string[] = [];
+
+      for (const file of fileList) {
+        const isPdf = file.name.toLowerCase().endsWith('.pdf');
+        const isDocx = file.name.toLowerCase().endsWith('.docx');
+        if (!isPdf && !isDocx) continue;
+
+        // Auto determine category: announcement or tor
+        let category: 'announcement' | 'tor' | 'other' = forcedCategory || 'announcement';
+        if (!forcedCategory) {
+          const lowerName = file.name.toLowerCase();
+          if (lowerName.includes('tor') || lowerName.includes('ขอบเขต') || lowerName.includes('scope')) {
+            category = 'tor';
+          } else {
+            category = 'announcement';
+          }
+        }
+
+        // 1. Read base64 for persistent storage & viewing
+        const dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve((e.target?.result as string) || '');
+          reader.readAsDataURL(file);
+        });
+
+        // 2. Extract metadata
+        const { metadata } = await extractProjectMetadataFromFile(file);
+
+        if (metadata.projectCode && (!currentProj.projectCode || currentProj.projectCode.startsWith('EGP-'))) {
+          currentProj.projectCode = metadata.projectCode;
+        }
+        if (metadata.projectTitle && (!currentProj.projectTitle || currentProj.projectTitle.trim() === '')) {
+          currentProj.projectTitle = metadata.projectTitle;
+        }
+        if (metadata.clientAgency && (!currentProj.clientAgency || currentProj.clientAgency.trim() === '')) {
+          currentProj.clientAgency = metadata.clientAgency;
+        }
+        if (metadata.budgetAmount && metadata.budgetAmount > 0) {
+          currentProj.budgetAmount = metadata.budgetAmount;
+        }
+        if (metadata.announcementDate) {
+          currentProj.announcementDate = metadata.announcementDate;
+        }
+        if (metadata.submissionDeadline) {
+          currentProj.submissionDeadline = metadata.submissionDeadline;
+        }
+        if (metadata.egpUrl) {
+          currentProj.egpUrl = metadata.egpUrl;
+        }
+
+        // 3. Add to attachments (avoid duplicate name)
+        const existingIdx = currentAttachments.findIndex((a) => a.name === file.name);
+        const attachmentObj: ProjectAttachment = {
+          id: `att-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
           name: file.name,
           size: file.size,
-          category: isTor ? 'tor' : 'announcement',
+          category,
           type: file.type || (isPdf ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
           uploadedAt: new Date().toISOString(),
           dataUrl,
         };
 
-        const updatedProj: BiddingProject = {
-          ...baseProj,
-          projectCode: metadata.projectCode || baseProj.projectCode,
-          projectTitle: metadata.projectTitle || baseProj.projectTitle,
-          clientAgency: metadata.clientAgency || baseProj.clientAgency,
-          budgetAmount: metadata.budgetAmount !== undefined ? metadata.budgetAmount : baseProj.budgetAmount,
-          announcementDate: metadata.announcementDate || baseProj.announcementDate,
-          submissionDeadline: metadata.submissionDeadline || baseProj.submissionDeadline,
-          egpUrl: metadata.egpUrl || baseProj.egpUrl,
-          attachments: [...baseProj.attachments.filter((a) => a.name !== file.name), newAttachment],
-        };
-
-        setEditingProject(updatedProj);
-        if (!editingProject) {
-          setIsCreatingNew(true);
+        if (existingIdx >= 0) {
+          currentAttachments[existingIdx] = attachmentObj;
+        } else {
+          currentAttachments.push(attachmentObj);
         }
 
-        const foundItems: string[] = [];
-        if (metadata.projectCode) foundItems.push(`รหัสโครงการ: ${metadata.projectCode}`);
-        if (metadata.projectTitle) foundItems.push(`ชื่อโครงการ: ${metadata.projectTitle.substring(0, 45)}...`);
-        if (metadata.clientAgency) foundItems.push(`หน่วยงาน: ${metadata.clientAgency}`);
-        if (metadata.budgetAmount) foundItems.push(`งบประมาณ: ฿${metadata.budgetAmount.toLocaleString()} บาท`);
-        if (metadata.announcementDate) foundItems.push(`วันที่ประกาศ: ${metadata.announcementDate}`);
-        if (metadata.submissionDeadline) foundItems.push(`วันเวลายื่นข้อเสนอ: ${metadata.submissionDeadline}`);
+        extractedSummary.push(`แนบ [${category === 'announcement' ? 'ประกาศจัดจ้าง' : 'TOR'}] ${file.name}`);
+      }
 
-        setDocAnalysisMsg({
-          type: 'success',
-          text: `สกัดข้อมูลสำเร็จ! ระบบกรอกข้อมูลอัตโนมัติจากไฟล์ "${file.name}" ให้เรียบร้อยแล้ว`,
-          details: foundItems.length > 0 ? foundItems : ['แนบไฟล์เข้าสู่โครงการเรียบร้อยแล้ว'],
-        });
-      };
-      reader.readAsDataURL(file);
+      currentProj.attachments = currentAttachments;
+
+      // Sync proposal cover
+      if (currentProj.projectTitle) {
+        currentProj.proposalData.cover.projectTitle = currentProj.projectTitle;
+      }
+      if (currentProj.projectCode) {
+        currentProj.proposalData.cover.projectCode = currentProj.projectCode;
+      }
+      if (currentProj.clientAgency) {
+        currentProj.proposalData.cover.clientAgency = currentProj.clientAgency;
+      }
+      if (currentProj.budgetAmount) {
+        currentProj.proposalData.cover.budgetFormatted = `${currentProj.budgetAmount.toLocaleString()} บาท`;
+      }
+
+      setEditingProject(currentProj);
+      if (!editingProject) {
+        setIsCreatingNew(true);
+      }
+
+      const detailsList: string[] = [...extractedSummary];
+      if (currentProj.projectCode) detailsList.push(`รหัสโครงการ: ${currentProj.projectCode}`);
+      if (currentProj.budgetAmount) detailsList.push(`งบประมาณ: ฿${currentProj.budgetAmount.toLocaleString()} บาท`);
+      if (currentProj.submissionDeadline) detailsList.push(`กำหนดยื่นข้อเสนอ: ${currentProj.submissionDeadline}`);
+
+      setDocAnalysisMsg({
+        type: 'success',
+        text: `สกัดข้อมูลและแนบเอกสารสำเร็จ (${fileList.length} ไฟล์) - เอกสารทั้งหมดถูกบันทึกเพื่อเรียกดูทีหลังเรียบร้อยแล้ว`,
+        details: detailsList,
+      });
     } catch (err: any) {
-      console.error('Error extracting metadata from file:', err);
+      console.error('Error processing smart files:', err);
       setDocAnalysisMsg({
         type: 'error',
         text: `เกิดข้อผิดพลาดในการอ่านไฟล์: ${err.message || 'ไม่สามารถประมวลผลเอกสารได้'}`,
@@ -665,15 +755,17 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
           >
             <RotateCcw size={16} /> โหลดตัวอย่าง
           </button>
-          {/* Hidden Smart File Input */}
+          {/* Hidden Smart File Input (Accepts Multiple Files) */}
           <input
             type="file"
             ref={smartFileInputRef}
             style={{ display: 'none' }}
+            multiple
             accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleProcessSmartFile(file);
+              if (e.target.files && e.target.files.length > 0) {
+                handleProcessSmartFiles(e.target.files);
+              }
               e.target.value = '';
             }}
           />
@@ -1109,11 +1201,10 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
       {/* Edit / Create Project Modal */}
       {editingProject && (
-        <div className="modal-overlay" onClick={() => { setEditingProject(null); setIsCreatingNew(false); }}>
+        <div className="modal-overlay">
           <div
             className="modal-container dashboard-project-modal"
-            onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: '820px' }}
+            style={{ maxWidth: '840px' }}
           >
             {/* Modal Header */}
             <div className="modal-header">
@@ -1123,17 +1214,13 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                 </div>
                 <div className="modal-header-text">
                   <h2>{isCreatingNew ? 'สร้างโครงการประกวดราคาใหม่' : 'แก้ไขข้อมูลโครงการประกวดราคา'}</h2>
-                  <p>ระบุข้อมูลประกาศจัดซื้อจัดจ้างภาครัฐ e-GP และรายละเอียดงบประมาณ</p>
+                  <p>ระบุข้อมูลประกาศจัดซื้อจัดจ้างภาครัฐ e-GP แนบเอกสาร TOR และรายละเอียดงบประมาณ</p>
                 </div>
               </div>
               <button
                 type="button"
                 className="modal-close-btn"
-                onClick={() => {
-                  setEditingProject(null);
-                  setIsCreatingNew(false);
-                  setDocAnalysisMsg(null);
-                }}
+                onClick={handleCloseProjectModal}
                 title="ปิดหน้าต่าง"
               >
                 <X size={18} />
@@ -1142,6 +1229,32 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
             <form onSubmit={handleSaveProjectModal}>
               <div className="modal-body">
+                {/* Hidden File Inputs for Announcement and TOR specifically */}
+                <input
+                  type="file"
+                  ref={announcementFileInputRef}
+                  style={{ display: 'none' }}
+                  accept=".pdf,application/pdf"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                      handleProcessSmartFiles(e.target.files, 'announcement');
+                    }
+                    e.target.value = '';
+                  }}
+                />
+                <input
+                  type="file"
+                  ref={torFileInputRef}
+                  style={{ display: 'none' }}
+                  accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                      handleProcessSmartFiles(e.target.files, 'tor');
+                    }
+                    e.target.value = '';
+                  }}
+                />
+
                 {/* Smart Dropzone for e-GP Announcement / TOR */}
                 <div
                   className={`smart-dropzone ${isDraggingDoc ? 'dragging' : ''}`}
@@ -1153,11 +1266,12 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                   onDrop={(e) => {
                     e.preventDefault();
                     setIsDraggingDoc(false);
-                    const file = e.dataTransfer.files?.[0];
-                    if (file) handleProcessSmartFile(file);
+                    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                      handleProcessSmartFiles(e.dataTransfer.files);
+                    }
                   }}
                   onClick={() => smartFileInputRef.current?.click()}
-                  title="คลิกเพื่อเลือกไฟล์ หรือลากไฟล์ประกาศมาวาง"
+                  title="คลิกเพื่อเลือกไฟล์ หรือลากไฟล์ประกาศจัดจ้าง/TOR มาวาง"
                 >
                   <div className="smart-dropzone-icon">
                     {isAnalyzingDoc ? (
@@ -1169,17 +1283,71 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                   <div className="smart-dropzone-title">
                     {isAnalyzingDoc
                       ? '🔍 กำลังอ่านและสกัดข้อมูลจากเอกสารทางการ...'
-                      : '⚡ ลากไฟล์ประกาศจัดจ้าง หรือ TOR (PDF / Word) มาวางที่นี่'}
+                      : '⚡ ลากไฟล์ประกาศจัดจ้าง และ ไฟล์ TOR (PDF / Word) มาวางที่นี่'}
                   </div>
                   <div className="smart-dropzone-desc">
                     {isAnalyzingDoc
                       ? 'ระบบกำลังวิเคราะห์รหัสโครงการ, ชื่อโครงการ, หน่วยงาน, งบประมาณ และวันเวลายื่นข้อเสนอ...'
-                      : 'ระบบจะสแกนและกรอกรหัส e-GP, ชื่อโครงการ, หน่วยงาน, งบประมาณ และวันเวลายื่นข้อเสนอให้อัตโนมัติ (คลิกเพื่อเลือกไฟล์)'}
+                      : 'สามารถแนบได้ทั้งไฟล์ประกาศจัดจ้างและไฟล์ TOR พร้อมกัน ระบบจะสกัดข้อมูลกรอกลงฟอร์มและบันทึกไฟล์ให้เรียกดูทีหลังได้ตลอดเวลา'}
                   </div>
+
+                  {/* Quick Action Buttons for Specific File Categories */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: '0.65rem',
+                      marginTop: '0.5rem',
+                      flexWrap: 'wrap',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      className="btn-modal-cancel"
+                      style={{
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                        backgroundColor: '#F0FDF4',
+                        borderColor: '#86EFAC',
+                        color: '#15803D',
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        announcementFileInputRef.current?.click();
+                      }}
+                    >
+                      <Upload size={14} /> 📄 แนบไฟล์ประกาศจัดจ้าง (PDF)
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-modal-cancel"
+                      style={{
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                        backgroundColor: '#EFF6FF',
+                        borderColor: '#93C5FD',
+                        color: '#1D4ED8',
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        torFileInputRef.current?.click();
+                      }}
+                    >
+                      <Upload size={14} /> 📘 แนบไฟล์ TOR (PDF / Word)
+                    </button>
+                  </div>
+
                   <div className="smart-dropzone-badges">
                     <span className="smart-dropzone-badge">📄 ประกาศจัดจ้าง e-GP (.PDF)</span>
-                    <span className="smart-dropzone-badge">📝 เอกสาร TOR (.PDF / .DOCX)</span>
-                    <span className="smart-dropzone-badge">✨ Auto-fill & แนบไฟล์ทันที</span>
+                    <span className="smart-dropzone-badge">📘 เอกสาร TOR (.PDF / .DOCX)</span>
+                    <span className="smart-dropzone-badge">💾 บันทึกไฟล์ถาวร</span>
+                    <span className="smart-dropzone-badge">✨ Auto-fill & แนบไฟล์</span>
                   </div>
                 </div>
 
@@ -1201,6 +1369,108 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                         ))}
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* Section: Attached Documents for this Project */}
+                {editingProject.attachments && editingProject.attachments.length > 0 && (
+                  <div className="modal-section-card" style={{ borderColor: '#CBD5E1' }}>
+                    <div className="modal-section-header">
+                      <div className="modal-section-header-title">
+                        <Paperclip size={16} /> เอกสารแนบประจำโครงการ ({editingProject.attachments.length} ไฟล์ที่แนบแล้ว)
+                      </div>
+                      <span className="modal-section-subtitle">ไฟล์จะถูกบันทึกเพื่อเรียกดูและดาวน์โหลดได้ตลอดเวลา</span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                      {editingProject.attachments.map((att) => (
+                        <div
+                          key={att.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '0.65rem 0.85rem',
+                            borderRadius: '8px',
+                            backgroundColor: att.category === 'tor' ? '#EFF6FF' : '#F0FDF4',
+                            border: `1px solid ${att.category === 'tor' ? '#BFDBFE' : '#BBF7D0'}`,
+                            gap: '0.75rem',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flex: 1, minWidth: 0 }}>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleAttachmentCategory(att.id)}
+                              title="คลิกเพื่อสลับหมวดหมู่ระหว่าง ประกาศจัดจ้าง กับ TOR"
+                              style={{
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                                padding: '0.2rem 0.55rem',
+                                borderRadius: '9999px',
+                                border: 'none',
+                                cursor: 'pointer',
+                                backgroundColor: att.category === 'tor' ? '#2563EB' : '#059669',
+                                color: '#FFFFFF',
+                                flexShrink: 0,
+                              }}
+                            >
+                              {att.category === 'tor' ? '📘 TOR' : '📄 ประกาศจัดจ้าง'} (คลิกเพื่อเปลี่ยน)
+                            </button>
+                            <span
+                              style={{
+                                fontSize: '0.85rem',
+                                fontWeight: 500,
+                                color: 'var(--slate-800)',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                              title={att.name}
+                            >
+                              {att.name}
+                            </span>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--slate-400)', flexShrink: 0 }}>
+                              ({(att.size / (1024 * 1024)).toFixed(2)} MB)
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexShrink: 0 }}>
+                            {att.dataUrl && (
+                              <a
+                                href={att.dataUrl}
+                                download={att.name}
+                                className="btn-modal-cancel"
+                                style={{
+                                  padding: '0.3rem 0.6rem',
+                                  fontSize: '0.75rem',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.25rem',
+                                  textDecoration: 'none',
+                                }}
+                                title="ดาวน์โหลดหรือเปิดดูไฟล์นี้"
+                              >
+                                <Download size={13} /> ดาวน์โหลด
+                              </a>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveModalAttachment(att.id)}
+                              className="btn-modal-cancel"
+                              style={{
+                                padding: '0.3rem 0.55rem',
+                                color: '#EF4444',
+                                borderColor: '#FECACA',
+                                backgroundColor: '#FEF2F2',
+                              }}
+                              title="ลบไฟล์แนบนี้ออก"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 
@@ -1429,11 +1699,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                   <button
                     type="button"
                     className="btn-modal-cancel"
-                    onClick={() => {
-                      setEditingProject(null);
-                      setIsCreatingNew(false);
-                      setDocAnalysisMsg(null);
-                    }}
+                    onClick={handleCloseProjectModal}
                   >
                     ยกเลิก
                   </button>
