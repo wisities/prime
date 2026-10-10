@@ -1259,10 +1259,16 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         <div className="modal-overlay">
           <div
             className="modal-container dashboard-project-modal"
-            style={{ maxWidth: '840px' }}
+            style={{
+              maxWidth: '880px',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
           >
             {/* Modal Header */}
-            <div className="modal-header">
+            <div className="modal-header" style={{ flexShrink: 0 }}>
               <div className="modal-title-group">
                 <div className="modal-header-badge">
                   <Building2 size={22} color="#F1B844" />
@@ -1282,8 +1288,24 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleSaveProjectModal}>
-              <div className="modal-body">
+            <form
+              onSubmit={handleSaveProjectModal}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                flex: '1 1 auto',
+                minHeight: 0,
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                className="modal-body"
+                style={{
+                  flex: '1 1 auto',
+                  minHeight: 0,
+                  overflowY: 'auto',
+                }}
+              >
                 {/* Hidden File Inputs for Announcement, TOR, and General attachments */}
                 <input
                   type="file"
@@ -1806,7 +1828,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
               </div>
 
               {/* Modal Footer */}
-              <div className="modal-footer">
+              <div className="modal-footer" style={{ flexShrink: 0 }}>
                 <div className="modal-footer-hint">
                   <Sparkles size={14} style={{ color: 'var(--gold-600)' }} />
                   <span>สามารถแนบไฟล์ประกาศจัดจ้างและ TOR เพิ่มเติมได้ที่หน้ารายการโครงการ</span>

@@ -416,9 +416,10 @@ input, textarea, select, button {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: 1000;
   padding: 1.5rem;
   backdrop-filter: blur(6px);
+  overflow-y: auto;
 }
 
 .modal-content,
@@ -433,6 +434,14 @@ input, textarea, select, button {
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0, 0, 0, 0.05);
   overflow: hidden;
   animation: modalScaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-container > form {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 @keyframes modalScaleIn {
@@ -534,10 +543,34 @@ input, textarea, select, button {
 .modal-body {
   padding: 1.5rem 1.75rem;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 1.15rem;
   background-color: #F8FAFC;
+  flex: 1 1 auto;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E1 #F1F5F9;
+}
+
+.modal-body::-webkit-scrollbar {
+  width: 7px;
+}
+
+.modal-body::-webkit-scrollbar-track {
+  background: #F1F5F9;
+  border-radius: 4px;
+}
+
+.modal-body::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+
+.modal-body::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
 }
 
 /* Smart Dropzone for e-GP / TOR Documents */
@@ -1650,7 +1683,31 @@ input, textarea, select, button {
 
 /* Project Modal Extra Styles */
 .dashboard-project-modal {
-  max-width: 720px !important;
+  max-width: 880px !important;
+  max-height: 90vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+.dashboard-project-modal > form {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.dashboard-project-modal .modal-body {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+}
+
+.dashboard-project-modal .modal-header,
+.dashboard-project-modal .modal-footer {
+  flex-shrink: 0 !important;
 }
 
 .modal-title-group {
