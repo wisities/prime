@@ -40,7 +40,7 @@ const COLOR_SECONDARY = '1E3A8A';
 const COLOR_TEXT = '1E293B';
 const COLOR_MUTED = '64748B';
 
-// Helper for Thai standard body paragraphs (มีย่อหน้า 0.5 นิ้ว / 720 twips, กั้นหน้าหลัง JUSTIFIED, Line Spacing = Single)
+// Helper for Thai standard body paragraphs (มีย่อหน้า 0.5 นิ้ว / 720 twips, AlignmentType.LEFT ป้องกันตัวอักษรยืด, Line Spacing = Single)
 function createBodyParagraphs(
   text: string,
   options?: {
@@ -64,7 +64,7 @@ function createBodyParagraphs(
 
   return lines.map((line) => {
     return new Paragraph({
-      alignment: options?.align ?? AlignmentType.JUSTIFIED,
+      alignment: options?.align ?? AlignmentType.LEFT,
       indent: {
         firstLine: options?.firstLineIndent ?? 720, // ย่อหน้ามาตรฐาน 0.5 นิ้ว (1.27 ซม.)
       },
@@ -289,7 +289,7 @@ function renderMethodologyParagraphsAndTables(text: string): (Paragraph | Table)
         i++;
       }
 
-      // กรองเส้นแบ่ง header |---|---| ออก
+      // กรองเส้นแบ่ง header |---|---| ออก (ถ้ามี)
       const contentRows = tableLines.filter((tl) => !/^\|[\s\-:|]+\|$/.test(tl));
       if (contentRows.length > 0) {
         const parsedRows = contentRows.map((rowStr) =>
@@ -300,18 +300,56 @@ function renderMethodologyParagraphsAndTables(text: string): (Paragraph | Table)
         );
 
         const colCount = Math.max(...parsedRows.map((r) => r.length), 1);
-        const colWidth = Math.floor(100 / colCount);
+
+        // ตรวจสอบว่าคอลัมน์แรกเป็นคอลัมน์ลำดับหรือไม่ ("ลำดับ", "ขั้นตอน", "ที่", "ข้อ", "#", "No." หรือตัวเลขสั้นๆ)
+        const firstColHeader = (parsedRows[0]?.[0] || '').trim();
+        const isSequenceCol =
+          /^(ลำดับ|ขั้นตอน|ที่|ข้อ|ลำดับที่|no\.?|#|order|item|seq)$/i.test(firstColHeader) ||
+          (parsedRows.length > 1 && parsedRows.slice(1).every((r) => !r[0] || r[0].length <= 4));
+
+        const colWidths: number[] = [];
+        if (isSequenceCol && colCount > 1) {
+          // กำหนดความกว้างคอลัมน์ลำดับให้พอดีกับเนื้อหา (10% สำหรับ 2-3 คอลัมน์, 8% สำหรับ 4+ คอลัมน์)
+          const firstWidth = colCount >= 4 ? 8 : 10;
+          colWidths.push(firstWidth);
+          const remainingWidth = 100 - firstWidth;
+          const otherColWidth = Math.floor(remainingWidth / (colCount - 1));
+          for (let c = 1; c < colCount; c++) {
+            if (c === colCount - 1) {
+              colWidths.push(100 - colWidths.reduce((a, b) => a + b, 0));
+            } else {
+              colWidths.push(otherColWidth);
+            }
+          }
+        } else {
+          const equalWidth = Math.floor(100 / colCount);
+          for (let c = 0; c < colCount; c++) {
+            if (c === colCount - 1) {
+              colWidths.push(100 - colWidths.reduce((a, b) => a + b, 0));
+            } else {
+              colWidths.push(equalWidth);
+            }
+          }
+        }
 
         const docxRows: TableRow[] = [];
         parsedRows.forEach((rowCells, rIdx) => {
-          const isHeader = rIdx === 0 && tableLines.some((tl) => /^\|[\s\-:|]+\|$/.test(tl));
+          // แถวแรกของตารางเป็น Header Row เสมอ (สีเข้ม 0F2744 ตัวอักษรสีขาว และ Repeat Header Row ข้ามหน้า)
+          const isHeader = rIdx === 0;
           const cells: TableCell[] = [];
           for (let c = 0; c < colCount; c++) {
             const cellText = rowCells[c] || '';
+            const width = colWidths[c] || Math.floor(100 / colCount);
             if (isHeader) {
-              cells.push(createHeaderCell(cellText, colWidth));
+              cells.push(createHeaderCell(cellText, width));
             } else {
-              cells.push(createDataCell(cellText, colWidth));
+              const isSeq = isSequenceCol && c === 0;
+              cells.push(
+                createDataCell(cellText, width, {
+                  align: isSeq ? AlignmentType.CENTER : AlignmentType.LEFT,
+                  bold: isSeq,
+                })
+              );
             }
           }
           if (isHeader) {
@@ -351,10 +389,10 @@ function renderMethodologyParagraphsAndTables(text: string): (Paragraph | Table)
         })
       );
     } else {
-      // ย่อหน้าข้อความพรรณาตามปกติ (มีย่อหน้า กั้นหน้าหลัง Single line spacing)
+      // ย่อหน้าข้อความพรรณาตามปกติ (มีย่อหน้า AlignmentType.LEFT ป้องกันตัวอักษรยืดผิดปกติ Line Spacing = Single)
       result.push(
         new Paragraph({
-          alignment: AlignmentType.JUSTIFIED,
+          alignment: AlignmentType.LEFT,
           indent: { firstLine: 720 },
           spacing: { before: 40, after: 80, line: 240, lineRule: LineRuleType.AUTO },
           children: [
@@ -1141,8 +1179,8 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
 
   part5AChildren.push(
     ...createBodyParagraphs(section5.companyProfile),
-    createP(`ทุนจดทะเบียน: ${section5.registeredCapital}`, { firstLineIndent: 450, align: AlignmentType.LEFT }),
-    ...createBodyParagraphs(`วิสัยทัศน์และพันธกิจ: ${section5.visionMission}`)
+    createP(`ทุนจดทะเบียน: ${section5.registeredCapital}`, { firstLineIndent: 450, align: AlignmentType.LEFT, spaceAfter: 60 }),
+    createP(`วิสัยทัศน์และพันธกิจ: ${section5.visionMission}`, { firstLineIndent: 450, align: AlignmentType.LEFT, spaceAfter: 100 })
   );
 
   if (section5.companyOfficeImageUrl) {

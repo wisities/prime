@@ -305,6 +305,7 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                         tableLines.push(methLines[lineIdx]);
                         lineIdx++;
                       }
+                      // กรองเส้นแบ่ง header |---|---| ออก (ถ้ามี)
                       const contentRows = tableLines.filter((tl) => !/^\|[\s\-:|]+\|$/.test(tl));
                       if (contentRows.length > 0) {
                         const parsedRows = contentRows.map((r) =>
@@ -312,6 +313,9 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                         );
                         const headerRow = parsedRows[0];
                         const dataRows = parsedRows.slice(1);
+                        const firstColTitle = (headerRow[0] || '').trim();
+                        const isSeqCol = /^(ลำดับ|ขั้นตอน|ที่|ข้อ|ลำดับที่|no\.?|#)$/i.test(firstColTitle) || (headerRow.length > 2 && dataRows.every((r) => !r[0] || r[0].length <= 4));
+
                         parsedElements.push(
                           <table
                             key={`tbl-${lineIdx}`}
@@ -325,21 +329,43 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                           >
                             <thead>
                               <tr style={{ backgroundColor: 'var(--primary-800)', color: 'white' }}>
-                                {headerRow.map((h, hIdx) => (
-                                  <th key={hIdx} style={{ padding: '6px 8px', border: '1px solid var(--slate-300)', textAlign: 'left' }}>
-                                    {h}
-                                  </th>
-                                ))}
+                                {headerRow.map((h, hIdx) => {
+                                  const isCol0Seq = isSeqCol && hIdx === 0;
+                                  return (
+                                    <th
+                                      key={hIdx}
+                                      style={{
+                                        padding: '6px 8px',
+                                        border: '1px solid var(--slate-300)',
+                                        textAlign: isCol0Seq ? 'center' : 'left',
+                                        width: isCol0Seq ? '10%' : undefined,
+                                      }}
+                                    >
+                                      {h}
+                                    </th>
+                                  );
+                                })}
                               </tr>
                             </thead>
                             <tbody>
                               {dataRows.map((row, rIdx) => (
                                 <tr key={rIdx} style={{ backgroundColor: rIdx % 2 === 0 ? '#FFFFFF' : '#F8FAFC' }}>
-                                  {row.map((cell, cIdx) => (
-                                    <td key={cIdx} style={{ padding: '6px 8px', border: '1px solid var(--slate-300)' }}>
-                                      {cell}
-                                    </td>
-                                  ))}
+                                  {row.map((cell, cIdx) => {
+                                    const isCol0Seq = isSeqCol && cIdx === 0;
+                                    return (
+                                      <td
+                                        key={cIdx}
+                                        style={{
+                                          padding: '6px 8px',
+                                          border: '1px solid var(--slate-300)',
+                                          textAlign: isCol0Seq ? 'center' : 'left',
+                                          fontWeight: isCol0Seq ? 600 : 400,
+                                        }}
+                                      >
+                                        {cell}
+                                      </td>
+                                    );
+                                  })}
                                 </tr>
                               ))}
                             </tbody>
@@ -371,7 +397,7 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                     } else {
                       // พรรณาวิธีการ (Paragraph)
                       parsedElements.push(
-                        <p key={`p-${lineIdx}`} style={{ margin: '0 0 0.5rem 0', textAlign: 'justify', textIndent: '2rem', lineHeight: 1.5 }}>
+                        <p key={`p-${lineIdx}`} style={{ margin: '0 0 0.5rem 0', textAlign: 'left', textIndent: '2rem', lineHeight: 1.5 }}>
                           {line}
                         </p>
                       );
