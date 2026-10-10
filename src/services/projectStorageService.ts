@@ -218,6 +218,10 @@ export async function uploadAttachmentFile(
       const cleanFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
       const storagePath = `${projectId}/${Date.now()}_${cleanFileName}`;
 
+      try {
+        await supabase.storage.createBucket('project-attachments', { public: true });
+      } catch {}
+
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('project-attachments')
         .upload(storagePath, file, {
@@ -324,6 +328,15 @@ export async function testSupabaseConnection(): Promise<SupabaseTestResult> {
       storageExists = Boolean(
         buckets?.some((b) => b.id === 'project-attachments' || b.name === 'project-attachments')
       );
+      if (!storageExists) {
+        // ลองสร้าง Bucket อัตโนมัติผ่าน API
+        const { error: createErr } = await supabase.storage.createBucket('project-attachments', {
+          public: true,
+        });
+        if (!createErr) {
+          storageExists = true;
+        }
+      }
     } catch {}
 
     const countNum = count ?? (data ? data.length : 0);
