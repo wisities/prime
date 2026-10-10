@@ -167,20 +167,30 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
               <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '0.35rem' }}>
                 1.2 วัตถุประสงค์ของโครงการ
               </h3>
-              <ul style={{ paddingLeft: '2rem', marginBottom: '1rem' }}>
-                {section1.objectives.map((obj, i) => (
-                  <li key={i}>(1.{i + 1}) {obj}</li>
-                ))}
-              </ul>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginBottom: '1rem' }}>
+                {section1.objectives.map((obj, i) => {
+                  const clean = obj.replace(/^\(\d+\.\d+\)\s*/, '').replace(/^1\.\d+\.\d+\s*/, '');
+                  return (
+                    <p key={i} style={{ margin: 0, textIndent: '1.5rem', textAlign: 'justify' }}>
+                      1.2.{i + 1} {clean}
+                    </p>
+                  );
+                })}
+              </div>
 
               <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '0.35rem' }}>
                 1.3 ประโยชน์ที่คาดว่าจะได้รับ
               </h3>
-              <ul style={{ paddingLeft: '2rem', marginBottom: '1rem' }}>
-                {section1.expectedBenefits.map((b, i) => (
-                  <li key={i}>(2.{i + 1}) {b}</li>
-                ))}
-              </ul>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginBottom: '1rem' }}>
+                {section1.expectedBenefits.map((b, i) => {
+                  const clean = b.replace(/^\(\d+\.\d+\)\s*/, '').replace(/^2\.\d+\.\d+\s*/, '').replace(/^1\.\d+\.\d+\s*/, '');
+                  return (
+                    <p key={i} style={{ margin: 0, textIndent: '1.5rem', textAlign: 'justify' }}>
+                      1.3.{i + 1} {clean}
+                    </p>
+                  );
+                })}
+              </div>
 
               <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginTop: '1rem', marginBottom: '0.5rem' }}>
                 1.5 ขอบเขตงานตามประกาศจัดจ้าง ({section1.scopeItems.length} ข้อ)
@@ -220,7 +230,7 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                   แผนการดำเนินงานตลอดโครงการ (Work Plan & Weekly Gantt Chart)
                 </h2>
               </div>
-              <p style={{ marginBottom: '1rem' }}>{section2.workPlanOverview}</p>
+              <p style={{ marginBottom: '1rem', textAlign: 'justify', textIndent: '2rem', lineHeight: 1.5 }}>{section2.workPlanOverview}</p>
               
               <div style={{ backgroundColor: 'var(--slate-50)', padding: '0.75rem', border: '1px solid var(--slate-300)', borderRadius: '6px', textAlign: 'center', marginBottom: '1.5rem' }}>
                 <span style={{ fontSize: '0.85rem', color: 'var(--primary-800)', fontWeight: 600 }}>
@@ -263,7 +273,7 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                   กรอบแนวคิดและวิธีการดำเนินงานตามข้อกำหนด (TOR Mapping)
                 </h2>
               </div>
-              <p style={{ marginBottom: '1rem' }}>{section3.frameworkOverview}</p>
+              <p style={{ marginBottom: '1rem', textAlign: 'justify', textIndent: '2rem', lineHeight: 1.5 }}>{section3.frameworkOverview}</p>
 
               <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--primary-900)' }}>
                 3.2 วิธีการดำเนินงาน
@@ -361,7 +371,7 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                     } else {
                       // พรรณาวิธีการ (Paragraph)
                       parsedElements.push(
-                        <p key={`p-${lineIdx}`} style={{ margin: '0 0 0.35rem 0', lineHeight: 1.6 }}>
+                        <p key={`p-${lineIdx}`} style={{ margin: '0 0 0.5rem 0', textAlign: 'justify', textIndent: '2rem', lineHeight: 1.5 }}>
                           {line}
                         </p>
                       );

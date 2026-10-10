@@ -17,6 +17,7 @@ import {
   PageBreak,
   TableOfContents,
   PageOrientation,
+  LineRuleType,
 } from 'docx';
 import saveAs from 'file-saver';
 import { ProposalData } from '../types/proposal';
@@ -39,7 +40,55 @@ const COLOR_SECONDARY = '1E3A8A';
 const COLOR_TEXT = '1E293B';
 const COLOR_MUTED = '64748B';
 
-// Helper for Thai standard paragraph
+// Helper for Thai standard body paragraphs (มีย่อหน้า 0.5 นิ้ว / 720 twips, กั้นหน้าหลัง JUSTIFIED, Line Spacing = Single)
+function createBodyParagraphs(
+  text: string,
+  options?: {
+    bold?: boolean;
+    size?: number; // half-points (32 = 16pt)
+    color?: string;
+    align?: (typeof AlignmentType)[keyof typeof AlignmentType];
+    firstLineIndent?: number; // default 720 (0.5 inch / 1.27 cm)
+    spaceAfter?: number;
+    spaceBefore?: number;
+    italic?: boolean;
+  }
+): Paragraph[] {
+  if (!text) return [];
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  if (lines.length === 0) return [];
+
+  return lines.map((line) => {
+    return new Paragraph({
+      alignment: options?.align ?? AlignmentType.JUSTIFIED,
+      indent: {
+        firstLine: options?.firstLineIndent ?? 720, // ย่อหน้ามาตรฐาน 0.5 นิ้ว (1.27 ซม.)
+      },
+      spacing: {
+        after: options?.spaceAfter ?? 100,
+        before: options?.spaceBefore ?? 0,
+        line: 240, // Line Spacing = Single (240 twips)
+        lineRule: LineRuleType.AUTO,
+      },
+      children: [
+        new TextRun({
+          text: line,
+          font: FONT_FAMILY,
+          size: options?.size ?? 32, // 16pt (TH Sarabun New)
+          bold: options?.bold ?? false,
+          italics: options?.italic ?? false,
+          color: options?.color ?? COLOR_TEXT,
+        }),
+      ],
+    });
+  });
+}
+
+// Helper for Thai standard paragraph (lists, metadata, single lines)
 function createP(
   text: string,
   options?: {
@@ -51,15 +100,20 @@ function createP(
     spaceBefore?: number;
     italic?: boolean;
     indentLeft?: number;
+    firstLineIndent?: number;
   }
 ): Paragraph {
   return new Paragraph({
     alignment: options?.align || AlignmentType.LEFT,
-    indent: options?.indentLeft ? { left: options.indentLeft } : undefined,
+    indent: {
+      left: options?.indentLeft,
+      firstLine: options?.firstLineIndent,
+    },
     spacing: {
-      after: options?.spaceAfter ?? 120,
+      after: options?.spaceAfter ?? 80,
       before: options?.spaceBefore ?? 0,
-      line: 300,
+      line: 240, // Line Spacing = Single (240 twips)
+      lineRule: LineRuleType.AUTO,
     },
     children: [
       new TextRun({
@@ -83,7 +137,7 @@ function createSectionHeader(
     heading: HeadingLevel.HEADING_1,
     alignment: AlignmentType.CENTER,
     pageBreakBefore,
-    spacing: { before: 260, after: 180 },
+    spacing: { before: 260, after: 180, line: 240, lineRule: LineRuleType.AUTO },
     children: [
       new TextRun({
         text: sectionNum,
@@ -114,7 +168,7 @@ function formatTorClauseNumber(clause: string): string {
 function createH1(title: string): Paragraph {
   return new Paragraph({
     heading: HeadingLevel.HEADING_1,
-    spacing: { before: 240, after: 140 },
+    spacing: { before: 240, after: 140, line: 240, lineRule: LineRuleType.AUTO },
     children: [
       new TextRun({
         text: title,
@@ -130,7 +184,7 @@ function createH1(title: string): Paragraph {
 function createH2(title: string): Paragraph {
   return new Paragraph({
     heading: HeadingLevel.HEADING_2,
-    spacing: { before: 180, after: 100 },
+    spacing: { before: 180, after: 100, line: 240, lineRule: LineRuleType.AUTO },
     children: [
       new TextRun({
         text: title,
@@ -151,6 +205,7 @@ function createHeaderCell(text: string, widthPercent: number): TableCell {
     children: [
       new Paragraph({
         alignment: AlignmentType.CENTER,
+        spacing: { line: 240, lineRule: LineRuleType.AUTO },
         children: [
           new TextRun({
             text,
@@ -170,24 +225,33 @@ function createDataCell(
   widthPercent: number,
   options?: { align?: (typeof AlignmentType)[keyof typeof AlignmentType]; bold?: boolean; bg?: string }
 ): TableCell {
+  const lines = (text || '').split(/\r?\n/);
+  const paraChildren = lines.map((l, idx) => {
+    return new Paragraph({
+      alignment: options?.align || AlignmentType.LEFT,
+      spacing: {
+        after: idx === lines.length - 1 ? 0 : 40,
+        before: 0,
+        line: 240,
+        lineRule: LineRuleType.AUTO,
+      },
+      children: [
+        new TextRun({
+          text: l,
+          font: FONT_FAMILY,
+          size: 28, // 14pt
+          bold: options?.bold ?? false,
+          color: COLOR_TEXT,
+        }),
+      ],
+    });
+  });
+
   return new TableCell({
     width: { size: widthPercent, type: WidthType.PERCENTAGE },
     shading: options?.bg ? { fill: options.bg } : undefined,
     margins: { top: 100, bottom: 100, left: 140, right: 140 },
-    children: [
-      new Paragraph({
-        alignment: options?.align || AlignmentType.LEFT,
-        children: [
-          new TextRun({
-            text,
-            font: FONT_FAMILY,
-            size: 28, // 14pt
-            bold: options?.bold ?? false,
-            color: COLOR_TEXT,
-          }),
-        ],
-      }),
-    ],
+    children: paraChildren.length > 0 ? paraChildren : [new Paragraph({ children: [] })],
   });
 }
 
@@ -256,7 +320,8 @@ function renderMethodologyParagraphsAndTables(text: string): (Paragraph | Table)
       result.push(
         new Paragraph({
           bullet: { level: 0 },
-          spacing: { before: 50, after: 50 },
+          alignment: AlignmentType.JUSTIFIED,
+          spacing: { before: 40, after: 40, line: 240, lineRule: LineRuleType.AUTO },
           children: [
             new TextRun({
               text: cleanLine,
@@ -267,10 +332,12 @@ function renderMethodologyParagraphsAndTables(text: string): (Paragraph | Table)
         })
       );
     } else {
-      // ย่อหน้าข้อความพรรณาตามปกติ
+      // ย่อหน้าข้อความพรรณาตามปกติ (มีย่อหน้า กั้นหน้าหลัง Single line spacing)
       result.push(
         new Paragraph({
-          spacing: { before: 70, after: 70 },
+          alignment: AlignmentType.JUSTIFIED,
+          indent: { firstLine: 720 },
+          spacing: { before: 40, after: 80, line: 240, lineRule: LineRuleType.AUTO },
           children: [
             new TextRun({
               text: line,
@@ -494,39 +561,69 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
   part1Children.push(
     createSectionHeader('ส่วนที่ 1', 'บทนำ ภาพรวมโครงการ และขอบเขตงานตามประกาศจัดจ้าง', true),
     createH2('1.1 ความเป็นมาและความสำคัญ'),
-    createP(section1.background),
+    ...createBodyParagraphs(section1.background),
     createH2('1.2 วัตถุประสงค์ของโครงการ')
   );
 
   section1.objectives.forEach((obj, idx) => {
-    part1Children.push(createP(`(1.${idx + 1}) ${obj}`, { spaceAfter: 80 }));
+    const cleanObj = obj.replace(/^\(\d+\.\d+\)\s*/, '').replace(/^1\.\d+\.\d+\s*/, '');
+    part1Children.push(
+      new Paragraph({
+        alignment: AlignmentType.THAI_DISTRIBUTE,
+        indent: { firstLine: 450 },
+        spacing: { after: 60, before: 0, line: 240, lineRule: LineRuleType.AUTO },
+        children: [
+          new TextRun({
+            text: `1.2.${idx + 1} ${cleanObj}`,
+            font: FONT_FAMILY,
+            size: 32,
+            color: COLOR_TEXT,
+          }),
+        ],
+      })
+    );
   });
 
   part1Children.push(createH2('1.3 ประโยชน์ที่คาดว่าจะได้รับ'));
   section1.expectedBenefits.forEach((benefit, idx) => {
-    part1Children.push(createP(`(2.${idx + 1}) ${benefit}`, { spaceAfter: 80 }));
+    const cleanBenefit = benefit.replace(/^\(\d+\.\d+\)\s*/, '').replace(/^2\.\d+\.\d+\s*/, '').replace(/^1\.\d+\.\d+\s*/, '');
+    part1Children.push(
+      new Paragraph({
+        alignment: AlignmentType.THAI_DISTRIBUTE,
+        indent: { firstLine: 450 },
+        spacing: { after: 60, before: 0, line: 240, lineRule: LineRuleType.AUTO },
+        children: [
+          new TextRun({
+            text: `1.3.${idx + 1} ${cleanBenefit}`,
+            font: FONT_FAMILY,
+            size: 32,
+            color: COLOR_TEXT,
+          }),
+        ],
+      })
+    );
   });
 
   part1Children.push(
     createH2('1.4 กลุ่มเป้าหมายและกรอบระยะเวลาดำเนินงาน'),
-    createP(`กลุ่มเป้าหมายผู้ใช้งาน: ${section1.targetAudience}`),
-    createP(`ระยะเวลาดำเนินการรวม: ${section1.projectDurationDays} วัน (${section1.projectDurationMonths} เดือน / ${section1.projectDurationMonths * 4} สัปดาห์)`),
-    createP(`วงเงินงบประมาณโครงการ: ${section1.budgetAmount.toLocaleString()} บาท`),
+    createP(`กลุ่มเป้าหมายผู้ใช้งาน: ${section1.targetAudience}`, { firstLineIndent: 450, align: AlignmentType.THAI_DISTRIBUTE }),
+    createP(`ระยะเวลาดำเนินการรวม: ${section1.projectDurationDays} วัน (${section1.projectDurationMonths} เดือน / ${section1.projectDurationMonths * 4} สัปดาห์)`, { firstLineIndent: 450, align: AlignmentType.THAI_DISTRIBUTE }),
+    createP(`วงเงินงบประมาณโครงการ: ${section1.budgetAmount.toLocaleString()} บาท`, { firstLineIndent: 450, align: AlignmentType.THAI_DISTRIBUTE }),
     createH2('1.5 ขอบเขตงานตามประกาศจัดจ้าง'),
-    createP(section1.projectScopeOverview)
+    ...createBodyParagraphs(section1.projectScopeOverview)
   );
 
   // Hierarchical Scope items (Level 1 to 5)
   (section1.scopeItems || []).forEach((item) => {
-    const indentTwips = (item.level - 1) * 360;
     const isLevel1 = item.level === 1;
-
+    const indentLeft = (item.level - 1) * 720;
     const torText = (item.requirement || item.title || '').trim();
 
     part1Children.push(
       new Paragraph({
-        indent: { left: indentTwips },
-        spacing: { before: isLevel1 ? 140 : 70, after: 60, line: 300 },
+        alignment: AlignmentType.THAI_DISTRIBUTE,
+        indent: isLevel1 ? undefined : { left: indentLeft, firstLine: 720 },
+        spacing: { before: isLevel1 ? 120 : 60, after: 60, line: 240, lineRule: LineRuleType.AUTO },
         children: [
           new TextRun({
             text: `${formatTorClauseNumber(item.clauseNumber)} `,
@@ -554,7 +651,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
 
   part2Children.push(
     createSectionHeader('ส่วนที่ 2', 'แผนการดำเนินงานตลอดโครงการ (Work Plan & Weekly Gantt Chart)'),
-    createP(section2.workPlanOverview),
+    ...createBodyParagraphs(section2.workPlanOverview),
     createH2('2.1 แผนภูมิแกนต์ (Gantt Chart) แสดงการปฏิบัติงานรายสัปดาห์ตลอดโครงการ')
   );
 
@@ -659,7 +756,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
   part3Children.push(
     createSectionHeader('ส่วนที่ 3', 'กรอบแนวคิดและวิธีการดำเนินงานตามข้อกำหนด (TOR Mapping)', true),
     createH2('3.1 แผนภาพกรอบแนวคิดการดำเนินงาน (Conceptual Framework Diagram)'),
-    createP(section3.frameworkOverview)
+    ...createBodyParagraphs(section3.frameworkOverview)
   );
 
   try {
@@ -701,7 +798,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
     part3Children.push(
       new Paragraph({
         heading: HeadingLevel.HEADING_3,
-        spacing: { before: 200, after: 100 },
+        spacing: { before: 200, after: 100, line: 240, lineRule: LineRuleType.AUTO },
         children: [
           new TextRun({
             text: `3.2.${idx + 1} ${formatTorClauseNumber(item.clauseNumber)}: ${item.title}`,
@@ -868,7 +965,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
   part3Children.push(
     createSectionHeader('ส่วนที่ 4', 'คณะผู้ดำเนินงาน แนวทางบริหารความเสี่ยง และตารางเปรียบเทียบข้อเสนอ', true),
     createH2('4.1 โครงสร้างบุคลากรและคณะผู้ดำเนินงาน'),
-    createP(section4.teamOverview)
+    ...createBodyParagraphs(section4.teamOverview)
   );
 
   const teamRows = [
@@ -906,7 +1003,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
 
   part3Children.push(
     createH2('4.2 แผนการบริหารจัดการความเสี่ยงโครงการ (Risk Management Plan)'),
-    createP(section4.riskManagementOverview)
+    ...createBodyParagraphs(section4.riskManagementOverview)
   );
 
   const riskRows = [
@@ -945,9 +1042,9 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
   // 4.3 ตารางเปรียบเทียบข้อเสนอโครงการกับข้อกำหนด TOR (Compliance Matrix)
   part3Children.push(
     createH2('4.3 ตารางเปรียบเทียบข้อเสนอโครงการกับข้อกำหนดของหน่วยงาน (TOR Compliance Matrix)'),
-    createP(
+    ...createBodyParagraphs(
       section4.complianceMatrixOverview ||
-        'บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด ได้ศึกษาและวิเคราะห์ข้อกำหนดในขอบเขตของงาน (TOR) ทุกข้ออย่างละเอียดถี่ถ้วน และขอสรุปตารางเปรียบเทียบการตอบสนองข้อกำหนด โดยยืนยันการยอมรับและปฏิบัติตามเกณฑ์ขั้นต่ำของ TOR ทุกประการ พร้อมทั้งนำเสนอแนวทางการดำเนินงานที่ยกระดับมาตรฐานและคุณภาพสูงกว่าที่ TOR กำหนดในรายการสำคัญ ดังรายละเอียดต่อไปนี้'
+        'บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด ยืนยันการปฏิบัติตามข้อกำหนดในขอบเขตงาน (TOR) ทุกประการ โดยในบางรายการสำคัญ บริษัทฯ ได้นำเสนอเทคโนโลยีและมาตรฐานที่ยกระดับให้มีประสิทธิภาพและความมั่นคงปลอดภัยสูงกว่าเกณฑ์ที่ TOR กำหนด ดังรายละเอียดต่อไปนี้'
     )
   );
 
@@ -1036,9 +1133,9 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
   }
 
   part3Children.push(
-    createP(section5.companyProfile),
-    createP(`ทุนจดทะเบียน: ${section5.registeredCapital}`),
-    createP(`วิสัยทัศน์และพันธกิจ: ${section5.visionMission}`)
+    ...createBodyParagraphs(section5.companyProfile),
+    createP(`ทุนจดทะเบียน: ${section5.registeredCapital}`, { firstLineIndent: 450, align: AlignmentType.THAI_DISTRIBUTE }),
+    ...createBodyParagraphs(`วิสัยทัศน์และพันธกิจ: ${section5.visionMission}`)
   );
 
   if (section5.companyOfficeImageUrl) {
@@ -1079,7 +1176,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
   );
 
   section5.certifications.forEach((cert) => {
-    part3Children.push(createP(`✓ ${cert}`, { spaceAfter: 60 }));
+    part3Children.push(createP(`✓ ${cert}`, { spaceAfter: 60, firstLineIndent: 450, align: AlignmentType.THAI_DISTRIBUTE }));
   });
 
   const currentYearBE = 2568;
@@ -1099,7 +1196,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
     createH2(`5.3 ผลงานและประสบการณ์ที่เกี่ยวข้อง`),
     new Paragraph({
       heading: HeadingLevel.HEADING_3,
-      spacing: { before: 140, after: 80 },
+      spacing: { before: 140, after: 80, line: 240, lineRule: LineRuleType.AUTO },
       children: [
         new TextRun({
           text: `5.3.1 ผลงานอ้างอิงหลักตามเกณฑ์ TOR (ย้อนหลังไม่เกิน ${section5.maxYearsFilter} ปี พ.ศ. ${currentYearBE - section5.maxYearsFilter} - ${currentYearBE})`,
@@ -1110,7 +1207,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
         }),
       ],
     }),
-    createP(`บริษัทฯ ขอเสนอผลงานที่มีขอบเขตงานและลักษณะงานสอดคล้องกับข้อกำหนดของ TOR โดยเป็นผลงานที่แล้วเสร็จย้อนหลังไม่เกิน ${section5.maxYearsFilter} ปี พร้อมทั้งได้แนบสำเนาสัญญาจ้างและหนังสือรับรองผลงานไว้ในภาคผนวก ก ของข้อเสนอนี้อย่างครบถ้วน`)
+    ...createBodyParagraphs(`บริษัทฯ ขอเสนอผลงานที่มีขอบเขตงานและลักษณะงานสอดคล้องกับข้อกำหนดของ TOR โดยเป็นผลงานที่แล้วเสร็จย้อนหลังไม่เกิน ${section5.maxYearsFilter} ปี พร้อมทั้งได้แนบสำเนาสัญญาจ้างและหนังสือรับรองผลงานไว้ในภาคผนวก ก ของข้อเสนอนี้อย่างครบถ้วน`)
   );
 
   const torRefRows = [
@@ -1190,7 +1287,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
     part3Children.push(
       new Paragraph({
         heading: HeadingLevel.HEADING_3,
-        spacing: { before: 200, after: 80 },
+        spacing: { before: 200, after: 80, line: 240, lineRule: LineRuleType.AUTO },
         children: [
           new TextRun({
             text: `5.3.2 ผลงานและประสบการณ์เสริมที่สอดคล้องกับงานจ้างโครงการนี้ (Supplementary Experience)`,
@@ -1201,7 +1298,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
           }),
         ],
       }),
-      createP('ผลงานเพิ่มเติมที่มีกิจกรรม เทคโนโลยี หรือแนวทางการดำเนินงานที่สอดคล้องและเป็นประโยชน์ต่อโครงการจ้างนี้เพื่อประกอบการพิจารณาความพร้อมและความเชี่ยวชาญ')
+      ...createBodyParagraphs('ผลงานเพิ่มเติมที่มีกิจกรรม เทคโนโลยี หรือแนวทางการดำเนินงานที่สอดคล้องและเป็นประโยชน์ต่อโครงการจ้างนี้เพื่อประกอบการพิจารณาความพร้อมและความเชี่ยวชาญ')
     );
 
     const suppRows = [
@@ -1281,7 +1378,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
     part3Children.push(
       new Paragraph({ children: [new PageBreak()] }),
       createH1('ภาคผนวก ก: สำเนาสัญญาจ้างและหนังสือรับรองผลงานอ้างอิงตามเกณฑ์ TOR'),
-      createP('เอกสารสำเนาสัญญาจ้างและหนังสือรับรองผลงานโครงการที่แล้วเสร็จ เพื่อประกอบการพิจารณาคุณสมบัติและผลงานตามประกาศจัดจ้างของหน่วยงานภาครัฐ')
+      ...createBodyParagraphs('เอกสารสำเนาสัญญาจ้างและหนังสือรับรองผลงานโครงการที่แล้วเสร็จ เพื่อประกอบการพิจารณาคุณสมบัติและผลงานตามประกาศจัดจ้างของหน่วยงานภาครัฐ')
     );
 
     projectsWithCerts.forEach((proj, idx) => {
@@ -1418,6 +1515,23 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
   // Construct Multi-Section Document (Portrait -> Landscape -> Portrait)
   // =========================================================================
   const doc = new Document({
+    styles: {
+      default: {
+        document: {
+          run: {
+            font: FONT_FAMILY,
+            size: 32,
+            color: COLOR_TEXT,
+          },
+          paragraph: {
+            spacing: {
+              line: 240,
+              lineRule: LineRuleType.AUTO,
+            },
+          },
+        },
+      },
+    },
     sections: [
       // Section 1: Portrait (Cover, TOC, Section 1)
       {
