@@ -1,7 +1,12 @@
 import React, { useState, useRef } from 'react';
 import { BiddingProject, ProposalStatus, ProjectAttachment } from '../types/proposal';
 import { exportProposalToDocx } from '../services/docxExport';
-import { uploadAttachmentFile } from '../services/projectStorageService';
+import {
+  uploadAttachmentFile,
+  testSupabaseConnection,
+  SupabaseTestResult,
+  saveProject,
+} from '../services/projectStorageService';
 import { isSupabaseConfigured } from '../services/supabaseClient';
 import {
   FileText,
@@ -63,6 +68,39 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   const [uploadCategory, setUploadCategory] = useState<'announcement' | 'tor' | 'other'>('announcement');
   const fileUploadInputRef = useRef<HTMLInputElement>(null);
   const jsonImportInputRef = useRef<HTMLInputElement>(null);
+
+  // Cloud Diagnostic Modal State
+  const [showCloudDiagnostic, setShowCloudDiagnostic] = useState(false);
+  const [diagLoading, setDiagLoading] = useState(false);
+  const [diagResult, setDiagResult] = useState<SupabaseTestResult | null>(null);
+  const [syncingAll, setSyncingAll] = useState(false);
+
+  const handleCheckConnection = async () => {
+    setShowCloudDiagnostic(true);
+    setDiagLoading(true);
+    try {
+      const res = await testSupabaseConnection();
+      setDiagResult(res);
+    } finally {
+      setDiagLoading(false);
+    }
+  };
+
+  const handleSyncAllToCloud = async () => {
+    setSyncingAll(true);
+    try {
+      for (const p of projects) {
+        await saveProject(p);
+      }
+      alert('ซิงค์ข้อมูลโครงการทั้งหมดขึ้น Supabase Cloud เรียบร้อยแล้ว!');
+      const res = await testSupabaseConnection();
+      setDiagResult(res);
+    } catch {
+      alert('เกิดข้อผิดพลาดในการซิงค์ข้อมูล');
+    } finally {
+      setSyncingAll(false);
+    }
+  };
 
   // Stats calculation
   const totalProjects = projects.length;
@@ -404,6 +442,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             </div>
             {cloudStatus === 'cloud' ? (
               <span
+                onClick={handleCheckConnection}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -415,12 +454,15 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                   borderRadius: '9999px',
                   fontSize: '0.75rem',
                   fontWeight: 600,
+                  cursor: 'pointer',
                 }}
+                title="คลิกเพื่อตรวจสอบสถานะการเชื่อมต่อ Supabase Cloud"
               >
                 <Cloud size={13} /> Supabase Cloud Connected
               </span>
             ) : (
               <span
+                onClick={handleCheckConnection}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -432,10 +474,11 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                   borderRadius: '9999px',
                   fontSize: '0.75rem',
                   fontWeight: 500,
+                  cursor: 'pointer',
                 }}
-                title="ระบบพร้อมเชื่อมต่อ Supabase โดยระบุ VITE_SUPABASE_URL และ KEY ในไฟล์ .env"
+                title="คลิกเพื่อตรวจสอบสถานะการเชื่อมต่อ Supabase Cloud"
               >
-                <HardDrive size={13} /> Local Database (พร้อมเชื่อม Supabase)
+                <HardDrive size={13} /> Local Database (คลิกเพื่อเช็ค Cloud)
               </span>
             )}
           </div>
@@ -446,6 +489,15 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         </div>
 
         <div className="dashboard-hero-actions">
+          <button
+            type="button"
+            className="btn btn-secondary hero-btn"
+            onClick={handleCheckConnection}
+            title="ทดสอบการเชื่อมต่อกับ Supabase Cloud Database"
+            style={{ backgroundColor: 'rgba(59, 130, 246, 0.25)', borderColor: 'rgba(59, 130, 246, 0.4)' }}
+          >
+            <Cloud size={16} /> เช็คการเชื่อมต่อ Cloud
+          </button>
           <button
             type="button"
             className="btn btn-secondary hero-btn"
@@ -1073,6 +1125,166 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Cloud Connection Diagnostic Modal */}
+      {showCloudDiagnostic && (
+        <div className="modal-overlay">
+          <div className="modal-container" style={{ maxWidth: '600px' }}>
+            <div className="modal-header">
+              <div className="modal-title-group">
+                <Cloud size={20} style={{ color: '#3B82F6' }} />
+                <h2>ตรวจสอบการเชื่อมต่อ Supabase Cloud</h2>
+              </div>
+              <button
+                type="button"
+                className="close-btn"
+                onClick={() => setShowCloudDiagnostic(false)}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              {diagLoading ? (
+                <div style={{ textAlign: 'center', padding: '2.5rem 1rem' }}>
+                  <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>⏳</div>
+                  <div style={{ fontWeight: 600, color: 'var(--slate-800)' }}>กำลังทดสอบการเชื่อมต่อกับ Supabase...</div>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--slate-500)', marginTop: '0.25rem' }}>
+                    ตรวจสอบฐานข้อมูล PostgreSQL, ตาราง bidding_projects และ Storage Bucket
+                  </div>
+                </div>
+              ) : diagResult ? (
+                <>
+                  <div
+                    style={{
+                      padding: '1rem 1.25rem',
+                      borderRadius: '10px',
+                      backgroundColor: diagResult.connected ? '#ECFDF5' : '#FEF2F2',
+                      border: `1px solid ${diagResult.connected ? '#A7F3D0' : '#FECACA'}`,
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '0.75rem',
+                    }}
+                  >
+                    {diagResult.connected ? (
+                      <CheckCircle2 size={24} style={{ color: '#10B981', flexShrink: 0, marginTop: '2px' }} />
+                    ) : (
+                      <AlertCircle size={24} style={{ color: '#EF4444', flexShrink: 0, marginTop: '2px' }} />
+                    )}
+                    <div>
+                      <div
+                        style={{
+                          fontWeight: 700,
+                          fontSize: '1rem',
+                          color: diagResult.connected ? '#065F46' : '#991B1B',
+                          marginBottom: '0.25rem',
+                        }}
+                      >
+                        {diagResult.connected ? 'เชื่อมต่อ Supabase สำเร็จเรียบร้อย' : 'ไม่สามารถเชื่อมต่อ Supabase ได้'}
+                      </div>
+                      <div style={{ fontSize: '0.85rem', color: diagResult.connected ? '#047857' : '#B91C1C', lineHeight: 1.5 }}>
+                        {diagResult.message}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ backgroundColor: 'var(--slate-50)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--slate-200)' }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--slate-500)', marginBottom: '0.65rem' }}>
+                      รายละเอียดผลการตรวจสอบระบบ:
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', fontSize: '0.85rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: 'var(--slate-600)' }}>Environment Variables:</span>
+                        <span style={{ fontWeight: 600, color: diagResult.isConfigured ? '#10B981' : '#EF4444' }}>
+                          {diagResult.isConfigured ? '✅ มีการตั้งค่าแล้ว' : '❌ ยังไม่ได้ตั้งค่า'}
+                        </span>
+                      </div>
+
+                      {diagResult.url && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: 'var(--slate-600)' }}>Supabase Project URL:</span>
+                          <span className="font-mono" style={{ fontSize: '0.785rem', color: 'var(--primary-700)' }}>
+                            {diagResult.url}
+                          </span>
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: 'var(--slate-600)' }}>ตาราง bidding_projects:</span>
+                        <span style={{ fontWeight: 600, color: diagResult.tableExists ? '#10B981' : '#EF4444' }}>
+                          {diagResult.tableExists ? '✅ พร้อมใช้งาน' : '❌ ไม่พบตาราง (ต้องรัน SQL)'}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: 'var(--slate-600)' }}>Storage project-attachments:</span>
+                        <span style={{ fontWeight: 600, color: diagResult.storageExists ? '#10B981' : '#F59E0B' }}>
+                          {diagResult.storageExists ? '✅ พร้อมใช้งาน' : '⚠️ ยังไม่พบ Bucket (สร้างอัตโนมัติจาก SQL)'}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: 'var(--slate-600)' }}>จำนวนโครงการบน Cloud:</span>
+                        <span style={{ fontWeight: 700, color: 'var(--slate-900)' }}>
+                          {diagResult.projectCount} โครงการ
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {!diagResult.connected && (
+                    <div style={{ fontSize: '0.8rem', color: 'var(--slate-600)', lineHeight: 1.5, background: '#FFFBEB', padding: '0.85rem', borderRadius: '6px', border: '1px solid #FDE68A' }}>
+                      💡 <strong>คำแนะนำในการแก้ไข:</strong>
+                      <ul style={{ paddingLeft: '1.25rem', marginTop: '0.35rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                        <li>ตรวจสอบว่าได้คัดลอกไฟล์ <code>supabase_schema.sql</code> ไปกด Run ใน SQL Editor ของ Supabase แล้วหรือยัง</li>
+                        <li>ตรวจสอบค่า <code>VITE_SUPABASE_URL</code> และ <code>VITE_SUPABASE_ANON_KEY</code> ใน Vercel Settings &gt; Environment Variables</li>
+                        <li>หากเพิ่งแก้ไขค่าใน Vercel กรุณากด <strong>Redeploy</strong> เพื่อให้การตั้งค่ามีผล</li>
+                      </ul>
+                    </div>
+                  )}
+                </>
+              ) : null}
+            </div>
+
+            <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
+              <div>
+                {diagResult?.connected && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={syncingAll}
+                    onClick={handleSyncAllToCloud}
+                    title="อัปโหลดโครงการทั้งหมดในหน้านี้ขึ้นไปบันทึกลง Supabase ทันที"
+                    style={{ fontSize: '0.8rem', color: '#1E40AF', borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}
+                  >
+                    <Upload size={14} />
+                    <span>{syncingAll ? 'กำลังซิงค์...' : '🔄 ซิงค์ทุกโครงการขึ้น Supabase'}</span>
+                  </button>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={handleCheckConnection}
+                  disabled={diagLoading}
+                >
+                  <RotateCcw size={14} /> ทดสอบอีกครั้ง
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => setShowCloudDiagnostic(false)}
+                >
+                  ปิดหน้าต่าง
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

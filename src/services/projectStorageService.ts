@@ -23,7 +23,27 @@ export async function loadAllProjects(): Promise<{
 
       if (projError) {
         console.warn('Supabase fetch error, fallback to local:', projError);
-      } else if (cloudProjects && cloudProjects.length > 0) {
+      } else if (cloudProjects) {
+        // หากเชื่อมต่อตารางได้ แต่ตารางยังว่างเปล่า (0 โครงการ)
+        // ให้อัปโหลดข้อมูลโครงการที่มีอยู่ในเครื่องขึ้น Cloud อัตโนมัติทันที
+        if (cloudProjects.length === 0) {
+          const localProjects = (() => {
+            try {
+              const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+              if (saved) {
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+              }
+            } catch {}
+            return DEFAULT_BIDDING_PROJECTS;
+          })();
+
+          for (const proj of localProjects) {
+            await saveProject(proj);
+          }
+          return { projects: localProjects, source: 'cloud' };
+        }
+
         // ดึงรายการไฟล์แนบ
         const { data: cloudAttachments } = await supabase
           .from('project_attachments')
@@ -241,3 +261,93 @@ export async function uploadAttachmentFile(
     dataUrl: fileUrl || base64DataUrl,
   };
 }
+
+export interface SupabaseTestResult {
+  isConfigured: boolean;
+  connected: boolean;
+  url?: string;
+  tableExists: boolean;
+  storageExists: boolean;
+  projectCount: number;
+  message: string;
+  errorDetail?: string;
+}
+
+/**
+ * ฟังก์ชันสำหรับทดสอบการเชื่อมต่อกับ Supabase และตรวจสอบโครงสร้างตาราง
+ */
+export async function testSupabaseConnection(): Promise<SupabaseTestResult> {
+  const configured = isSupabaseConfigured();
+  if (!configured || !supabase) {
+    return {
+      isConfigured: false,
+      connected: false,
+      tableExists: false,
+      storageExists: false,
+      projectCount: 0,
+      message: 'ยังไม่พบการตั้งค่า Environment Variables (VITE_SUPABASE_URL และ VITE_SUPABASE_ANON_KEY)',
+    };
+  }
+
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+
+  try {
+    // 1. ทดสอบการเชื่อมต่อตาราง bidding_projects
+    const { data, count, error } = await supabase
+      .from('bidding_projects')
+      .select('id', { count: 'exact' });
+
+    if (error) {
+      const isMissingTable =
+        error.code === '42P01' ||
+        error.message?.includes('relation') ||
+        error.message?.includes('does not exist');
+
+      return {
+        isConfigured: true,
+        connected: false,
+        url: supabaseUrl,
+        tableExists: false,
+        storageExists: false,
+        projectCount: 0,
+        message: isMissingTable
+          ? 'เชื่อมต่อ Supabase ได้แล้ว แต่ยังไม่พบตาราง "bidding_projects" กรุณารันไฟล์ supabase_schema.sql ใน SQL Editor ของ Supabase'
+          : `เกิดข้อผิดพลาดในการเชื่อมต่อฐานข้อมูล: ${error.message}`,
+        errorDetail: error.message,
+      };
+    }
+
+    // 2. ทดสอบ Storage bucket
+    let storageExists = false;
+    try {
+      const { data: buckets } = await supabase.storage.listBuckets();
+      storageExists = Boolean(
+        buckets?.some((b) => b.id === 'project-attachments' || b.name === 'project-attachments')
+      );
+    } catch {}
+
+    const countNum = count ?? (data ? data.length : 0);
+
+    return {
+      isConfigured: true,
+      connected: true,
+      url: supabaseUrl,
+      tableExists: true,
+      storageExists,
+      projectCount: countNum,
+      message: `เชื่อมต่อ Supabase Cloud สำเร็จ 100%! พบข้อมูลโครงการทั้งหมด ${countNum} โครงการ`,
+    };
+  } catch (err: any) {
+    return {
+      isConfigured: true,
+      connected: false,
+      url: supabaseUrl,
+      tableExists: false,
+      storageExists: false,
+      projectCount: 0,
+      message: `ไม่สามารถเชื่อมต่อ Supabase ได้: ${err.message || 'Network error'}`,
+      errorDetail: err.message,
+    };
+  }
+}
+
