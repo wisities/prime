@@ -196,6 +196,22 @@ function createH2(title: string): Paragraph {
     ],
   });
 }
+function createH3(title: string): Paragraph {
+  return new Paragraph({
+    heading: HeadingLevel.HEADING_3,
+    spacing: { before: 160, after: 80, line: 240, lineRule: LineRuleType.AUTO },
+    children: [
+      new TextRun({
+        text: title,
+        font: FONT_FAMILY,
+        size: 32, // 16pt
+        bold: true,
+        color: COLOR_SECONDARY,
+      }),
+    ],
+  });
+}
+
 
 function createHeaderCell(text: string, widthPercent: number): TableCell {
   return new TableCell({
@@ -1024,10 +1040,10 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
   const teamRows = [
     createHeaderRow([
       createHeaderCell('ลำดับ', 6),
-      createHeaderCell('ชื่อ - นามสกุล', 20),
-      createHeaderCell('ตำแหน่งที่เสนอในโครงการ', 24),
-      createHeaderCell('วุฒิการศึกษาและใบรับรอง', 26),
-      createHeaderCell('ประสบการณ์และผลงานเด่น', 24),
+      createHeaderCell('ชื่อ - นามสกุล', 24),
+      createHeaderCell('ตำแหน่งในโครงการ', 26),
+      createHeaderCell('อายุงาน', 16),
+      createHeaderCell('วุฒิการศึกษา', 28),
     ]),
   ];
 
@@ -1035,14 +1051,17 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
     teamRows.push(
       createDataRow([
         createDataCell(String(idx + 1), 6, { align: AlignmentType.CENTER, bold: true }),
+        createDataCell(member.name, 24, { bold: true }),
+        createDataCell(member.proposedRole, 26),
         createDataCell(
-          `${member.name}\n(อายุงาน ${member.experienceYears} ปี${member.startWorkYearBE ? ` / เริ่มงาน พ.ศ. ${member.startWorkYearBE}` : ''})`,
-          20,
-          { bold: true }
+          `${member.experienceYears} ปี${member.startWorkYearBE ? `\n(เริ่มงาน พ.ศ. ${member.startWorkYearBE})` : ''}`,
+          16,
+          { align: AlignmentType.CENTER }
         ),
-        createDataCell(`${member.proposedRole}\n• หน้าที่: ${member.responsibilities}`, 24),
-        createDataCell(`${member.education}\n• ใบรับรอง: ${member.certifications}`, 26),
-        createDataCell(member.highlightProjects, 24),
+        createDataCell(
+          `${member.education}${member.certifications ? `\n• ใบรับรอง: ${member.certifications}` : ''}`,
+          28
+        ),
       ])
     );
   });
@@ -1053,6 +1072,195 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
       rows: teamRows,
     })
   );
+
+  // 4.1.2 ประวัติส่วนตัวและประสบการณ์การทำงานรายบุคคล (Detailed Curriculum Vitae - CV)
+  part4Children.push(
+    new Paragraph({ spacing: { before: 240, after: 120 } }),
+    createH3('4.1.2 ประวัติส่วนตัวและประสบการณ์การทำงานรายบุคคล (Curriculum Vitae - CV)'),
+    ...createBodyParagraphs(
+      'คณะผู้ดำเนินงานที่ได้รับการคัดเลือกเข้าร่วมโครงการ มีคุณวุฒิ ประสบการณ์ และประวัติด้านวิชาชีพตรงตามขอบเขตงาน (TOR) โดยมีรายละเอียดประวัติส่วนตัวและผลงานรายบุคคลดังต่อไปนี้'
+    )
+  );
+
+  section4.teamMembers.forEach((member, idx) => {
+    // ซ้าย: รูปถ่าย 1.5 นิ้ว (กว้าง ~108 pt, สูง 144 pt ในสัดส่วน 3:4)
+    let photoParagraph: Paragraph;
+    if (member.photoUrl) {
+      try {
+        const imgType = member.photoUrl.startsWith('data:image/png') ? 'png' : 'jpg';
+        photoParagraph = new Paragraph({
+          alignment: AlignmentType.CENTER,
+          children: [
+            new ImageRun({
+              type: imgType,
+              data: member.photoUrl,
+              transformation: {
+                width: 108,
+                height: 144,
+              },
+            }),
+          ],
+        });
+      } catch (e) {
+        console.error('Failed to parse member photo base64:', e);
+        photoParagraph = new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 180, after: 180 },
+          children: [
+            new TextRun({
+              text: '[ รูปถ่าย 1.5 นิ้ว ]',
+              font: FONT_FAMILY,
+              size: 20,
+              color: COLOR_MUTED,
+            }),
+          ],
+        });
+      }
+    } else {
+      photoParagraph = new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 180, after: 180 },
+        children: [
+          new TextRun({
+            text: '[ รูปถ่ายขนาด 1.5 นิ้ว ]\n(หน้าตรงทางการ)',
+            font: FONT_FAMILY,
+            size: 20,
+            color: COLOR_MUTED,
+          }),
+        ],
+      });
+    }
+
+    const leftPhotoCell = new TableCell({
+      width: { size: 24, type: WidthType.PERCENTAGE },
+      verticalAlign: AlignmentType.CENTER,
+      shading: { fill: 'F8FAFC' },
+      margins: { top: 120, bottom: 120, left: 120, right: 120 },
+      borders: {
+        top: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
+        bottom: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
+        left: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
+        right: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
+      },
+      children: [
+        photoParagraph,
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 60 },
+          children: [
+            new TextRun({
+              text: `ลำดับที่ ${idx + 1}`,
+              font: FONT_FAMILY,
+              size: 20,
+              bold: true,
+              color: COLOR_PRIMARY,
+            }),
+          ],
+        }),
+      ],
+    });
+
+    // ขวา: รายละเอียดประวัติส่วนตัว
+    const rightInfoParagraphs: Paragraph[] = [
+      new Paragraph({
+        spacing: { before: 40, after: 60 },
+        children: [
+          new TextRun({
+            text: member.name,
+            font: FONT_FAMILY,
+            size: 28, // 14pt bold
+            bold: true,
+            color: COLOR_PRIMARY,
+          }),
+        ],
+      }),
+      new Paragraph({
+        spacing: { before: 30, after: 30 },
+        children: [
+          new TextRun({ text: '• ตำแหน่งในโครงการ: ', font: FONT_FAMILY, size: 24, bold: true, color: COLOR_TEXT }),
+          new TextRun({ text: member.proposedRole, font: FONT_FAMILY, size: 24, bold: true, color: COLOR_SECONDARY }),
+        ],
+      }),
+      new Paragraph({
+        spacing: { before: 30, after: 30 },
+        children: [
+          new TextRun({ text: '• อายุงานและประสบการณ์: ', font: FONT_FAMILY, size: 24, bold: true, color: COLOR_TEXT }),
+          new TextRun({
+            text: `${member.experienceYears} ปี${member.startWorkYearBE ? ` (เริ่มงานปี พ.ศ. ${member.startWorkYearBE})` : ''}`,
+            font: FONT_FAMILY,
+            size: 24,
+            color: COLOR_TEXT,
+          }),
+        ],
+      }),
+      new Paragraph({
+        spacing: { before: 30, after: 30 },
+        children: [
+          new TextRun({ text: '• วุฒิการศึกษา: ', font: FONT_FAMILY, size: 24, bold: true, color: COLOR_TEXT }),
+          new TextRun({ text: member.education, font: FONT_FAMILY, size: 24, color: COLOR_TEXT }),
+        ],
+      }),
+      new Paragraph({
+        spacing: { before: 30, after: 30 },
+        children: [
+          new TextRun({ text: '• ใบรับรองมาตรฐานวิชาชีพ: ', font: FONT_FAMILY, size: 24, bold: true, color: COLOR_TEXT }),
+          new TextRun({ text: member.certifications || '-', font: FONT_FAMILY, size: 24, color: COLOR_TEXT }),
+        ],
+      }),
+      new Paragraph({
+        spacing: { before: 40, after: 30 },
+        children: [
+          new TextRun({ text: '• ประวัติส่วนตัว: ', font: FONT_FAMILY, size: 24, bold: true, color: COLOR_TEXT }),
+          new TextRun({
+            text: member.personalBio || 'มีความรู้ความสามารถและประสบการณ์ตรงในการพัฒนาระบบเทคโนโลยีสารสนเทศภาครัฐ',
+            font: FONT_FAMILY,
+            size: 24,
+            color: COLOR_TEXT,
+          }),
+        ],
+      }),
+      new Paragraph({
+        spacing: { before: 30, after: 30 },
+        children: [
+          new TextRun({ text: '• หน้าที่ความรับผิดชอบในโครงการ: ', font: FONT_FAMILY, size: 24, bold: true, color: COLOR_TEXT }),
+          new TextRun({ text: member.responsibilities, font: FONT_FAMILY, size: 24, color: COLOR_TEXT }),
+        ],
+      }),
+      new Paragraph({
+        spacing: { before: 30, after: 30 },
+        children: [
+          new TextRun({ text: '• ประสบการณ์และผลงานเด่น: ', font: FONT_FAMILY, size: 24, bold: true, color: COLOR_TEXT }),
+          new TextRun({ text: member.highlightProjects, font: FONT_FAMILY, size: 24, color: COLOR_TEXT }),
+        ],
+      }),
+    ];
+
+    const rightInfoCell = new TableCell({
+      width: { size: 76, type: WidthType.PERCENTAGE },
+      margins: { top: 120, bottom: 120, left: 160, right: 120 },
+      borders: {
+        top: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
+        bottom: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
+        left: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
+        right: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
+      },
+      children: rightInfoParagraphs,
+    });
+
+    const memberProfileTable = new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: [
+        new TableRow({
+          children: [leftPhotoCell, rightInfoCell],
+        }),
+      ],
+    });
+
+    part4Children.push(
+      memberProfileTable,
+      new Paragraph({ spacing: { before: 120, after: 120 } })
+    );
+  });
 
   part4Children.push(
     createH2('4.2 แผนการบริหารจัดการความเสี่ยงโครงการ (Risk Management Plan)'),

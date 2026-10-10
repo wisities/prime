@@ -95,7 +95,8 @@ export interface TeamMember {
   startWorkYearBE?: number; // ปี พ.ศ. ที่เริ่มทำงานสำหรับนับปีประสบการณ์
   responsibilities: string;
   highlightProjects: string;
-  photoUrl?: string;
+  photoUrl?: string; // base64 รูปถ่ายหน้าตรงขนาด 1.5 นิ้ว
+  personalBio?: string; // ประวัติส่วนตัว / ข้อมูลสรุปประวัติการทำงาน
 }
 
 export interface RiskItem {

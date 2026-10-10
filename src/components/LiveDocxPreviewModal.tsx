@@ -488,30 +488,127 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
               </div>
               <p style={{ marginBottom: '1rem' }}>{section4.teamOverview}</p>
               
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '0.5rem' }}>คณะทำงาน ({section4.teamMembers.length} ท่าน)</h3>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--primary-900)' }}>
+                4.1.1 ตารางสรุปรายชื่อและคุณสมบัติบุคลากรหลักที่เสนอในโครงการ ({section4.teamMembers.length} ท่าน)
+              </h3>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
                 <thead>
                   <tr style={{ backgroundColor: 'var(--primary-800)', color: 'white' }}>
-                    <th style={{ padding: '6px', border: '1px solid var(--slate-300)' }}>ชื่อ - นามสกุล</th>
-                    <th style={{ padding: '6px', border: '1px solid var(--slate-300)' }}>ตำแหน่งที่เสนอ</th>
-                    <th style={{ padding: '6px', border: '1px solid var(--slate-300)' }}>วุฒิการศึกษาและใบรับรอง</th>
+                    <th style={{ padding: '8px', border: '1px solid var(--slate-300)', width: '6%', textAlign: 'center' }}>ลำดับ</th>
+                    <th style={{ padding: '8px', border: '1px solid var(--slate-300)', width: '24%' }}>ชื่อ - นามสกุล</th>
+                    <th style={{ padding: '8px', border: '1px solid var(--slate-300)', width: '26%' }}>ตำแหน่งในโครงการ</th>
+                    <th style={{ padding: '8px', border: '1px solid var(--slate-300)', width: '16%', textAlign: 'center' }}>อายุงาน</th>
+                    <th style={{ padding: '8px', border: '1px solid var(--slate-300)', width: '28%' }}>วุฒิการศึกษา</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {section4.teamMembers.map((m) => (
-                    <tr key={m.id}>
-                      <td style={{ padding: '6px', border: '1px solid var(--slate-300)', fontWeight: 600 }}>
-                        {m.name}
-                        <div style={{ fontSize: '0.75rem', color: 'var(--slate-500)', fontWeight: 'normal' }}>
-                          ประสบการณ์ {m.experienceYears} ปี{m.startWorkYearBE ? ` (เริ่มงาน พ.ศ. ${m.startWorkYearBE})` : ''}
-                        </div>
+                  {section4.teamMembers.map((m, idx) => (
+                    <tr key={m.id} style={{ backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC' }}>
+                      <td style={{ padding: '8px', border: '1px solid var(--slate-300)', textAlign: 'center', fontWeight: 600 }}>{idx + 1}</td>
+                      <td style={{ padding: '8px', border: '1px solid var(--slate-300)', fontWeight: 600, color: 'var(--primary-900)' }}>{m.name}</td>
+                      <td style={{ padding: '8px', border: '1px solid var(--slate-300)' }}>{m.proposedRole}</td>
+                      <td style={{ padding: '8px', border: '1px solid var(--slate-300)', textAlign: 'center' }}>
+                        <span style={{ fontWeight: 600 }}>{m.experienceYears} ปี</span>
+                        {m.startWorkYearBE ? (
+                          <div style={{ fontSize: '0.75rem', color: 'var(--slate-500)' }}>เริ่มงาน พ.ศ. {m.startWorkYearBE}</div>
+                        ) : null}
                       </td>
-                      <td style={{ padding: '6px', border: '1px solid var(--slate-300)' }}>{m.proposedRole}</td>
-                      <td style={{ padding: '6px', border: '1px solid var(--slate-300)' }}>{m.education} ({m.certifications})</td>
+                      <td style={{ padding: '8px', border: '1px solid var(--slate-300)' }}>
+                        <div>{m.education}</div>
+                        {m.certifications && (
+                          <div style={{ fontSize: '0.75rem', color: 'var(--primary-700)', marginTop: '2px' }}>
+                            • ใบรับรอง: {m.certifications}
+                          </div>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+
+              {/* 4.1.2 ประวัติส่วนตัวรายบุคคล */}
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--primary-900)' }}>
+                4.1.2 ประวัติส่วนตัวและประสบการณ์การทำงานรายบุคคล (Curriculum Vitae - CV)
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem' }}>
+                {section4.teamMembers.map((m, idx) => (
+                  <div
+                    key={m.id}
+                    style={{
+                      border: '1px solid var(--slate-300)',
+                      borderRadius: '8px',
+                      padding: '1rem',
+                      backgroundColor: '#FFFFFF',
+                      display: 'flex',
+                      gap: '1.25rem',
+                      alignItems: 'flex-start',
+                    }}
+                  >
+                    {/* Left: Photo 1.5 Inch Box */}
+                    <div style={{ width: '110px', flexShrink: 0, textAlign: 'center' }}>
+                      <div
+                        style={{
+                          width: '110px',
+                          height: '146px',
+                          borderRadius: '6px',
+                          border: m.photoUrl ? '1px solid var(--slate-300)' : '2px dashed var(--slate-300)',
+                          backgroundColor: '#F8FAFC',
+                          overflow: 'hidden',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                        }}
+                      >
+                        {m.photoUrl ? (
+                          <img src={m.photoUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <div style={{ padding: '6px', color: 'var(--slate-400)', fontSize: '0.7rem' }}>
+                            <div style={{ fontWeight: 600 }}>รูปถ่าย 1.5 นิ้ว</div>
+                            <div style={{ fontSize: '0.625rem' }}>(หน้าตรงทางการ)</div>
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary-700)', marginTop: '6px' }}>
+                        ลำดับที่ {idx + 1}
+                      </div>
+                    </div>
+
+                    {/* Right: Personal Bio & Credentials */}
+                    <div style={{ flex: 1, minWidth: 0, fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                      <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--primary-900)' }}>{m.name}</div>
+                      <div>
+                        <strong>ตำแหน่งในโครงการ: </strong>
+                        <span style={{ color: 'var(--primary-700)', fontWeight: 600 }}>{m.proposedRole}</span>
+                      </div>
+                      <div>
+                        <strong>อายุงานและประสบการณ์: </strong>
+                        <span>{m.experienceYears} ปี{m.startWorkYearBE ? ` (เริ่มงานปี พ.ศ. ${m.startWorkYearBE})` : ''}</span>
+                      </div>
+                      <div>
+                        <strong>วุฒิการศึกษา: </strong>
+                        <span>{m.education}</span>
+                      </div>
+                      <div>
+                        <strong>ใบรับรองมาตรฐานวิชาชีพ: </strong>
+                        <span>{m.certifications || '-'}</span>
+                      </div>
+                      <div style={{ backgroundColor: '#F8FAFC', padding: '0.5rem 0.75rem', borderRadius: '6px', borderLeft: '3px solid var(--primary-600)', marginTop: '2px' }}>
+                        <strong>ประวัติส่วนตัว: </strong>
+                        <span>{m.personalBio || 'มีความรู้ความสามารถและประสบการณ์ตรงในการพัฒนาระบบเทคโนโลยีสารสนเทศภาครัฐ'}</span>
+                      </div>
+                      <div>
+                        <strong>หน้าที่ความรับผิดชอบในโครงการ: </strong>
+                        <span>{m.responsibilities}</span>
+                      </div>
+                      <div>
+                        <strong>ประสบการณ์และผลงานเด่น: </strong>
+                        <span>{m.highlightProjects}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
 
               <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '0.5rem' }}>แผนบริหารความเสี่ยง ({section4.riskItems.length} ประเด็น)</h3>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>

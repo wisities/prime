@@ -8,7 +8,7 @@ import {
   saveMemberToMasterLibrary,
   saveMultipleMembersToMasterLibrary,
 } from '../services/masterLibraryService';
-import { Users, ShieldAlert, Plus, Trash2, Library, ChevronDown, ChevronUp, TableProperties, CheckCheck, Sparkles, RotateCcw, Clock, ArrowUp, ArrowDown, BookmarkPlus, BookmarkCheck, Check } from 'lucide-react';
+import { Users, ShieldAlert, Plus, Trash2, Library, ChevronDown, ChevronUp, TableProperties, CheckCheck, Sparkles, RotateCcw, Clock, ArrowUp, ArrowDown, BookmarkPlus, BookmarkCheck, Check, Camera, Upload, User } from 'lucide-react';
 
 interface Section4EditorProps {
   section4: Section4TeamAndRisk;
@@ -116,10 +116,23 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
       certifications: 'ใบรับรองมาตรฐานวิชาชีพ',
       startWorkYearBE: defaultStartYear,
       experienceYears: 5,
+      personalBio: 'มีประสบการณ์และความเชี่ยวชาญในการพัฒนาระบบเทคโนโลยีสารสนเทศภาครัฐอย่างต่อเนื่อง',
       responsibilities: 'รับผิดชอบงานตามที่ได้รับมอบหมาย',
       highlightProjects: 'มีประสบการณ์ในโครงการภาครัฐที่เกี่ยวข้อง',
     };
     onChange({ ...section4, teamMembers: [...section4.teamMembers, newMember] });
+  };
+
+  const handlePhotoUpload = (id: string, file: File) => {
+    if (!file.type.startsWith('image/')) {
+      alert('กรุณาเลือกไฟล์รูปภาพที่ถูกต้อง (JPG, PNG, WebP)');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      handleTeamMemberChange(id, 'photoUrl', reader.result as string);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleDeleteMember = (id: string) => {
@@ -382,91 +395,210 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
                 </div>
               </div>
 
-              <div className="grid-4" style={{ marginBottom: '0.85rem' }}>
-                <div>
-                  <label className="form-label">ตำแหน่งที่เสนอในโครงการ</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="เช่น ผู้จัดการโครงการ"
-                    value={member.proposedRole}
-                    onChange={(e) => handleTeamMemberChange(member.id, 'proposedRole', e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="form-label">วุฒิการศึกษา</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="เช่น ปริญญาตรี วิศวกรรมศาสตร์"
-                    value={member.education}
-                    onChange={(e) => handleTeamMemberChange(member.id, 'education', e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>ปีที่เริ่มทำงาน (พ.ศ.)</span>
-                    <span style={{ fontSize: '0.725rem', color: '#2563EB', fontWeight: 600 }}>
-                      = {member.experienceYears} ปี
-                    </span>
-                  </label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ display: 'flex', gap: '1.25rem', marginTop: '0.65rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                {/* Photo 1.5 Inch Box */}
+                <div
+                  style={{
+                    width: '125px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '110px',
+                      height: '146px',
+                      borderRadius: '6px',
+                      border: member.photoUrl ? '2px solid var(--primary-600)' : '2px dashed var(--slate-300)',
+                      backgroundColor: '#F8FAFC',
+                      overflow: 'hidden',
+                      position: 'relative',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                    }}
+                  >
+                    {member.photoUrl ? (
+                      <>
+                        <img
+                          src={member.photoUrl}
+                          alt={member.name}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleTeamMemberChange(member.id, 'photoUrl', undefined)}
+                          style={{
+                            position: 'absolute',
+                            top: '4px',
+                            right: '4px',
+                            backgroundColor: 'rgba(220, 38, 38, 0.85)',
+                            color: '#FFFFFF',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: '22px',
+                            height: '22px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                          }}
+                          title="ลบรูปถ่าย"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </> 
+                    ) : (
+                      <div style={{ textAlign: 'center', padding: '6px' }}>
+                        <Camera size={26} color="#94A3B8" style={{ margin: '0 auto 4px' }} />
+                        <div style={{ fontSize: '0.725rem', color: '#64748B', fontWeight: 600 }}>
+                          รูปถ่าย 1.5 นิ้ว
+                        </div>
+                        <div style={{ fontSize: '0.625rem', color: '#94A3B8' }}>
+                          (หน้าตรงทางการ)
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <label
+                    className="btn btn-outline"
+                    style={{
+                      width: '110px',
+                      marginTop: '6px',
+                      fontSize: '0.725rem',
+                      padding: '0.3rem 0.4rem',
+                      display: 'flex',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      cursor: 'pointer',
+                      gap: '4px',
+                      color: 'var(--primary-700)',
+                      borderColor: '#BFDBFE',
+                      backgroundColor: '#F0F9FF',
+                    }}
+                  >
                     <input
-                      type="number"
-                      className="form-input"
-                      placeholder={`เช่น ${currentYearBE - member.experienceYears}`}
-                      value={member.startWorkYearBE || ''}
-                      onChange={(e) => handleStartWorkYearChange(member.id, e.target.value)}
-                      title="ระบุปี พ.ศ. ที่เริ่มทำงาน ระบบจะคำนวณปีประสบการณ์ให้อัตโนมัติ"
-                    />
-                    <div
-                      style={{
-                        padding: '0.45rem 0.65rem',
-                        backgroundColor: '#EFF6FF',
-                        border: '1px solid #BFDBFE',
-                        borderRadius: '6px',
-                        fontSize: '0.8rem',
-                        fontWeight: 700,
-                        color: '#1D4ED8',
-                        whiteSpace: 'nowrap',
-                        flexShrink: 0,
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handlePhotoUpload(member.id, file);
                       }}
-                      title={`คำนวณถึงปัจจุบัน (ปี พ.ศ. ${currentYearBE})`}
-                    >
-                      {member.experienceYears} ปี
+                    />
+                    <Upload size={12} /> {member.photoUrl ? 'เปลี่ยนรูป' : 'อัปโหลดรูป'}
+                  </label>
+                </div>
+
+                {/* Form Inputs Details */}
+                <div style={{ flex: 1, minWidth: '300px', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                  <div className="grid-4">
+                    <div>
+                      <label className="form-label">ตำแหน่งที่เสนอในโครงการ</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="เช่น ผู้จัดการโครงการ"
+                        value={member.proposedRole}
+                        onChange={(e) => handleTeamMemberChange(member.id, 'proposedRole', e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>ปีที่เริ่มทำงาน (พ.ศ.)</span>
+                        <span style={{ fontSize: '0.725rem', color: '#2563EB', fontWeight: 600 }}>
+                          = {member.experienceYears} ปี
+                        </span>
+                      </label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <input
+                          type="number"
+                          className="form-input"
+                          placeholder={'เช่น ' + (currentYearBE - member.experienceYears)}
+                          value={member.startWorkYearBE || ''}
+                          onChange={(e) => handleStartWorkYearChange(member.id, e.target.value)}
+                          title="ระบุปี พ.ศ. ที่เริ่มทำงาน ระบบจะคำนวณปีประสบการณ์ให้อัตโนมัติ"
+                        />
+                        <div
+                          style={{
+                            padding: '0.45rem 0.65rem',
+                            backgroundColor: '#EFF6FF',
+                            border: '1px solid #BFDBFE',
+                            borderRadius: '6px',
+                            fontSize: '0.8rem',
+                            fontWeight: 700,
+                            color: '#1D4ED8',
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0,
+                          }}
+                          title={'คำนวณถึงปัจจุบัน (ปี พ.ศ. ' + currentYearBE + ')'}
+                        >
+                          {member.experienceYears} ปี
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="form-label">วุฒิการศึกษา</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="เช่น ปริญญาตรี วิศวกรรมศาสตร์"
+                        value={member.education}
+                        onChange={(e) => handleTeamMemberChange(member.id, 'education', e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">ใบรับรองมาตรฐานวิชาชีพ (Certs)</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="เช่น PMP, ITIL, AWS"
+                        value={member.certifications}
+                        onChange={(e) => handleTeamMemberChange(member.id, 'certifications', e.target.value)}
+                      />
                     </div>
                   </div>
-                </div>
-                <div>
-                  <label className="form-label">ใบรับรองมาตรฐานวิชาชีพ (Certs)</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="เช่น PMP, ITIL, AWS"
-                    value={member.certifications}
-                    onChange={(e) => handleTeamMemberChange(member.id, 'certifications', e.target.value)}
-                  />
-                </div>
-              </div>
 
-              <div className="grid-2">
-                <div>
-                  <label className="form-label">บทบาทหน้าที่ในโครงการ</label>
-                  <textarea
-                    className="form-textarea"
-                    style={{ minHeight: '60px' }}
-                    value={member.responsibilities}
-                    onChange={(e) => handleTeamMemberChange(member.id, 'responsibilities', e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="form-label">ผลงานหรือโครงการเด่นที่ผ่านมา</label>
-                  <textarea
-                    className="form-textarea"
-                    style={{ minHeight: '60px' }}
-                    value={member.highlightProjects}
-                    onChange={(e) => handleTeamMemberChange(member.id, 'highlightProjects', e.target.value)}
-                  />
+                  {/* Personal Bio */}
+                  <div>
+                    <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>ประวัติส่วนตัวและประสบการณ์ทำงานโดยสรุป</span>
+                      <span style={{ fontSize: '0.725rem', color: '#64748B' }}>(ใช้สำหรับแสดงในหัวข้อประวัติส่วนตัวรายบุคคล)</span>
+                    </label>
+                    <textarea
+                      className="form-textarea"
+                      style={{ minHeight: '65px' }}
+                      placeholder="สรุปประวัติส่วนตัว ความเชี่ยวชาญ และความพร้อมในการปฏิบัติงานตามตำแหน่ง..."
+                      value={member.personalBio || ''}
+                      onChange={(e) => handleTeamMemberChange(member.id, 'personalBio', e.target.value)}
+                    />
+                  </div>
+
+                  <div className="grid-2">
+                    <div>
+                      <label className="form-label">บทบาทหน้าที่ในโครงการ</label>
+                      <textarea
+                        className="form-textarea"
+                        style={{ minHeight: '60px' }}
+                        value={member.responsibilities}
+                        onChange={(e) => handleTeamMemberChange(member.id, 'responsibilities', e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">ผลงานหรือโครงการเด่นที่ผ่านมา</label>
+                      <textarea
+                        className="form-textarea"
+                        style={{ minHeight: '60px' }}
+                        value={member.highlightProjects}
+                        onChange={(e) => handleTeamMemberChange(member.id, 'highlightProjects', e.target.value)}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
