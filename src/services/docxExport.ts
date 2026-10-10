@@ -1290,10 +1290,11 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
     }
   });
 
-  // 5.3.2 ผลงานเสริมที่สอดคล้อง
+  // 5.3.2 ผลงานเสริมที่สอดคล้อง (ขึ้นหน้าใหม่ตามความต้องการของผู้ใช้)
   if (supplementaryProjects.length > 0) {
     part5BChildren.push(
       new Paragraph({
+        pageBreakBefore: true,
         heading: HeadingLevel.HEADING_3,
         spacing: { before: 200, after: 80, line: 240, lineRule: LineRuleType.AUTO },
         children: [

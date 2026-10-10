@@ -632,8 +632,15 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
               {/* 5.3.2 ผลงานเสริมที่สอดคล้อง */}
               {section5.pastProjects.some((p) => p.isSelected && p.projectType === 'supplementary') && (
                 <>
-                  <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginTop: '1.25rem', marginBottom: '0.5rem', color: 'var(--primary-900)' }}>
-                    5.3.2 ผลงานและประสบการณ์เสริมที่สอดคล้องกับงานจ้างโครงการนี้
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', margin: '1.75rem 0 1rem 0' }}>
+                    <div style={{ flex: 1, borderTop: '1px dashed var(--slate-300)' }} />
+                    <span style={{ fontSize: '0.75rem', color: 'var(--slate-400)', fontWeight: 500, letterSpacing: '0.05em' }}>
+                      [-- ขึ้นหน้าใหม่ (Page Break) --]
+                    </span>
+                    <div style={{ flex: 1, borderTop: '1px dashed var(--slate-300)' }} />
+                  </div>
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginTop: '0.5rem', marginBottom: '0.5rem', color: 'var(--primary-900)' }}>
+                    5.3.2 ผลงานและประสบการณ์เสริมที่สอดคล้องกับงานจ้างโครงการนี้ (Supplementary Experience)
                   </h3>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem', marginBottom: '1.5rem' }}>
                     <thead>
