@@ -882,6 +882,7 @@ export const App: React.FC = () => {
         onImport={handleImportTorScopes}
         attachments={currentProject?.attachments}
         selectedAttachmentId={activeTorAttachmentId}
+        projectId={currentProject?.id}
       />
 
       <UserManagementModal

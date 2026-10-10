@@ -25,7 +25,19 @@ import {
   Check,
   Trash2,
   Plus,
+  Save,
+  RotateCcw,
+  Lock,
 } from 'lucide-react';
+
+interface TorDraftData {
+  parsedItems: TorScopeItem[];
+  activeDocName: string;
+  savedAt: string;
+  sourceMode?: 'project' | 'upload';
+}
+
+const getDraftKey = (projId?: string) => `prime_tor_scope_draft_${projId || 'default'}`;
 
 interface TorImportModalProps {
   isOpen: boolean;
@@ -33,6 +45,7 @@ interface TorImportModalProps {
   onImport: (items: TorScopeItem[]) => void;
   attachments?: ProjectAttachment[];
   selectedAttachmentId?: string | null;
+  projectId?: string;
 }
 
 export const TorImportModal: React.FC<TorImportModalProps> = ({
@@ -41,6 +54,7 @@ export const TorImportModal: React.FC<TorImportModalProps> = ({
   onImport,
   attachments = [],
   selectedAttachmentId,
+  projectId,
 }) => {
   const [file, setFile] = useState<File | null>(null);
   const [rawText, setRawText] = useState('');
@@ -50,8 +64,40 @@ export const TorImportModal: React.FC<TorImportModalProps> = ({
   const [parsedItems, setParsedItems] = useState<TorScopeItem[]>([]);
   const [sourceMode, setSourceMode] = useState<'project' | 'upload'>('project');
   const [activeDocName, setActiveDocName] = useState<string>('');
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+  const [hasLoadedDraft, setHasLoadedDraft] = useState(false);
+  const [showDraftSavedToast, setShowDraftSavedToast] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // บันทึกร่างลง LocalStorage
+  const saveDraft = (items: TorScopeItem[], docName: string) => {
+    if (items.length === 0) return;
+    const now = new Date().toISOString();
+    const draftData: TorDraftData = {
+      parsedItems: items,
+      activeDocName: docName,
+      savedAt: now,
+      sourceMode,
+    };
+    try {
+      localStorage.setItem(getDraftKey(projectId), JSON.stringify(draftData));
+      setDraftSavedAt(now);
+      setShowDraftSavedToast(true);
+      setTimeout(() => setShowDraftSavedToast(false), 3000);
+    } catch (err) {
+      console.warn('Failed to save TOR draft', err);
+    }
+  };
+
+  // ล้างร่าง
+  const clearDraft = () => {
+    try {
+      localStorage.removeItem(getDraftKey(projectId));
+      setDraftSavedAt(null);
+      setHasLoadedDraft(false);
+    } catch {}
+  };
 
   // Filter TOR attachments (or fallback to any PDF/DOCX)
   const torAttachments = attachments.filter(
@@ -73,6 +119,9 @@ export const TorImportModal: React.FC<TorImportModalProps> = ({
       setRawText(text);
       const items = parseTorTextRules(text);
       setParsedItems(items);
+      if (items.length > 0) {
+        saveDraft(items, att.name);
+      }
       if (items.length === 0) {
         setErrorMsg('อ่านไฟล์สำเร็จ แต่ไม่พบข้อความที่ตรงตามรูปแบบข้อกำหนด TOR มาตรฐาน สามารถลองใช้ปุ่ม AI แยกข้อด้านล่าง');
       }
@@ -87,15 +136,29 @@ export const TorImportModal: React.FC<TorImportModalProps> = ({
   // Initial load when modal opens or selectedAttachmentId changes
   useEffect(() => {
     if (!isOpen) {
-      setFile(null);
-      setRawText('');
-      setParsedItems([]);
       setErrorMsg(null);
-      setActiveDocName('');
       return;
     }
 
     setApiKey(getGeminiApiKey());
+
+    // 1. ตรวจสอบร่างเดิมที่เคยบันทึกไว้ในระบบ
+    try {
+      const draftJson = localStorage.getItem(getDraftKey(projectId));
+      if (draftJson) {
+        const draft: TorDraftData = JSON.parse(draftJson);
+        if (draft.parsedItems && draft.parsedItems.length > 0) {
+          setParsedItems(draft.parsedItems);
+          setActiveDocName(draft.activeDocName || '');
+          setDraftSavedAt(draft.savedAt);
+          setHasLoadedDraft(true);
+          if (draft.sourceMode) setSourceMode(draft.sourceMode);
+          return; // ใช้ร่างเดิมโดยไม่ต้องสกัดซ้ำ
+        }
+      }
+    } catch {}
+
+    setHasLoadedDraft(false);
 
     if (selectedAttachmentId && availableDocs.length > 0) {
       const target = availableDocs.find((a) => a.id === selectedAttachmentId);
@@ -115,7 +178,7 @@ export const TorImportModal: React.FC<TorImportModalProps> = ({
     } else {
       setSourceMode('upload');
     }
-  }, [isOpen, selectedAttachmentId]);
+  }, [isOpen, selectedAttachmentId, projectId]);
 
   if (!isOpen) return null;
 
@@ -174,18 +237,23 @@ export const TorImportModal: React.FC<TorImportModalProps> = ({
     }
   };
 
-  // แก้ไขข้อมูลของข้อกำหนดที่สกัดได้
+  // แก้ไขข้อมูลของข้อกำหนดที่สกัดได้ (พร้อม Auto-save ร่างอัตโนมัติ)
   const handleItemFieldChange = (index: number, field: keyof TorScopeItem, value: any) => {
     setParsedItems((prev) => {
       const updated = [...prev];
       updated[index] = { ...updated[index], [field]: value };
+      saveDraft(updated, activeDocName);
       return updated;
     });
   };
 
   // ลบข้อกำหนดที่ไม่ต้องการออกก่อนนำเข้า
   const handleDeleteParsedItem = (index: number) => {
-    setParsedItems((prev) => prev.filter((_, idx) => idx !== index));
+    setParsedItems((prev) => {
+      const updated = prev.filter((_, idx) => idx !== index);
+      saveDraft(updated, activeDocName);
+      return updated;
+    });
   };
 
   // เพิ่มข้อกำหนดใหม่ด้วยตนเอง
@@ -205,7 +273,38 @@ export const TorImportModal: React.FC<TorImportModalProps> = ({
       toolsAndTechnology: '',
       deliverable: '',
     };
-    setParsedItems((prev) => [...prev, newItem]);
+    const updated = [...parsedItems, newItem];
+    setParsedItems(updated);
+    saveDraft(updated, activeDocName);
+  };
+
+  // ปิดหน้าต่างอย่างปลอดภัยพร้อมบันทึกร่าง
+  const handleSafeClose = () => {
+    if (parsedItems.length > 0) {
+      saveDraft(parsedItems, activeDocName);
+    }
+    onClose();
+  };
+
+  // บันทึกร่างด้วยตนเอง
+  const handleManualSaveDraft = () => {
+    if (parsedItems.length === 0) {
+      alert('ยังไม่มีข้อมูลข้อกำหนด TOR สำหรับบันทึกร่าง');
+      return;
+    }
+    saveDraft(parsedItems, activeDocName);
+  };
+
+  // ล้างร่างเพื่อเริ่มสกัดใหม่จากไฟล์
+  const handleDiscardDraftAndReExtract = () => {
+    if (confirm('คุณต้องการล้างร่างที่กำลังแก้ไขอยู่ และสกัดข้อกำหนดใหม่จากไฟล์ต้นฉบับใช่หรือไม่?')) {
+      clearDraft();
+      setParsedItems([]);
+      if (availableDocs.length > 0) {
+        const target = (selectedAttachmentId && availableDocs.find((a) => a.id === selectedAttachmentId)) || torAttachments[0] || availableDocs[0];
+        handleExtractFromAttachment(target);
+      }
+    }
   };
 
   const handleConfirmImport = () => {
@@ -222,30 +321,37 @@ export const TorImportModal: React.FC<TorImportModalProps> = ({
     }));
 
     if (confirm(`ยืนยันการนำเข้าขอบเขตงาน TOR จำนวน ${cleanItems.length} ข้อ? (จะนำไปแทนที่รายการเดิมและเชื่อมโยงสู่ Gantt Chart และส่วนที่ 3 อัตโนมัติ)`)) {
+      clearDraft();
       onImport(cleanItems);
       onClose();
     }
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '920px', maxHeight: '92vh' }}>
+    <div className="modal-overlay">
+      <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '940px', maxHeight: '94vh' }}>
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
             <FileUp size={22} color="var(--primary-700)" />
             <div>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--primary-900)' }}>
-                ระบบนำเข้าและอ่านเอกสาร TOR (Word & PDF Importer)
-              </h3>
-              <p style={{ fontSize: '0.8rem', color: 'var(--slate-500)' }}>
-                สกัดขอบเขตงานระดับ 1-5 เข้าสู่ข้อเสนอโครงการอัตโนมัติ โดยใช้ไฟล์ที่แนบไว้แล้วในโครงการได้ทันที
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--primary-900)', margin: 0 }}>
+                  ระบบนำเข้าและอ่านเอกสาร TOR (Word & PDF Importer)
+                </h3>
+                <span style={{ fontSize: '0.72rem', color: 'var(--slate-600)', backgroundColor: '#F1F5F9', border: '1px solid #E2E8F0', padding: '1px 7px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                  <Lock size={11} color="#64748B" /> ล็อคหน้าจอไม่ให้ปิดเอง
+                </span>
+              </div>
+              <p style={{ fontSize: '0.8rem', color: 'var(--slate-500)', marginTop: '2px', marginBottom: 0 }}>
+                สกัดขอบเขตงานระดับ 1-5 เข้าสู่ข้อเสนอโครงการ (แก้ไขทีละข้อและบันทึกร่างไว้ก่อนได้)
               </p>
             </div>
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleSafeClose}
             style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: 'var(--slate-400)' }}
+            title="ปิดหน้าต่างนี้ (บันทึกร่างอัตโนมัติ)"
           >
             <X size={20} />
           </button>
@@ -470,16 +576,66 @@ export const TorImportModal: React.FC<TorImportModalProps> = ({
 
           {/* Parsed Items Preview & Editor */}
           <div>
+            {draftSavedAt && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  backgroundColor: '#EFF6FF',
+                  border: '1px solid #BFDBFE',
+                  borderRadius: '6px',
+                  padding: '0.45rem 0.75rem',
+                  marginBottom: '0.65rem',
+                  fontSize: '0.8rem',
+                  color: '#1E40AF',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Save size={14} color="#2563EB" />
+                  <span>
+                    <strong>บันทึกร่างอัตโนมัติแล้ว</strong> ({parsedItems.length} ข้อ - เมื่อ {new Date(draftSavedAt).toLocaleTimeString('th-TH')}) สามารถปิดหน้าต่างนี้และกลับมาแก้ต่อได้ตลอดเวลา
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDiscardDraftAndReExtract}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#DC2626',
+                    fontSize: '0.78rem',
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                    padding: 0,
+                  }}
+                  title="ล้างร่างที่กำลังแก้ไขอยู่เพื่อสกัดใหม่จากไฟล์ต้นฉบับ"
+                >
+                  เริ่มสกัดใหม่จากไฟล์ (ล้างร่าง)
+                </button>
+              </div>
+            )}
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem', flexWrap: 'wrap', gap: '0.5rem' }}>
               <div>
                 <span style={{ fontWeight: 600, color: 'var(--primary-900)', fontSize: '0.95rem' }}>
                   ผลการสกัดขอบเขตงาน ({parsedItems.length} ข้อ) {activeDocName && <span style={{ color: '#2563EB', fontSize: '0.825rem' }}>- จากไฟล์: {activeDocName}</span>}
                 </span>
                 <div style={{ fontSize: '0.78rem', color: 'var(--slate-500)', marginTop: '2px' }}>
-                  ✏️ สามารถแก้ไขเลขข้อ, ชื่อหัวข้อ และข้อความรายละเอียดในแต่ละช่องได้โดยตรงก่อนนำเข้าสู่ระบบ
+                  ✏️ สามารถแก้ไขเลขข้อ, ชื่อหัวข้อ และข้อความรายละเอียดในแต่ละช่องได้โดยตรง ข้อมูลจะถูกบันทึกร่างอัตโนมัติ
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={handleManualSaveDraft}
+                  disabled={parsedItems.length === 0}
+                  className="btn btn-outline"
+                  style={{ padding: '0.3rem 0.65rem', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#1D4ED8', borderColor: '#BFDBFE' }}
+                  title="บันทึกร่างข้อมูลที่แก้ไขไว้"
+                >
+                  <Save size={13} /> บันทึกร่าง
+                </button>
                 <button
                   type="button"
                   onClick={handleAddNewParsedItem}
@@ -638,19 +794,52 @@ export const TorImportModal: React.FC<TorImportModalProps> = ({
           </div>
         </div>
 
-        <div className="modal-footer">
-          <button type="button" onClick={onClose} className="btn btn-outline">
-            ยกเลิก
-          </button>
-          <button
-            type="button"
-            onClick={handleConfirmImport}
-            disabled={parsedItems.length === 0}
-            className="btn btn-primary"
-          >
-            <CheckCircle size={16} />
-            นำเข้าสู่ระบบ ({parsedItems.length} ข้อ)
-          </button>
+        <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <button
+              type="button"
+              onClick={handleManualSaveDraft}
+              disabled={parsedItems.length === 0}
+              className="btn btn-outline"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                borderColor: '#2563EB',
+                color: '#1D4ED8',
+                fontWeight: 600,
+                fontSize: '0.85rem',
+              }}
+              title="บันทึกร่างข้อมูลที่แก้ไขไว้ลงเครื่อง"
+            >
+              <Save size={15} /> บันทึกร่างไว้ก่อน
+            </button>
+            {showDraftSavedToast && (
+              <span style={{ fontSize: '0.8rem', color: '#16A34A', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                <Check size={15} /> บันทึกร่างสำเร็จแล้ว!
+              </span>
+            )}
+            {!showDraftSavedToast && draftSavedAt && (
+              <span style={{ fontSize: '0.78rem', color: 'var(--slate-500)' }}>
+                บันทึกร่างล่าสุด {new Date(draftSavedAt).toLocaleTimeString('th-TH')}
+              </span>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button type="button" onClick={handleSafeClose} className="btn btn-outline">
+              ปิด / พักไว้ก่อน
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmImport}
+              disabled={parsedItems.length === 0}
+              className="btn btn-primary"
+            >
+              <CheckCircle size={16} />
+              นำเข้าสู่ระบบ ({parsedItems.length} ข้อ)
+            </button>
+          </div>
         </div>
       </div>
     </div>
