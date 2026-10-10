@@ -6,11 +6,11 @@ import {
   testSupabaseConnection,
   SupabaseTestResult,
   saveProject,
+  deleteProject,
   storeAttachmentInIDB,
   getAttachmentFromIDB,
 } from '../services/projectStorageService';
-import { isSupabaseConfigured } from '../services/supabaseClient';
-import { extractProjectMetadataFromFile } from '../services/torDocReader';
+import { extractProjectMetadataFromFile, parseTorTextRules } from '../services/torDocReader';
 import {
   FileText,
   ExternalLink,
@@ -49,7 +49,7 @@ interface ProjectDashboardProps {
   cloudStatus?: 'cloud' | 'local';
   onSelectProject: (projectId: string) => void;
   onUpdateProjects: (updated: BiddingProject[]) => void;
-  onOpenTorImporterForProject: (projectId: string) => void;
+  onOpenTorImporterForProject: (projectId: string, attachmentId?: string) => void;
   onResetProjectsToDefault: () => void;
   onOpenUserManagement?: () => void;
 }
@@ -259,6 +259,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     if (confirm(`คุณต้องการลบโครงการ "${title}" ออกจากระบบใช่หรือไม่?`)) {
       const updated = projects.filter((p) => p.id !== projectId);
       onUpdateProjects(updated);
+      deleteProject(projectId);
     }
   };
 
@@ -473,7 +474,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         // 2. Extract metadata if PDF or Word
         if (isPdf || isDocx) {
           try {
-            const { metadata } = await extractProjectMetadataFromFile(file);
+            const { metadata, rawText } = await extractProjectMetadataFromFile(file);
             if (metadata.projectCode && (!currentProj.projectCode || currentProj.projectCode.startsWith('EGP-'))) {
               currentProj.projectCode = metadata.projectCode;
             }
@@ -494,6 +495,18 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             }
             if (metadata.egpUrl) {
               currentProj.egpUrl = metadata.egpUrl;
+            }
+
+            // Auto-extract TOR scope items into section 1 if file is TOR and scopeItems is empty
+            if (category === 'tor' && rawText) {
+              const currentScopes = currentProj.proposalData?.section1?.scopeItems || [];
+              if (currentScopes.length === 0) {
+                const extractedScopes = parseTorTextRules(rawText);
+                if (extractedScopes.length > 0) {
+                  currentProj.proposalData.section1.scopeItems = extractedScopes;
+                  extractedSummary.push(`🎯 สกัดข้อกำหนด TOR (${extractedScopes.length} ข้อ) เข้าสู่ส่วนที่ 1 อัตโนมัติ`);
+                }
+              }
             }
           } catch (metaErr) {
             console.warn('Metadata extraction skipped for file:', file.name, metaErr);
@@ -1201,7 +1214,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                                 className="att-icon-btn att-import-btn"
                                 onClick={() => {
                                   onSelectProject(project.id);
-                                  onOpenTorImporterForProject(project.id);
+                                  onOpenTorImporterForProject(project.id, att.id);
                                 }}
                                 title="นำเข้าขอบเขตงานจาก TOR นี้เข้าสู่ข้อเสนอโครงการ"
                               >

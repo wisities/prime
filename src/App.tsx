@@ -212,7 +212,9 @@ export const App: React.FC = () => {
     } catch (e) {
       console.warn('LocalStorage save error', e);
     }
-    updatedProjects.forEach((p) => saveProject(p));
+    updatedProjects
+      .filter((p) => !projects.includes(p))
+      .forEach((p) => saveProject(p));
   };
 
   // Editor Tabs
@@ -223,6 +225,7 @@ export const App: React.FC = () => {
   const [showAuditModal, setShowAuditModal] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [showTorImportModal, setShowTorImportModal] = useState(false);
+  const [activeTorAttachmentId, setActiveTorAttachmentId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -235,6 +238,7 @@ export const App: React.FC = () => {
         scopeItems: items,
       },
     }));
+    setActiveTorAttachmentId(null);
   };
 
   // Real-time error/warning count for badge
@@ -304,12 +308,13 @@ export const App: React.FC = () => {
     setCurrentView('editor');
   };
 
-  const handleOpenTorImporterForProject = (projectId: string) => {
+  const handleOpenTorImporterForProject = (projectId: string, attachmentId?: string) => {
     setActiveProjectId(projectId);
     const target = projects.find((p) => p.id === projectId);
     if (target) {
       setProposal(target.proposalData);
     }
+    setActiveTorAttachmentId(attachmentId || null);
     setCurrentView('editor');
     setShowTorImportModal(true);
   };
@@ -823,8 +828,13 @@ export const App: React.FC = () => {
 
       <TorImportModal
         isOpen={showTorImportModal}
-        onClose={() => setShowTorImportModal(false)}
+        onClose={() => {
+          setShowTorImportModal(false);
+          setActiveTorAttachmentId(null);
+        }}
         onImport={handleImportTorScopes}
+        attachments={currentProject?.attachments}
+        selectedAttachmentId={activeTorAttachmentId}
       />
 
       <UserManagementModal

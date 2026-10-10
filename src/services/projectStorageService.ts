@@ -323,6 +323,23 @@ export async function saveProject(project: BiddingProject): Promise<boolean> {
         }
       }
 
+      // ลบไฟล์แนบที่ถูกผู้ใช้ลบออกแล้ว (มีใน Cloud แต่ไม่มีในโครงการปัจจุบัน)
+      try {
+        const currentIds = new Set((project.attachments || []).map((a) => a.id));
+        const { data: cloudRows } = await supabase
+          .from('project_attachments')
+          .select('id')
+          .eq('project_id', project.id);
+        const staleIds = (cloudRows || [])
+          .map((r: any) => r.id as string)
+          .filter((id) => !currentIds.has(id));
+        if (staleIds.length > 0) {
+          await supabase.from('project_attachments').delete().in('id', staleIds);
+        }
+      } catch (cleanupErr) {
+        console.warn('Attachment cleanup error:', cleanupErr);
+      }
+
       return true;
     } catch (err) {
       console.error('Supabase save error:', err);
@@ -370,7 +387,7 @@ export async function uploadAttachmentFile(
   file: File,
   category: 'announcement' | 'tor' | 'other'
 ): Promise<ProjectAttachment> {
-  const attachmentId = `att-${Date.now()}`;
+  const attachmentId = `att-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
   let fileUrl: string | undefined = undefined;
 
   // อ่าน base64 เพื่อใช้ในการ parse Word/PDF ฝั่ง Client ได้ทันที

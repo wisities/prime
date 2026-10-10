@@ -1,4 +1,5 @@
 import { TorScopeItem } from '../types/proposal';
+import { getAttachmentFromIDB } from './projectStorageService';
 
 /**
  * Extracts raw text from a Microsoft Word (.docx) file using mammoth
@@ -363,4 +364,53 @@ export async function extractProjectMetadataFromFile(
   const metadata = extractProjectMetadataFromText(rawText);
   return { metadata, rawText };
 }
+
+/**
+ * Extracts raw text directly from an existing project attachment (using dataUrl or IndexedDB)
+ * without requiring the user to re-upload the file!
+ */
+export async function readAttachmentContent(att: {
+  name: string;
+  dataUrl?: string;
+  id?: string;
+}): Promise<string> {
+  let url = att.dataUrl;
+  if ((!url || url.startsWith('idb://')) && att.id) {
+    const fromIdb = await getAttachmentFromIDB(att.id);
+    if (fromIdb) url = fromIdb;
+  }
+
+  if (!url) {
+    throw new Error(`ไม่พบข้อมูลไฟล์ "${att.name}" กรุณาตรวจสอบการเชื่อมต่อไฟล์`);
+  }
+
+  const res = await fetch(url);
+  const arrayBuffer = await res.arrayBuffer();
+  const lower = att.name.toLowerCase();
+
+  if (lower.endsWith('.docx')) {
+    const mammoth = await import('mammoth');
+    const result = await mammoth.extractRawText({ arrayBuffer });
+    return result.value || '';
+  } else if (lower.endsWith('.pdf')) {
+    const pdfjsLib = await import('pdfjs-dist');
+    if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version || '4.0.379'}/pdf.worker.min.mjs`;
+    }
+    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+    const pdf = await loadingTask.promise;
+    let fullText = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items.map((item: any) => item.str).join(' ');
+      fullText += `--- หน้าที่ ${i} ---\n${pageText}\n\n`;
+    }
+    return fullText;
+  } else {
+    const decoder = new TextDecoder('utf-8');
+    return decoder.decode(arrayBuffer);
+  }
+}
+
 
