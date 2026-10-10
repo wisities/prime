@@ -255,6 +255,21 @@ function createDataCell(
   });
 }
 
+function createHeaderRow(cells: TableCell[]): TableRow {
+  return new TableRow({
+    tableHeader: true, // Repeat header row across pages in Word
+    cantSplit: true,
+    children: cells,
+  });
+}
+
+function createDataRow(cells: TableCell[]): TableRow {
+  return new TableRow({
+    cantSplit: true, // Prevent row from splitting across page breaks
+    children: cells,
+  });
+}
+
 function renderMethodologyParagraphsAndTables(text: string): (Paragraph | Table)[] {
   const result: (Paragraph | Table)[] = [];
   const lines = (text || 'บริษัทฯ มุ่งมั่นปฏิบัติงานตามมาตรฐานสากลและส่งมอบตามเกณฑ์ที่กำหนด')
@@ -299,7 +314,11 @@ function renderMethodologyParagraphsAndTables(text: string): (Paragraph | Table)
               cells.push(createDataCell(cellText, colWidth));
             }
           }
-          docxRows.push(new TableRow({ children: cells }));
+          if (isHeader) {
+            docxRows.push(createHeaderRow(cells));
+          } else {
+            docxRows.push(createDataRow(cells));
+          }
         });
 
         result.push(
@@ -320,7 +339,7 @@ function renderMethodologyParagraphsAndTables(text: string): (Paragraph | Table)
       result.push(
         new Paragraph({
           bullet: { level: 0 },
-          alignment: AlignmentType.JUSTIFIED,
+          alignment: AlignmentType.LEFT,
           spacing: { before: 40, after: 40, line: 240, lineRule: LineRuleType.AUTO },
           children: [
             new TextRun({
@@ -569,7 +588,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
     const cleanObj = obj.replace(/^\(\d+\.\d+\)\s*/, '').replace(/^1\.\d+\.\d+\s*/, '');
     part1Children.push(
       new Paragraph({
-        alignment: AlignmentType.THAI_DISTRIBUTE,
+        alignment: AlignmentType.LEFT,
         indent: { firstLine: 450 },
         spacing: { after: 60, before: 0, line: 240, lineRule: LineRuleType.AUTO },
         children: [
@@ -589,7 +608,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
     const cleanBenefit = benefit.replace(/^\(\d+\.\d+\)\s*/, '').replace(/^2\.\d+\.\d+\s*/, '').replace(/^1\.\d+\.\d+\s*/, '');
     part1Children.push(
       new Paragraph({
-        alignment: AlignmentType.THAI_DISTRIBUTE,
+        alignment: AlignmentType.LEFT,
         indent: { firstLine: 450 },
         spacing: { after: 60, before: 0, line: 240, lineRule: LineRuleType.AUTO },
         children: [
@@ -606,9 +625,9 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
 
   part1Children.push(
     createH2('1.4 กลุ่มเป้าหมายและกรอบระยะเวลาดำเนินงาน'),
-    createP(`กลุ่มเป้าหมายผู้ใช้งาน: ${section1.targetAudience}`, { firstLineIndent: 450, align: AlignmentType.THAI_DISTRIBUTE }),
-    createP(`ระยะเวลาดำเนินการรวม: ${section1.projectDurationDays} วัน (${section1.projectDurationMonths} เดือน / ${section1.projectDurationMonths * 4} สัปดาห์)`, { firstLineIndent: 450, align: AlignmentType.THAI_DISTRIBUTE }),
-    createP(`วงเงินงบประมาณโครงการ: ${section1.budgetAmount.toLocaleString()} บาท`, { firstLineIndent: 450, align: AlignmentType.THAI_DISTRIBUTE }),
+    createP(`กลุ่มเป้าหมายผู้ใช้งาน: ${section1.targetAudience}`, { firstLineIndent: 450, align: AlignmentType.LEFT }),
+    createP(`ระยะเวลาดำเนินการรวม: ${section1.projectDurationDays} วัน (${section1.projectDurationMonths} เดือน / ${section1.projectDurationMonths * 4} สัปดาห์)`, { firstLineIndent: 450, align: AlignmentType.LEFT }),
+    createP(`วงเงินงบประมาณโครงการ: ${section1.budgetAmount.toLocaleString()} บาท`, { firstLineIndent: 450, align: AlignmentType.LEFT }),
     createH2('1.5 ขอบเขตงานตามประกาศจัดจ้าง'),
     ...createBodyParagraphs(section1.projectScopeOverview)
   );
@@ -621,7 +640,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
 
     part1Children.push(
       new Paragraph({
-        alignment: AlignmentType.THAI_DISTRIBUTE,
+        alignment: AlignmentType.LEFT,
         indent: isLevel1 ? undefined : { left: indentLeft, firstLine: 720 },
         spacing: { before: isLevel1 ? 120 : 60, after: 60, line: 240, lineRule: LineRuleType.AUTO },
         children: [
@@ -680,26 +699,22 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
   );
 
   const taskRows = [
-    new TableRow({
-      children: [
-        createHeaderCell('ระดับ / ข้อกำหนด TOR', 42),
-        createHeaderCell('ช่วงเวลาเริ่มต้น', 18),
-        createHeaderCell('ระยะเวลาทำงาน', 16),
-        createHeaderCell('ผู้รับผิดชอบหลัก', 24),
-      ],
-    }),
+    createHeaderRow([
+      createHeaderCell('ระดับ / ข้อกำหนด TOR', 42),
+      createHeaderCell('ช่วงเวลาเริ่มต้น', 18),
+      createHeaderCell('ระยะเวลาทำงาน', 16),
+      createHeaderCell('ผู้รับผิดชอบหลัก', 24),
+    ]),
   ];
 
   (section1.scopeItems || []).forEach((item) => {
     taskRows.push(
-      new TableRow({
-        children: [
-          createDataCell(`${formatTorClauseNumber(item.clauseNumber)} ${item.title}`, 42, { bold: item.level === 1 }),
-          createDataCell(`เดือนที่ ${item.startMonth} (สัปดาห์ W${item.startWeek})`, 18, { align: AlignmentType.CENTER }),
-          createDataCell(`${item.durationDays} วัน (~${Math.max(1, Math.round(item.durationDays / 7))} วีค)`, 16, { align: AlignmentType.CENTER, bold: true }),
-          createDataCell(item.responsibleRole || '-', 24),
-        ],
-      })
+      createDataRow([
+        createDataCell(`${formatTorClauseNumber(item.clauseNumber)} ${item.title}`, 42, { bold: item.level === 1 }),
+        createDataCell(`เดือนที่ ${item.startMonth} (สัปดาห์ W${item.startWeek})`, 18, { align: AlignmentType.CENTER }),
+        createDataCell(`${item.durationDays} วัน (~${Math.max(1, Math.round(item.durationDays / 7))} วีค)`, 16, { align: AlignmentType.CENTER, bold: true }),
+        createDataCell(item.responsibleRole || '-', 24),
+      ])
     );
   });
 
@@ -716,28 +731,24 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
   );
 
   const milestoneRows = [
-    new TableRow({
-      children: [
-        createHeaderCell('งวดงาน', 12),
-        createHeaderCell('ชื่อและขอบเขตงวดงาน', 32),
-        createHeaderCell('ระยะเวลาส่งมอบ', 20),
-        createHeaderCell('ร้อยละ / วงเงิน', 16),
-        createHeaderCell('เอกสารและผลงานที่ส่งมอบ', 20),
-      ],
-    }),
+    createHeaderRow([
+      createHeaderCell('งวดงาน', 12),
+      createHeaderCell('ชื่อและขอบเขตงวดงาน', 32),
+      createHeaderCell('ระยะเวลาส่งมอบ', 20),
+      createHeaderCell('ร้อยละ / วงเงิน', 16),
+      createHeaderCell('เอกสารและผลงานที่ส่งมอบ', 20),
+    ]),
   ];
 
   section2.milestones.forEach((m) => {
     milestoneRows.push(
-      new TableRow({
-        children: [
-          createDataCell(`งวดที่ ${m.installment}`, 12, { align: AlignmentType.CENTER, bold: true }),
-          createDataCell(m.title, 32),
-          createDataCell(m.timeframe, 20),
-          createDataCell(`${m.percentage}%\n(${m.amount.toLocaleString()} บาท)`, 16, { align: AlignmentType.RIGHT, bold: true }),
-          createDataCell(m.deliverables.join('\n• '), 20),
-        ],
-      })
+      createDataRow([
+        createDataCell(`งวดที่ ${m.installment}`, 12, { align: AlignmentType.CENTER, bold: true }),
+        createDataCell(m.title, 32),
+        createDataCell(m.timeframe, 20),
+        createDataCell(`${m.percentage}%\n(${m.amount.toLocaleString()} บาท)`, 16, { align: AlignmentType.RIGHT, bold: true }),
+        createDataCell(m.deliverables.join('\n• '), 20),
+      ])
     );
   });
 
@@ -961,78 +972,74 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
     part3Children.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
   });
 
-  // ส่วนที่ 4: คณะผู้ดำเนินงาน & ความเสี่ยง
-  part3Children.push(
-    createSectionHeader('ส่วนที่ 4', 'คณะผู้ดำเนินงาน แนวทางบริหารความเสี่ยง และตารางเปรียบเทียบข้อเสนอ', true),
+  // =========================================================================
+  // SECTION 4 (LANDSCAPE - แนวนอน): 4.1 คณะผู้ดำเนินงาน, 4.2 บริหารความเสี่ยง, 4.3 Compliance Matrix
+  // =========================================================================
+  const part4Children: (Paragraph | Table)[] = [];
+
+  part4Children.push(
+    createSectionHeader('ส่วนที่ 4', 'คณะผู้ดำเนินงาน แนวทางบริหารความเสี่ยง และตารางเปรียบเทียบข้อเสนอ'),
     createH2('4.1 โครงสร้างบุคลากรและคณะผู้ดำเนินงาน'),
     ...createBodyParagraphs(section4.teamOverview)
   );
 
   const teamRows = [
-    new TableRow({
-      children: [
-        createHeaderCell('ลำดับ', 8),
-        createHeaderCell('ชื่อ - นามสกุล', 22),
-        createHeaderCell('ตำแหน่งที่เสนอในโครงการ', 24),
-        createHeaderCell('วุฒิการศึกษาและใบรับรอง', 26),
-        createHeaderCell('ประสบการณ์และผลงานเด่น', 20),
-      ],
-    }),
+    createHeaderRow([
+      createHeaderCell('ลำดับ', 6),
+      createHeaderCell('ชื่อ - นามสกุล', 20),
+      createHeaderCell('ตำแหน่งที่เสนอในโครงการ', 24),
+      createHeaderCell('วุฒิการศึกษาและใบรับรอง', 26),
+      createHeaderCell('ประสบการณ์และผลงานเด่น', 24),
+    ]),
   ];
 
   section4.teamMembers.forEach((member, idx) => {
     teamRows.push(
-      new TableRow({
-        children: [
-          createDataCell(String(idx + 1), 8, { align: AlignmentType.CENTER, bold: true }),
-          createDataCell(`${member.name}\n(อายุงาน ${member.experienceYears} ปี)`, 22, { bold: true }),
-          createDataCell(`${member.proposedRole}\n• หน้าที่: ${member.responsibilities}`, 24),
-          createDataCell(`${member.education}\n• ใบรับรอง: ${member.certifications}`, 26),
-          createDataCell(member.highlightProjects, 20),
-        ],
-      })
+      createDataRow([
+        createDataCell(String(idx + 1), 6, { align: AlignmentType.CENTER, bold: true }),
+        createDataCell(`${member.name}\n(อายุงาน ${member.experienceYears} ปี)`, 20, { bold: true }),
+        createDataCell(`${member.proposedRole}\n• หน้าที่: ${member.responsibilities}`, 24),
+        createDataCell(`${member.education}\n• ใบรับรอง: ${member.certifications}`, 26),
+        createDataCell(member.highlightProjects, 24),
+      ])
     );
   });
 
-  part3Children.push(
+  part4Children.push(
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
       rows: teamRows,
     })
   );
 
-  part3Children.push(
+  part4Children.push(
     createH2('4.2 แผนการบริหารจัดการความเสี่ยงโครงการ (Risk Management Plan)'),
     ...createBodyParagraphs(section4.riskManagementOverview)
   );
 
   const riskRows = [
-    new TableRow({
-      children: [
-        createHeaderCell('หมวดหมู่', 15),
-        createHeaderCell('ประเด็นความเสี่ยง', 25),
-        createHeaderCell('โอกาส x ผลกระทบ', 16),
-        createHeaderCell('มาตรการป้องกันและลดความเสี่ยง (Mitigation)', 24),
-        createHeaderCell('แผนรองรับกรณีเกิดเหตุ (Contingency)', 20),
-      ],
-    }),
+    createHeaderRow([
+      createHeaderCell('หมวดหมู่', 14),
+      createHeaderCell('ประเด็นความเสี่ยง', 24),
+      createHeaderCell('โอกาส x ผลกระทบ', 14),
+      createHeaderCell('มาตรการป้องกันและลดความเสี่ยง (Mitigation)', 26),
+      createHeaderCell('แผนรองรับกรณีเกิดเหตุ (Contingency)', 22),
+    ]),
   ];
 
   section4.riskItems.forEach((risk) => {
     riskRows.push(
-      new TableRow({
-        children: [
-          createDataCell(risk.category, 15, { bold: true }),
-          createDataCell(risk.riskTitle, 25),
-          createDataCell(`${risk.likelihood} / ${risk.impact}`, 16, { align: AlignmentType.CENTER }),
-          createDataCell(risk.mitigationPlan, 24),
-          createDataCell(risk.contingencyPlan, 20),
-        ],
-      })
+      createDataRow([
+        createDataCell(risk.category, 14, { bold: true }),
+        createDataCell(risk.riskTitle, 24),
+        createDataCell(`${risk.likelihood} / ${risk.impact}`, 14, { align: AlignmentType.CENTER }),
+        createDataCell(risk.mitigationPlan, 26),
+        createDataCell(risk.contingencyPlan, 22),
+      ])
     );
   });
 
-  part3Children.push(
+  part4Children.push(
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
       rows: riskRows,
@@ -1040,7 +1047,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
   );
 
   // 4.3 ตารางเปรียบเทียบข้อเสนอโครงการกับข้อกำหนด TOR (Compliance Matrix)
-  part3Children.push(
+  part4Children.push(
     createH2('4.3 ตารางเปรียบเทียบข้อเสนอโครงการกับข้อกำหนดของหน่วยงาน (TOR Compliance Matrix)'),
     ...createBodyParagraphs(
       section4.complianceMatrixOverview ||
@@ -1049,13 +1056,11 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
   );
 
   const complianceRows = [
-    new TableRow({
-      children: [
-        createHeaderCell('ข้อกำหนดตามประกาศจัดจ้าง (TOR)', 38),
-        createHeaderCell('การดำเนินการ', 26),
-        createHeaderCell('หมายเหตุ / รายละเอียดที่เสนอดีกว่า TOR', 36),
-      ],
-    }),
+    createHeaderRow([
+      createHeaderCell('ข้อกำหนดตามประกาศจัดจ้าง (TOR)', 40),
+      createHeaderCell('การดำเนินการ', 22),
+      createHeaderCell('หมายเหตุ / รายละเอียดที่เสนอดีกว่า TOR', 38),
+    ]),
   ];
 
   (section1.scopeItems || []).forEach((item) => {
@@ -1068,46 +1073,48 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
       : (item.complianceNote || '-');
 
     complianceRows.push(
-      new TableRow({
-        children: [
-          createDataCell(
-            (item.requirement && item.requirement !== item.title)
-              ? `${formatTorClauseNumber(item.clauseNumber)} ${item.title}\n• ${item.requirement}`
-              : `${formatTorClauseNumber(item.clauseNumber)} ${item.title || item.requirement}`,
-            38,
-            { bold: item.level === 1 }
-          ),
-          createDataCell(
-            actionText,
-            26,
-            {
-              align: AlignmentType.CENTER,
-              bold: true,
-              bg: isExceed ? 'FEF3C7' : 'EFF6FF',
-            }
-          ),
-          createDataCell(
-            noteText,
-            36,
-            {
-              bold: isExceed,
-            }
-          ),
-        ],
-      })
+      createDataRow([
+        createDataCell(
+          (item.requirement && item.requirement !== item.title)
+            ? `${formatTorClauseNumber(item.clauseNumber)} ${item.title}\n• ${item.requirement}`
+            : `${formatTorClauseNumber(item.clauseNumber)} ${item.title || item.requirement}`,
+          40,
+          { bold: item.level === 1 }
+        ),
+        createDataCell(
+          actionText,
+          22,
+          {
+            align: AlignmentType.CENTER,
+            bold: true,
+            bg: isExceed ? 'FEF3C7' : 'EFF6FF',
+          }
+        ),
+        createDataCell(
+          noteText,
+          38,
+          {
+            bold: isExceed,
+          }
+        ),
+      ])
     );
   });
 
-  part3Children.push(
+  part4Children.push(
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
       rows: complianceRows,
     })
   );
 
-  // ส่วนที่ 5: ประวัติและประสบการณ์ของบริษัท
-  part3Children.push(
-    createSectionHeader('ส่วนที่ 5', 'ประวัติและประสบการณ์ของบริษัทที่เกี่ยวข้อง', true),
+  // =========================================================================
+  // SECTION 5A (PORTRAIT - แนวตั้ง): 5.1 ข้อมูลบริษัท, โลโก้, รูปสำนักงาน, 5.2 มาตรฐาน
+  // =========================================================================
+  const part5AChildren: (Paragraph | Table)[] = [];
+
+  part5AChildren.push(
+    createSectionHeader('ส่วนที่ 5', 'ประวัติและประสบการณ์ของบริษัทที่เกี่ยวข้อง'),
     createH2('5.1 ข้อมูลทั่วไปของ บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด')
   );
 
@@ -1115,7 +1122,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
   if (section5.companyLogoUrl) {
     try {
       const logoBytes = base64ToUint8Array(section5.companyLogoUrl);
-      part3Children.push(
+      part5AChildren.push(
         new Paragraph({
           alignment: AlignmentType.LEFT,
           spacing: { before: 80, after: 120 },
@@ -1132,16 +1139,16 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
     }
   }
 
-  part3Children.push(
+  part5AChildren.push(
     ...createBodyParagraphs(section5.companyProfile),
-    createP(`ทุนจดทะเบียน: ${section5.registeredCapital}`, { firstLineIndent: 450, align: AlignmentType.THAI_DISTRIBUTE }),
+    createP(`ทุนจดทะเบียน: ${section5.registeredCapital}`, { firstLineIndent: 450, align: AlignmentType.LEFT }),
     ...createBodyParagraphs(`วิสัยทัศน์และพันธกิจ: ${section5.visionMission}`)
   );
 
   if (section5.companyOfficeImageUrl) {
     try {
       const officeBytes = base64ToUint8Array(section5.companyOfficeImageUrl);
-      part3Children.push(
+      part5AChildren.push(
         new Paragraph({
           alignment: AlignmentType.CENTER,
           spacing: { before: 100, after: 60 },
@@ -1171,13 +1178,18 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
     }
   }
 
-  part3Children.push(
+  part5AChildren.push(
     createH2('5.2 มาตรฐานและการรับรองคุณภาพ')
   );
 
   section5.certifications.forEach((cert) => {
-    part3Children.push(createP(`✓ ${cert}`, { spaceAfter: 60, firstLineIndent: 450, align: AlignmentType.THAI_DISTRIBUTE }));
+    part5AChildren.push(createP(`✓ ${cert}`, { spaceAfter: 60, firstLineIndent: 450, align: AlignmentType.LEFT }));
   });
+
+  // =========================================================================
+  // SECTION 5B (LANDSCAPE - แนวนอน): 5.3 ผลงานและประสบการณ์ที่เกี่ยวข้อง (ตารางสัญญาจ้าง)
+  // =========================================================================
+  const part5BChildren: (Paragraph | Table)[] = [];
 
   const currentYearBE = 2568;
   const selectedProjects = (section5.pastProjects || []).filter((p) => p.isSelected);
@@ -1192,7 +1204,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
   );
 
   // 5.3.1 ผลงานอ้างอิงหลักตามเกณฑ์ TOR
-  part3Children.push(
+  part5BChildren.push(
     createH2(`5.3 ผลงานและประสบการณ์ที่เกี่ยวข้อง`),
     new Paragraph({
       heading: HeadingLevel.HEADING_3,
@@ -1211,54 +1223,50 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
   );
 
   const torRefRows = [
-    new TableRow({
-      children: [
-        createHeaderCell('ลำดับ', 6),
-        createHeaderCell('ชื่อโครงการและลักษณะงาน', 32),
-        createHeaderCell('หน่วยงานผู้ว่าจ้าง', 18),
-        createHeaderCell('ปี พ.ศ.', 10),
-        createHeaderCell('มูลค่าสัญญา (บาท)', 18),
-        createHeaderCell('หลักฐานสัญญา/รับรอง', 16),
-      ],
-    }),
+    createHeaderRow([
+      createHeaderCell('ลำดับ', 5),
+      createHeaderCell('ชื่อโครงการและลักษณะงาน', 33),
+      createHeaderCell('หน่วยงานผู้ว่าจ้าง', 18),
+      createHeaderCell('ปี พ.ศ.', 8),
+      createHeaderCell('มูลค่าสัญญา (บาท)', 18),
+      createHeaderCell('หลักฐานสัญญา/รับรอง', 18),
+    ]),
   ];
 
   torReferenceProjects.forEach((proj, idx) => {
     const hasCert = !!proj.certificateFileUrl;
     torRefRows.push(
-      new TableRow({
-        children: [
-          createDataCell(String(idx + 1), 6, { align: AlignmentType.CENTER, bold: true }),
-          createDataCell(`${proj.projectName}\n• ${proj.description}`, 32, { bold: true }),
-          createDataCell(proj.clientName, 18),
-          createDataCell(String(proj.completionYearBE), 10, { align: AlignmentType.CENTER }),
-          createDataCell(`${proj.contractValue.toLocaleString()} บาท`, 18, { align: AlignmentType.RIGHT, bold: true }),
-          createDataCell(hasCert ? '✓ มีแนบในภาคผนวก ก' : 'หนังสือรับรองผลงาน', 16, { align: AlignmentType.CENTER, bold: hasCert }),
-        ],
-      })
+      createDataRow([
+        createDataCell(String(idx + 1), 5, { align: AlignmentType.CENTER, bold: true }),
+        createDataCell(`${proj.projectName}\n• ${proj.description}`, 33, { bold: true }),
+        createDataCell(proj.clientName, 18),
+        createDataCell(String(proj.completionYearBE), 8, { align: AlignmentType.CENTER }),
+        createDataCell(`${proj.contractValue.toLocaleString()} บาท`, 18, { align: AlignmentType.RIGHT, bold: true }),
+        createDataCell(hasCert ? '✓ มีแนบในภาคผนวก ก' : 'หนังสือรับรองผลงาน', 18, { align: AlignmentType.CENTER, bold: hasCert }),
+      ])
     );
   });
 
-  part3Children.push(
+  part5BChildren.push(
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
       rows: torRefRows,
     })
   );
 
-  // Embed project screenshot images if present
+  // Embed project screenshot images if present (Landscape width up to 560px)
   torReferenceProjects.forEach((proj, idx) => {
     if (proj.projectImageUrl) {
       try {
         const pImgBytes = base64ToUint8Array(proj.projectImageUrl);
-        part3Children.push(
+        part5BChildren.push(
           new Paragraph({
             alignment: AlignmentType.CENTER,
             spacing: { before: 120, after: 40 },
             children: [
               new ImageRun({
                 data: pImgBytes,
-                transformation: { width: 440, height: 200 },
+                transformation: { width: 560, height: 250 },
               } as any),
             ],
           }),
@@ -1284,7 +1292,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
 
   // 5.3.2 ผลงานเสริมที่สอดคล้อง
   if (supplementaryProjects.length > 0) {
-    part3Children.push(
+    part5BChildren.push(
       new Paragraph({
         heading: HeadingLevel.HEADING_3,
         spacing: { before: 200, after: 80, line: 240, lineRule: LineRuleType.AUTO },
@@ -1302,32 +1310,28 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
     );
 
     const suppRows = [
-      new TableRow({
-        children: [
-          createHeaderCell('ลำดับ', 6),
-          createHeaderCell('ชื่อโครงการและผู้ว่าจ้าง', 28),
-          createHeaderCell('กิจกรรมและประเด็นที่สอดคล้องกับงานจ้างโครงการนี้', 40),
-          createHeaderCell('ปี พ.ศ.', 10),
-          createHeaderCell('มูลค่าสัญญา', 16),
-        ],
-      }),
+      createHeaderRow([
+        createHeaderCell('ลำดับ', 5),
+        createHeaderCell('ชื่อโครงการและผู้ว่าจ้าง', 27),
+        createHeaderCell('กิจกรรมและประเด็นที่สอดคล้องกับงานจ้างโครงการนี้', 44),
+        createHeaderCell('ปี พ.ศ.', 8),
+        createHeaderCell('มูลค่าสัญญา', 16),
+      ]),
     ];
 
     supplementaryProjects.forEach((proj, idx) => {
       suppRows.push(
-        new TableRow({
-          children: [
-            createDataCell(String(idx + 1), 6, { align: AlignmentType.CENTER, bold: true }),
-            createDataCell(`${proj.projectName}\n• ผู้ว่าจ้าง: ${proj.clientName}`, 28, { bold: true }),
-            createDataCell(proj.relevanceNote || proj.description, 40),
-            createDataCell(String(proj.completionYearBE), 10, { align: AlignmentType.CENTER }),
-            createDataCell(`${proj.contractValue.toLocaleString()} บาท`, 16, { align: AlignmentType.RIGHT }),
-          ],
-        })
+        createDataRow([
+          createDataCell(String(idx + 1), 5, { align: AlignmentType.CENTER, bold: true }),
+          createDataCell(`${proj.projectName}\n• ผู้ว่าจ้าง: ${proj.clientName}`, 27, { bold: true }),
+          createDataCell(proj.relevanceNote || proj.description, 44),
+          createDataCell(String(proj.completionYearBE), 8, { align: AlignmentType.CENTER }),
+          createDataCell(`${proj.contractValue.toLocaleString()} บาท`, 16, { align: AlignmentType.RIGHT }),
+        ])
       );
     });
 
-    part3Children.push(
+    part5BChildren.push(
       new Table({
         width: { size: 100, type: WidthType.PERCENTAGE },
         rows: suppRows,
@@ -1338,14 +1342,14 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
       if (proj.projectImageUrl) {
         try {
           const pImgBytes = base64ToUint8Array(proj.projectImageUrl);
-          part3Children.push(
+          part5BChildren.push(
             new Paragraph({
               alignment: AlignmentType.CENTER,
               spacing: { before: 120, after: 40 },
               children: [
                 new ImageRun({
                   data: pImgBytes,
-                  transformation: { width: 440, height: 200 },
+                  transformation: { width: 560, height: 250 },
                 } as any),
               ],
             }),
@@ -1371,18 +1375,19 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
   }
 
   // =========================================================================
-  // ภาคผนวก ก: สำเนาสัญญาจ้างและหนังสือรับรองผลงาน (Appendix A)
+  // SECTION 6 (PORTRAIT - แนวตั้ง): ภาคผนวก ก & ปกหลัง
   // =========================================================================
+  const part6Children: (Paragraph | Table)[] = [];
+
   const projectsWithCerts = torReferenceProjects.filter((p) => !!p.certificateFileUrl);
   if (projectsWithCerts.length > 0) {
-    part3Children.push(
-      new Paragraph({ children: [new PageBreak()] }),
+    part6Children.push(
       createH1('ภาคผนวก ก: สำเนาสัญญาจ้างและหนังสือรับรองผลงานอ้างอิงตามเกณฑ์ TOR'),
       ...createBodyParagraphs('เอกสารสำเนาสัญญาจ้างและหนังสือรับรองผลงานโครงการที่แล้วเสร็จ เพื่อประกอบการพิจารณาคุณสมบัติและผลงานตามประกาศจัดจ้างของหน่วยงานภาครัฐ')
     );
 
     projectsWithCerts.forEach((proj, idx) => {
-      part3Children.push(
+      part6Children.push(
         new Paragraph({
           heading: HeadingLevel.HEADING_2,
           spacing: { before: 180, after: 60 },
@@ -1396,12 +1401,12 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
             }),
           ],
         }),
-        createP(`หน่วยงานผู้ว่าจ้าง: ${proj.clientName} | ปีที่แล้วเสร็จ: พ.ศ. ${proj.completionYearBE} | มูลค่าสัญญา: ${proj.contractValue.toLocaleString()} บาท`, { spaceAfter: 80 })
+        createP(`หน่วยงานผู้ว่าจ้าง: ${proj.clientName} | ปีที่แล้วเสร็จ: พ.ศ. ${proj.completionYearBE} | มูลค่าสัญญา: ${proj.contractValue.toLocaleString()} บาท`, { spaceAfter: 80, align: AlignmentType.LEFT })
       );
 
       try {
         const certBytes = base64ToUint8Array(proj.certificateFileUrl!);
-        part3Children.push(
+        part6Children.push(
           new Paragraph({
             alignment: AlignmentType.CENTER,
             spacing: { before: 80, after: 60 },
@@ -1434,12 +1439,12 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
 
   // ปกหลัง
   if (cover.includeBackCover) {
-    part3Children.push(new Paragraph({ children: [new PageBreak()] }));
+    part6Children.push(new Paragraph({ children: [new PageBreak()] }));
 
     if (cover.backCoverImage) {
       try {
         const backBytes = base64ToUint8Array(cover.backCoverImage);
-        part3Children.push(
+        part6Children.push(
           new Paragraph({
             alignment: AlignmentType.CENTER,
             spacing: { before: 200, after: 200 },
@@ -1455,7 +1460,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
         console.warn('Failed to embed custom back cover', e);
       }
     } else {
-      part3Children.push(
+      part6Children.push(
         new Paragraph({
           alignment: AlignmentType.CENTER,
           spacing: { before: 1800, after: 200 },
@@ -1512,7 +1517,14 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
   }
 
   // =========================================================================
-  // Construct Multi-Section Document (Portrait -> Landscape -> Portrait)
+  // Construct Multi-Section Document with Dynamic Orientations:
+  // Section 1: Portrait (ปก, สารบัญ, ส่วนที่ 1)
+  // Section 2: Landscape (ส่วนที่ 2: Gantt Chart, แผนงาน)
+  // Section 3: Portrait (ส่วนที่ 3: กรอบแนวคิด 3.1 & วิธีการ 3.2)
+  // Section 4: Landscape (ส่วนที่ 4: 4.1 ทีมงาน, 4.2 ความเสี่ยง, 4.3 Compliance Matrix)
+  // Section 5A: Portrait (ส่วนที่ 5: 5.1 ข้อมูลบริษัท, 5.2 มาตรฐาน)
+  // Section 5B: Landscape (ส่วนที่ 5.3: ตารางผลงานอ้างอิง TOR 5.3.1 & 5.3.2)
+  // Section 6: Portrait (ภาคผนวก ก สำเนาสัญญา & ปกหลัง)
   // =========================================================================
   const doc = new Document({
     styles: {
@@ -1537,15 +1549,8 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
       {
         properties: {
           page: {
-            size: {
-              orientation: PageOrientation.PORTRAIT,
-            },
-            margin: {
-              top: 1440,
-              bottom: 1440,
-              left: 1440,
-              right: 1440,
-            },
+            size: { orientation: PageOrientation.PORTRAIT },
+            margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
           },
         },
         headers: { default: createCommonHeader() },
@@ -1553,19 +1558,12 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
         children: part1Children,
       },
 
-      // Section 2: LANDSCAPE (แนวนอน) สำหรับ Gantt Chart & แผนงาน
+      // Section 2: LANDSCAPE (ส่วนที่ 2: Gantt Chart & แผนงาน)
       {
         properties: {
           page: {
-            size: {
-              orientation: PageOrientation.LANDSCAPE,
-            },
-            margin: {
-              top: 1440,
-              bottom: 1440,
-              left: 1440,
-              right: 1440,
-            },
+            size: { orientation: PageOrientation.LANDSCAPE },
+            margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
           },
         },
         headers: { default: createCommonHeader() },
@@ -1573,24 +1571,69 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
         children: part2Children,
       },
 
-      // Section 3: Portrait (กลับเป็นแนวตั้ง สำหรับ ส่วนที่ 3, 4, 5 และปกหลัง)
+      // Section 3: Portrait (ส่วนที่ 3: 3.1 กรอบแนวคิด & 3.2 วิธีการดำเนินงานตาม TOR)
       {
         properties: {
           page: {
-            size: {
-              orientation: PageOrientation.PORTRAIT,
-            },
-            margin: {
-              top: 1440,
-              bottom: 1440,
-              left: 1440,
-              right: 1440,
-            },
+            size: { orientation: PageOrientation.PORTRAIT },
+            margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
           },
         },
         headers: { default: createCommonHeader() },
         footers: { default: createCommonFooter() },
         children: part3Children,
+      },
+
+      // Section 4: LANDSCAPE (ส่วนที่ 4: คณะผู้ดำเนินงาน 4.1, บริหารความเสี่ยง 4.2, Compliance Matrix 4.3)
+      {
+        properties: {
+          page: {
+            size: { orientation: PageOrientation.LANDSCAPE },
+            margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
+          },
+        },
+        headers: { default: createCommonHeader() },
+        footers: { default: createCommonFooter() },
+        children: part4Children,
+      },
+
+      // Section 5A: Portrait (ส่วนที่ 5: 5.1 ข้อมูลบริษัท, โลโก้, รูปสำนักงาน, 5.2 มาตรฐาน)
+      {
+        properties: {
+          page: {
+            size: { orientation: PageOrientation.PORTRAIT },
+            margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
+          },
+        },
+        headers: { default: createCommonHeader() },
+        footers: { default: createCommonFooter() },
+        children: part5AChildren,
+      },
+
+      // Section 5B: LANDSCAPE (ส่วนที่ 5.3: ผลงานและประสบการณ์ที่เกี่ยวข้อง 5.3.1, 5.3.2)
+      {
+        properties: {
+          page: {
+            size: { orientation: PageOrientation.LANDSCAPE },
+            margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
+          },
+        },
+        headers: { default: createCommonHeader() },
+        footers: { default: createCommonFooter() },
+        children: part5BChildren,
+      },
+
+      // Section 6: Portrait (ภาคผนวก ก & ปกหลัง)
+      {
+        properties: {
+          page: {
+            size: { orientation: PageOrientation.PORTRAIT },
+            margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
+          },
+        },
+        headers: { default: createCommonHeader() },
+        footers: { default: createCommonFooter() },
+        children: part6Children,
       },
     ],
   });

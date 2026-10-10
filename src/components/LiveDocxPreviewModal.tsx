@@ -455,6 +455,11 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                   คณะผู้ดำเนินงาน แนวทางบริหารความเสี่ยง และตารางเปรียบเทียบข้อเสนอ
                 </h2>
               </div>
+              <div style={{ backgroundColor: 'var(--slate-50)', padding: '0.6rem 0.75rem', border: '1px solid var(--slate-300)', borderRadius: '6px', textAlign: 'center', marginBottom: '1.25rem' }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--primary-800)', fontWeight: 600 }}>
+                  [ส่วนที่ 4: คณะทำงาน (4.1), แผนบริหารความเสี่ยง (4.2) และ Compliance Matrix (4.3) ถูกจัดวางในหน้าแนวนอน (Landscape) เพื่อความกว้างและอ่านง่ายของตาราง พร้อม Repeat Header Row ทุกตาราง]
+                </span>
+              </div>
               <p style={{ marginBottom: '1rem' }}>{section4.teamOverview}</p>
               
               <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '0.5rem' }}>คณะทำงาน ({section4.teamMembers.length} ท่าน)</h3>
@@ -589,7 +594,12 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
               )}
 
               {/* 5.3.1 ผลงานอ้างอิงหลักตามเกณฑ์ TOR */}
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginTop: '1rem', marginBottom: '0.5rem', color: 'var(--primary-900)' }}>
+              <div style={{ backgroundColor: 'var(--slate-50)', padding: '0.6rem 0.75rem', border: '1px solid var(--slate-300)', borderRadius: '6px', textAlign: 'center', marginTop: '1.25rem', marginBottom: '0.75rem' }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--primary-800)', fontWeight: 600 }}>
+                  [ส่วนที่ 5.3: ตารางผลงานและประสบการณ์ (5.3.1 และ 5.3.2) ถูกจัดวางในหน้าแนวนอน (Landscape) พร้อม Repeat Header Row ข้ามหน้า]
+                </span>
+              </div>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginTop: '0.5rem', marginBottom: '0.5rem', color: 'var(--primary-900)' }}>
                 5.3.1 ผลงานอ้างอิงหลักตามเกณฑ์ TOR (ย้อนหลังไม่เกิน {section5.maxYearsFilter} ปี พ.ศ. {2568 - section5.maxYearsFilter} - 2568)
               </h3>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem', marginBottom: '1rem' }}>
