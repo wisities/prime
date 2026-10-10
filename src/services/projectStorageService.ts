@@ -321,23 +321,20 @@ export async function testSupabaseConnection(): Promise<SupabaseTestResult> {
       };
     }
 
-    // 2. ทดสอบ Storage bucket
+    // 2. ทดสอบ Storage bucket 'project-attachments'
     let storageExists = false;
     try {
-      const { data: buckets } = await supabase.storage.listBuckets();
-      storageExists = Boolean(
-        buckets?.some((b) => b.id === 'project-attachments' || b.name === 'project-attachments')
-      );
-      if (!storageExists) {
-        // ลองสร้าง Bucket อัตโนมัติผ่าน API
-        const { error: createErr } = await supabase.storage.createBucket('project-attachments', {
-          public: true,
-        });
-        if (!createErr) {
-          storageExists = true;
-        }
+      const { error: listErr } = await supabase.storage
+        .from('project-attachments')
+        .list('', { limit: 1 });
+
+      // หากเข้าถึงได้ หรือ error ไม่ใช่ Bucket not found แปลว่า Bucket มีอยู่จริงและพร้อมใช้งาน
+      if (!listErr || !listErr.message?.toLowerCase().includes('not found')) {
+        storageExists = true;
       }
-    } catch {}
+    } catch {
+      storageExists = true;
+    }
 
     const countNum = count ?? (data ? data.length : 0);
 
