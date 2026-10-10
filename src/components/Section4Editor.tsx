@@ -5,8 +5,10 @@ import {
   deleteMasterTeamMember,
   clearAllMasterTeamMembers,
   resetMasterTeamLibrary,
+  saveMemberToMasterLibrary,
+  saveMultipleMembersToMasterLibrary,
 } from '../services/masterLibraryService';
-import { Users, ShieldAlert, Plus, Trash2, Library, ChevronDown, ChevronUp, TableProperties, CheckCheck, Sparkles, RotateCcw, Clock } from 'lucide-react';
+import { Users, ShieldAlert, Plus, Trash2, Library, ChevronDown, ChevronUp, TableProperties, CheckCheck, Sparkles, RotateCcw, Clock, ArrowUp, ArrowDown, BookmarkPlus, BookmarkCheck, Check } from 'lucide-react';
 
 interface Section4EditorProps {
   section4: Section4TeamAndRisk;
@@ -134,6 +136,41 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
     setShowLibraryModal(false);
   };
 
+  const handleMoveMember = (index: number, direction: 'up' | 'down') => {
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= section4.teamMembers.length) return;
+    const reordered = [...section4.teamMembers];
+    const [moved] = reordered.splice(index, 1);
+    reordered.splice(newIndex, 0, moved);
+    onChange({ ...section4, teamMembers: reordered });
+  };
+
+  const [savedMemberToast, setSavedMemberToast] = useState<string | null>(null);
+
+  const handleSaveMemberToLibrary = (member: TeamMember) => {
+    if (!member.name || member.name.trim() === '' || member.name.includes('(ระบุชื่อ-นามสกุล)')) {
+      alert('กรุณาระบุชื่อ-นามสกุลของบุคลากรก่อนบันทึกลงคลังข้อมูลกลาง');
+      return;
+    }
+    const updated = saveMemberToMasterLibrary(member);
+    setTeamLibrary(updated);
+    setSavedMemberToast(`บันทึก "${member.name}" เข้าสู่คลังบุคลากรกลางเรียบร้อยแล้ว`);
+    setTimeout(() => setSavedMemberToast(null), 3000);
+  };
+
+  const handleSaveAllMembersToLibrary = () => {
+    const validMembers = section4.teamMembers.filter(
+      (m) => m.name && m.name.trim() !== '' && !m.name.includes('(ระบุชื่อ-นามสกุล)')
+    );
+    if (validMembers.length === 0) {
+      alert('ไม่มีรายการบุคลากรที่มีชื่อถูกต้องให้บันทึก');
+      return;
+    }
+    const updated = saveMultipleMembersToMasterLibrary(validMembers);
+    setTeamLibrary(updated);
+    alert(`บันทึกบุคลากรทั้งหมด ${validMembers.length} ท่าน เข้าสู่คลังข้อมูลกลางเรียบร้อยแล้ว`);
+  };
+
   // Risk Items
   const handleRiskChange = (id: string, field: keyof RiskItem, value: any) => {
     const updated = section4.riskItems.map((r) =>
@@ -201,6 +238,29 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
           />
         </div>
 
+        {/* Toast Notification */}
+        {savedMemberToast && (
+          <div
+            style={{
+              backgroundColor: '#ECFDF5',
+              border: '1px solid #A7F3D0',
+              color: '#065F46',
+              padding: '0.6rem 1rem',
+              borderRadius: '8px',
+              fontSize: '0.85rem',
+              fontWeight: 500,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              marginTop: '0.75rem',
+              boxShadow: 'var(--shadow-sm)',
+            }}
+          >
+            <Check size={16} color="#059669" />
+            <span>{savedMemberToast}</span>
+          </div>
+        )}
+
         {/* Team Members List */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
           {section4.teamMembers.map((member, idx) => (
@@ -214,7 +274,7 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
                 boxShadow: 'var(--shadow-sm)',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                   <span
                     style={{
@@ -256,14 +316,70 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
                   </span>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => handleDeleteMember(member.id)}
-                  className="btn btn-outline"
-                  style={{ color: 'var(--danger)', borderColor: 'var(--danger-bg)', padding: '0.35rem 0.55rem' }}
-                >
-                  <Trash2 size={14} /> ลบ
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {/* Reorder Up */}
+                  <button
+                    type="button"
+                    disabled={idx === 0}
+                    onClick={() => handleMoveMember(idx, 'up')}
+                    className="btn btn-outline"
+                    style={{
+                      padding: '0.35rem 0.5rem',
+                      opacity: idx === 0 ? 0.35 : 1,
+                      cursor: idx === 0 ? 'not-allowed' : 'pointer',
+                    }}
+                    title="สลับลำดับขึ้น"
+                  >
+                    <ArrowUp size={14} />
+                  </button>
+
+                  {/* Reorder Down */}
+                  <button
+                    type="button"
+                    disabled={idx === section4.teamMembers.length - 1}
+                    onClick={() => handleMoveMember(idx, 'down')}
+                    className="btn btn-outline"
+                    style={{
+                      padding: '0.35rem 0.5rem',
+                      opacity: idx === section4.teamMembers.length - 1 ? 0.35 : 1,
+                      cursor: idx === section4.teamMembers.length - 1 ? 'not-allowed' : 'pointer',
+                    }}
+                    title="สลับลำดับลง"
+                  >
+                    <ArrowDown size={14} />
+                  </button>
+
+                  {/* Save to Master Library */}
+                  <button
+                    type="button"
+                    onClick={() => handleSaveMemberToLibrary(member)}
+                    className="btn btn-outline"
+                    style={{
+                      color: 'var(--primary-700)',
+                      borderColor: '#BAE6FD',
+                      backgroundColor: '#F0F9FF',
+                      padding: '0.35rem 0.65rem',
+                      fontSize: '0.8rem',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                    title="บันทึกข้อมูลบุคลากรท่านนี้ลงคลังกลางสำหรับใช้ในโครงการอื่น"
+                  >
+                    <BookmarkPlus size={14} /> บันทึกลงคลังกลาง
+                  </button>
+
+                  {/* Delete */}
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteMember(member.id)}
+                    className="btn btn-outline"
+                    style={{ color: 'var(--danger)', borderColor: 'var(--danger-bg)', padding: '0.35rem 0.55rem' }}
+                    title="ลบออกจากโครงการนี้"
+                  >
+                    <Trash2 size={14} /> ลบ
+                  </button>
+                </div>
               </div>
 
               <div className="grid-4" style={{ marginBottom: '0.85rem' }}>
@@ -685,6 +801,41 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* Quick Bulk Save Action */}
+            {section4.teamMembers.length > 0 && (
+              <div
+                style={{
+                  padding: '0.65rem 1rem',
+                  backgroundColor: '#F0F9FF',
+                  borderBottom: '1px solid #BAE6FD',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '0.5rem',
+                }}
+              >
+                <div style={{ fontSize: '0.8rem', color: '#0369A1' }}>
+                  💡 มีบุคลากรในโครงการนี้ {section4.teamMembers.length} ท่าน ต้องการบันทึก/อัปเดตเข้าคลังกลางทั้งหมดพร้อมกันหรือไม่?
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveAllMembersToLibrary}
+                  className="btn btn-outline"
+                  style={{
+                    fontSize: '0.78rem',
+                    padding: '0.3rem 0.65rem',
+                    backgroundColor: '#FFFFFF',
+                    color: '#0284C7',
+                    borderColor: '#7DD3FC',
+                    fontWeight: 600,
+                  }}
+                >
+                  <BookmarkPlus size={13} /> + บันทึกทุกคนในโครงการนี้เข้าคลังกลาง
+                </button>
+              </div>
+            )}
 
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', maxHeight: '65vh', overflowY: 'auto' }}>
               {teamLibrary.length === 0 ? (

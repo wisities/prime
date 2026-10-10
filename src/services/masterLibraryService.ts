@@ -105,6 +105,41 @@ export function clearAllMasterProjects(): PastProject[] {
 }
 
 /**
+ * Saves or updates a single team member in the master library.
+ */
+export function saveMemberToMasterLibrary(member: TeamMember): TeamMember[] {
+  const current = getMasterTeamLibrary();
+  const existingIdx = current.findIndex((m) => m.id === member.id || m.name.trim() === member.name.trim());
+  let updated: TeamMember[];
+  if (existingIdx >= 0) {
+    updated = [...current];
+    updated[existingIdx] = { ...member, id: current[existingIdx].id };
+  } else {
+    updated = [...current, { ...member, id: `lib-team-${Date.now()}` }];
+  }
+  saveMasterTeamLibrary(updated);
+  return updated;
+}
+
+/**
+ * Saves multiple team members to the master library (upsert).
+ */
+export function saveMultipleMembersToMasterLibrary(members: TeamMember[]): TeamMember[] {
+  const current = [...getMasterTeamLibrary()];
+  for (const m of members) {
+    if (!m.name || m.name.trim() === '' || m.name.includes('(ระบุชื่อ-นามสกุล)')) continue;
+    const existingIdx = current.findIndex((item) => item.id === m.id || item.name.trim() === m.name.trim());
+    if (existingIdx >= 0) {
+      current[existingIdx] = { ...m, id: current[existingIdx].id };
+    } else {
+      current.push({ ...m, id: `lib-team-${Date.now()}-${Math.random().toString(36).substr(2, 4)}` });
+    }
+  }
+  saveMasterTeamLibrary(current);
+  return current;
+}
+
+/**
  * Resets master projects back to the initial default mock list.
  */
 export function resetMasterProjectsLibrary(): PastProject[] {
@@ -114,4 +149,39 @@ export function resetMasterProjectsLibrary(): PastProject[] {
     console.error('Failed to reset projects library:', e);
   }
   return [...MASTER_PROJECTS_LIBRARY];
+}
+
+/**
+ * Saves or updates a single project in the master library.
+ */
+export function saveProjectToMasterLibrary(project: PastProject): PastProject[] {
+  const current = getMasterProjectsLibrary();
+  const existingIdx = current.findIndex((p) => p.id === project.id || p.projectName.trim() === project.projectName.trim());
+  let updated: PastProject[];
+  if (existingIdx >= 0) {
+    updated = [...current];
+    updated[existingIdx] = { ...project, id: current[existingIdx].id };
+  } else {
+    updated = [...current, { ...project, id: `lib-proj-${Date.now()}` }];
+  }
+  saveMasterProjectsLibrary(updated);
+  return updated;
+}
+
+/**
+ * Saves multiple projects to the master library (upsert).
+ */
+export function saveMultipleProjectsToMasterLibrary(projects: PastProject[]): PastProject[] {
+  const current = [...getMasterProjectsLibrary()];
+  for (const p of projects) {
+    if (!p.projectName || p.projectName.trim() === '') continue;
+    const existingIdx = current.findIndex((item) => item.id === p.id || item.projectName.trim() === p.projectName.trim());
+    if (existingIdx >= 0) {
+      current[existingIdx] = { ...p, id: current[existingIdx].id };
+    } else {
+      current.push({ ...p, id: `lib-proj-${Date.now()}-${Math.random().toString(36).substr(2, 4)}` });
+    }
+  }
+  saveMasterProjectsLibrary(current);
+  return current;
 }

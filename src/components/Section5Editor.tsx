@@ -5,8 +5,10 @@ import {
   deleteMasterProject,
   clearAllMasterProjects,
   resetMasterProjectsLibrary,
+  saveProjectToMasterLibrary,
+  saveMultipleProjectsToMasterLibrary,
 } from '../services/masterLibraryService';
-import { Building2, Plus, Trash2, Library, Filter, Calendar, AlertTriangle, CheckCircle, Upload, Image, FileText, Paperclip, FileCheck, BookmarkCheck, RotateCcw } from 'lucide-react';
+import { Building2, Plus, Trash2, Library, Filter, Calendar, AlertTriangle, CheckCircle, Upload, Image, FileText, Paperclip, FileCheck, BookmarkCheck, RotateCcw, ArrowUp, ArrowDown, BookmarkPlus, Check } from 'lucide-react';
 
 interface Section5EditorProps {
   section5: Section5Company;
@@ -102,6 +104,41 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
     const cloned = { ...project, id: `proj-${Date.now()}`, isSelected: true };
     onChange({ ...section5, pastProjects: [...section5.pastProjects, cloned] });
     setShowLibraryModal(false);
+  };
+
+  const handleMoveProject = (index: number, direction: 'up' | 'down') => {
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= section5.pastProjects.length) return;
+    const reordered = [...section5.pastProjects];
+    const [moved] = reordered.splice(index, 1);
+    reordered.splice(newIndex, 0, moved);
+    onChange({ ...section5, pastProjects: reordered });
+  };
+
+  const [savedProjectToast, setSavedProjectToast] = useState<string | null>(null);
+
+  const handleSaveProjectToLibrary = (project: PastProject) => {
+    if (!project.projectName || project.projectName.trim() === '') {
+      alert('กรุณาระบุชื่อโครงการก่อนบันทึกลงคลังข้อมูลกลาง');
+      return;
+    }
+    const updated = saveProjectToMasterLibrary(project);
+    setProjectsLibrary(updated);
+    setSavedProjectToast(`บันทึกโครงการ "${project.projectName}" เข้าสู่คลังผลงานกลางเรียบร้อยแล้ว`);
+    setTimeout(() => setSavedProjectToast(null), 3000);
+  };
+
+  const handleSaveAllProjectsToLibrary = () => {
+    const validProjects = section5.pastProjects.filter(
+      (p) => p.projectName && p.projectName.trim() !== ''
+    );
+    if (validProjects.length === 0) {
+      alert('ไม่มีรายการโครงการที่มีชื่อถูกต้องให้บันทึก');
+      return;
+    }
+    const updated = saveMultipleProjectsToMasterLibrary(validProjects);
+    setProjectsLibrary(updated);
+    alert(`บันทึกผลงานโครงการทั้งหมด ${validProjects.length} รายการ เข้าสู่คลังข้อมูลกลางเรียบร้อยแล้ว`);
   };
 
   // Filter calculation
@@ -410,9 +447,32 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
           </div>
         </div>
 
+        {/* Toast Notification */}
+        {savedProjectToast && (
+          <div
+            style={{
+              backgroundColor: '#ECFDF5',
+              border: '1px solid #A7F3D0',
+              color: '#065F46',
+              padding: '0.6rem 1rem',
+              borderRadius: '8px',
+              fontSize: '0.85rem',
+              fontWeight: 500,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              marginBottom: '1.25rem',
+              boxShadow: 'var(--shadow-sm)',
+            }}
+          >
+            <Check size={16} color="#059669" />
+            <span>{savedProjectToast}</span>
+          </div>
+        )}
+
         {/* Projects List */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          {section5.pastProjects.map((p) => {
+          {section5.pastProjects.map((p, idx) => {
             const isTorRef = (p.projectType || 'tor_reference') === 'tor_reference';
             const isTooOld = isTorRef && p.completionYearBE < minAllowedYear;
 
@@ -455,7 +515,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                   </div>
 
                   {/* Badges & Actions */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                     {/* Project Track Selector */}
                     <div style={{ display: 'inline-flex', borderRadius: '6px', border: '1px solid var(--slate-300)', overflow: 'hidden' }}>
                       <button
@@ -501,6 +561,58 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                         </span>
                       )
                     )}
+
+                    {/* Reorder Up */}
+                    <button
+                      type="button"
+                      disabled={idx === 0}
+                      onClick={() => handleMoveProject(idx, 'up')}
+                      className="btn btn-outline"
+                      style={{
+                        padding: '0.35rem 0.5rem',
+                        opacity: idx === 0 ? 0.35 : 1,
+                        cursor: idx === 0 ? 'not-allowed' : 'pointer',
+                      }}
+                      title="สลับลำดับขึ้น"
+                    >
+                      <ArrowUp size={14} />
+                    </button>
+
+                    {/* Reorder Down */}
+                    <button
+                      type="button"
+                      disabled={idx === section5.pastProjects.length - 1}
+                      onClick={() => handleMoveProject(idx, 'down')}
+                      className="btn btn-outline"
+                      style={{
+                        padding: '0.35rem 0.5rem',
+                        opacity: idx === section5.pastProjects.length - 1 ? 0.35 : 1,
+                        cursor: idx === section5.pastProjects.length - 1 ? 'not-allowed' : 'pointer',
+                      }}
+                      title="สลับลำดับลง"
+                    >
+                      <ArrowDown size={14} />
+                    </button>
+
+                    {/* Save to Master Library */}
+                    <button
+                      type="button"
+                      onClick={() => handleSaveProjectToLibrary(p)}
+                      className="btn btn-outline"
+                      style={{
+                        color: 'var(--primary-700)',
+                        borderColor: '#BAE6FD',
+                        backgroundColor: '#F0F9FF',
+                        padding: '0.35rem 0.65rem',
+                        fontSize: '0.8rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                      title="บันทึกผลงานโครงการนี้ลงคลังกลางสำหรับใช้ในโครงการอื่น"
+                    >
+                      <BookmarkPlus size={14} /> บันทึกลงคลังกลาง
+                    </button>
 
                     <button
                       type="button"
@@ -804,6 +916,41 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                 </button>
               </div>
             </div>
+
+            {/* Quick Bulk Save Action */}
+            {section5.pastProjects.length > 0 && (
+              <div
+                style={{
+                  padding: '0.65rem 1rem',
+                  backgroundColor: '#F0F9FF',
+                  borderBottom: '1px solid #BAE6FD',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '0.5rem',
+                }}
+              >
+                <div style={{ fontSize: '0.8rem', color: '#0369A1' }}>
+                  💡 มีผลงานโครงการในเล่มนี้ {section5.pastProjects.length} รายการ ต้องการบันทึก/อัปเดตเข้าคลังกลางทั้งหมดพร้อมกันหรือไม่?
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveAllProjectsToLibrary}
+                  className="btn btn-outline"
+                  style={{
+                    fontSize: '0.78rem',
+                    padding: '0.3rem 0.65rem',
+                    backgroundColor: '#FFFFFF',
+                    color: '#0284C7',
+                    borderColor: '#7DD3FC',
+                    fontWeight: 600,
+                  }}
+                >
+                  <BookmarkPlus size={13} /> + บันทึกทุกผลงานในเล่มนี้เข้าคลังกลาง
+                </button>
+              </div>
+            )}
 
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', maxHeight: '65vh', overflowY: 'auto' }}>
               {projectsLibrary.length === 0 ? (
