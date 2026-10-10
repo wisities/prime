@@ -275,11 +275,14 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-      // Synchronize project cover data
+      // Synchronize project cover and section1 data
       newProj.proposalData.cover.projectCode = newProj.projectCode;
       newProj.proposalData.cover.projectTitle = newProj.projectTitle;
       newProj.proposalData.cover.clientAgency = newProj.clientAgency;
       newProj.proposalData.cover.budgetFormatted = `${newProj.budgetAmount.toLocaleString()} บาท`;
+      if (newProj.proposalData.section1) {
+        newProj.proposalData.section1.budgetAmount = newProj.budgetAmount;
+      }
 
       onUpdateProjects([newProj, ...projects]);
     } else {
@@ -293,6 +296,9 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
           synced.proposalData.cover.projectTitle = synced.projectTitle;
           synced.proposalData.cover.clientAgency = synced.clientAgency;
           synced.proposalData.cover.budgetFormatted = `${synced.budgetAmount.toLocaleString()} บาท`;
+          if (synced.proposalData.section1) {
+            synced.proposalData.section1.budgetAmount = synced.budgetAmount;
+          }
           return synced;
         }
         return p;
@@ -301,6 +307,21 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     }
 
     setEditingProject(null);
+    setIsCreatingNew(false);
+  };
+
+  // Open edit modal with synchronized budget
+  const handleOpenEditModal = (project: BiddingProject) => {
+    const projToEdit: BiddingProject = JSON.parse(JSON.stringify(project));
+    const eff = projToEdit.budgetAmount || projToEdit.proposalData?.section1?.budgetAmount || 0;
+    projToEdit.budgetAmount = eff;
+    if (projToEdit.proposalData?.section1) {
+      projToEdit.proposalData.section1.budgetAmount = eff;
+    }
+    if (projToEdit.proposalData?.cover && (!projToEdit.proposalData.cover.budgetFormatted || projToEdit.proposalData.cover.budgetFormatted.trim() === '')) {
+      projToEdit.proposalData.cover.budgetFormatted = `${eff.toLocaleString()} บาท`;
+    }
+    setEditingProject(projToEdit);
     setIsCreatingNew(false);
   };
 
@@ -328,11 +349,11 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
           submitterCompany: 'บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด',
           submitterSubtext: 'Prime Digital Consultant Co., Ltd.',
           submissionDate: '',
-          budgetFormatted: '',
+          budgetFormatted: '5,000,000 บาท',
           includeBackCover: true,
           includeTOC: true,
         },
-        section1: { background: '', objectives: [], expectedBenefits: [], targetAudience: '', projectScopeOverview: '', scopeItems: [] },
+        section1: { background: '', objectives: [], expectedBenefits: [], targetAudience: '', projectScopeOverview: '', scopeItems: [], budgetAmount: 5000000 },
         section2: { methodologyStrategy: '', milestones: [] },
         section3: { frameworkOverview: '', conceptualDiagramCaption: '' },
         section4: { teamOverview: '', teamMembers: [], riskManagementOverview: '', riskItems: [], complianceMatrixOverview: '' },
@@ -341,6 +362,12 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
+    if (newProj.proposalData?.section1) {
+      newProj.proposalData.section1.budgetAmount = newProj.budgetAmount;
+    }
+    if (newProj.proposalData?.cover) {
+      newProj.proposalData.cover.budgetFormatted = `${newProj.budgetAmount.toLocaleString()} บาท`;
+    }
     setEditingProject(newProj);
     setIsCreatingNew(true);
   };
@@ -549,6 +576,9 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       }
       if (currentProj.budgetAmount) {
         currentProj.proposalData.cover.budgetFormatted = `${currentProj.budgetAmount.toLocaleString()} บาท`;
+        if (currentProj.proposalData.section1) {
+          currentProj.proposalData.section1.budgetAmount = currentProj.budgetAmount;
+        }
       }
 
       // Merge into state safely via functional update
@@ -1030,10 +1060,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                     <button
                       type="button"
                       className="icon-action-btn"
-                      onClick={() => {
-                        setEditingProject(JSON.parse(JSON.stringify(project)));
-                        setIsCreatingNew(false);
-                      }}
+                      onClick={() => handleOpenEditModal(project)}
                       title="แก้ไขข้อมูลโครงการ"
                     >
                       <Edit3 size={15} />
@@ -1087,10 +1114,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                       <button
                         type="button"
                         className="egp-link-empty-btn"
-                        onClick={() => {
-                          setEditingProject(JSON.parse(JSON.stringify(project)));
-                          setIsCreatingNew(false);
-                        }}
+                        onClick={() => handleOpenEditModal(project)}
                       >
                         <Plus size={12} /> เพิ่มลิงก์ e-GP
                       </button>

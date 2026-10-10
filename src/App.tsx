@@ -47,7 +47,7 @@ import {
   LogOut,
 } from 'lucide-react';
 
-import { loadAllProjects, saveProject } from './services/projectStorageService';
+import { loadAllProjects, saveProject, normalizeProjectBudget } from './services/projectStorageService';
 
 const PROJECTS_STORAGE_KEY = 'prime_bidding_projects_v2';
 
@@ -57,13 +57,13 @@ function loadInitialProjects(): BiddingProject[] {
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        return parsed.map(normalizeProjectBudget);
       }
     }
   } catch (e) {
     console.warn('Could not read projects from localStorage', e);
   }
-  return DEFAULT_BIDDING_PROJECTS;
+  return DEFAULT_BIDDING_PROJECTS.map(normalizeProjectBudget);
 }
 
 export const App: React.FC = () => {
@@ -162,31 +162,42 @@ export const App: React.FC = () => {
   const currentProject = projects.find((p) => p.id === activeProjectId) || projects[0] || DEFAULT_BIDDING_PROJECTS[0];
 
   // Proposal Data State for the currently selected project
-  const [proposal, setProposal] = useState<ProposalData>(currentProject.proposalData);
+  const [proposal, setProposal] = useState<ProposalData>(() => {
+    return normalizeProjectBudget(currentProject).proposalData;
+  });
 
-  // When switching projects, load that project's proposalData
+  // When switching projects or projects change, load that project's proposalData with budget normalization
   useEffect(() => {
     if (currentProject && currentProject.proposalData) {
-      setProposal(currentProject.proposalData);
+      const normalized = normalizeProjectBudget(currentProject);
+      setProposal(normalized.proposalData);
     }
-  }, [activeProjectId]);
+  }, [activeProjectId, currentProject?.id, currentProject?.budgetAmount]);
 
   // When proposal changes in editor, update the projects array and persist to cloud / local
   const updateProposalAndProject = (updater: (prev: ProposalData) => ProposalData) => {
     setProposal((prev) => {
       const nextProposal = updater(prev);
+      const effectiveBudget = nextProposal.section1?.budgetAmount || currentProject?.budgetAmount || 0;
+      if (nextProposal.section1 && (!nextProposal.section1.budgetAmount || nextProposal.section1.budgetAmount === 0) && effectiveBudget > 0) {
+        nextProposal.section1.budgetAmount = effectiveBudget;
+      }
+      if (nextProposal.cover && (!nextProposal.cover.budgetFormatted || nextProposal.cover.budgetFormatted.trim() === '' || nextProposal.cover.budgetFormatted === '0 บาท') && effectiveBudget > 0) {
+        nextProposal.cover.budgetFormatted = `${effectiveBudget.toLocaleString()} บาท`;
+      }
+
       setProjects((prevProjects) => {
         const updatedProjects = prevProjects.map((p) => {
           if (p.id === activeProjectId) {
-            const updated = {
+            const updated = normalizeProjectBudget({
               ...p,
               proposalData: nextProposal,
               projectTitle: nextProposal.cover.projectTitle || p.projectTitle,
               projectCode: nextProposal.cover.projectCode || p.projectCode,
               clientAgency: nextProposal.cover.clientAgency || p.clientAgency,
-              budgetAmount: nextProposal.section1.budgetAmount || p.budgetAmount,
+              budgetAmount: nextProposal.section1?.budgetAmount || p.budgetAmount || effectiveBudget,
               updatedAt: new Date().toISOString(),
-            };
+            });
             // Async sync to cloud database
             saveProject(updated);
             return updated;
@@ -201,9 +212,14 @@ export const App: React.FC = () => {
 
   // Save projects to cloud & local
   const handleUpdateProjects = (updatedProjects: BiddingProject[]) => {
-    setProjects(updatedProjects);
+    const normalizedList = updatedProjects.map(normalizeProjectBudget);
+    setProjects(normalizedList);
+    const active = normalizedList.find((p) => p.id === activeProjectId);
+    if (active && active.proposalData) {
+      setProposal(active.proposalData);
+    }
     try {
-      const sanitized = updatedProjects.map((p) => ({
+      const sanitized = normalizedList.map((p) => ({
         ...p,
         attachments: (p.attachments || []).map((a) => ({
           ...a,
@@ -214,7 +230,7 @@ export const App: React.FC = () => {
     } catch (e) {
       console.warn('LocalStorage save error', e);
     }
-    updatedProjects
+    normalizedList
       .filter((p) => !projects.includes(p))
       .forEach((p) => saveProject(p));
   };
@@ -749,10 +765,10 @@ export const App: React.FC = () => {
 
               <div style={{ display: 'flex', gap: '1.25rem', fontSize: '0.825rem', color: 'var(--slate-500)', alignItems: 'center', flexWrap: 'wrap' }}>
                 <div>
-                  ผู้ว่าจ้าง: <strong>{proposal.cover.clientAgency}</strong>
+                  ผู้ว่าจ้าง: <strong>{proposal.cover?.clientAgency || currentProject?.clientAgency || '-'}</strong>
                 </div>
                 <div>
-                  งบประมาณ: <strong>{proposal.section1.budgetAmount.toLocaleString()} บาท</strong>
+                  งบประมาณ: <strong>{(proposal.section1?.budgetAmount || currentProject?.budgetAmount || 0).toLocaleString()} บาท</strong>
                 </div>
                 <div style={{ color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <CheckCircle size={14} /> บันทึกอัตโนมัติแล้ว
@@ -785,7 +801,7 @@ export const App: React.FC = () => {
                 section2={proposal.section2}
                 scopeItems={proposal.section1.scopeItems}
                 totalDurationMonths={proposal.section1.projectDurationMonths}
-                totalBudget={proposal.section1.budgetAmount}
+                totalBudget={proposal.section1?.budgetAmount || currentProject?.budgetAmount || 0}
                 onChangeSection2={(newSection2) =>
                   updateProposalAndProject((prev) => ({ ...prev, section2: newSection2 }))
                 }

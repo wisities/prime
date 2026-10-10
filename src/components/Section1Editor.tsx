@@ -195,7 +195,7 @@ export const Section1Editor: React.FC<Section1EditorProps> = ({ section1, onChan
               onChange={(e) => handleFieldChange('budgetAmount', parseFloat(e.target.value) || 0)}
             />
             <div className="form-hint">
-              {section1.budgetAmount.toLocaleString()} บาท (สำหรับคำนวณและตรวจสอบยอดงวดงาน)
+              {(section1.budgetAmount || 0).toLocaleString()} บาท (สำหรับคำนวณและตรวจสอบยอดงวดงาน)
             </div>
           </div>
         </div>

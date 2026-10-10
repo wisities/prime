@@ -63,6 +63,41 @@ export async function getAttachmentFromIDB(id: string): Promise<string | null> {
 }
 
 /**
+ * ปรับปรุงและซิงค์ยอดงบประมาณให้ตรงกันทุกระดับ (project.budgetAmount, section1.budgetAmount, cover.budgetFormatted)
+ */
+export function normalizeProjectBudget(p: BiddingProject): BiddingProject {
+  const pCopy = { ...p };
+  const pData = pCopy.proposalData ? { ...pCopy.proposalData } : ({} as any);
+  const effBudget = pCopy.budgetAmount || pData.section1?.budgetAmount || 0;
+
+  if (effBudget > 0) {
+    pCopy.budgetAmount = effBudget;
+    if (pData.section1) {
+      if (!pData.section1.budgetAmount || pData.section1.budgetAmount === 0) {
+        pData.section1 = { ...pData.section1, budgetAmount: effBudget };
+      }
+    } else {
+      pData.section1 = {
+        background: '',
+        objectives: [],
+        expectedBenefits: [],
+        targetAudience: '',
+        projectScopeOverview: '',
+        scopeItems: [],
+        budgetAmount: effBudget,
+      };
+    }
+    if (pData.cover) {
+      if (!pData.cover.budgetFormatted || pData.cover.budgetFormatted.trim() === '' || pData.cover.budgetFormatted === '0 บาท') {
+        pData.cover = { ...pData.cover, budgetFormatted: `${effBudget.toLocaleString()} บาท` };
+      }
+    }
+  }
+  pCopy.proposalData = pData;
+  return pCopy;
+}
+
+/**
  * โหลดข้อมูลโครงการทั้งหมด
  * - หากเชื่อมต่อ Supabase สำเร็จ: โหลดจากฐานข้อมูล Cloud PostgreSQL
  * - หากยังไม่ได้เชื่อมต่อหรือเกิดปัญหาเครือข่าย: โหลดจาก LocalStorage สำรอง
@@ -125,22 +160,25 @@ export async function loadAllProjects(): Promise<{
           });
         }
 
-        const mapped: BiddingProject[] = cloudProjects.map((cp: any) => ({
-          id: cp.id,
-          projectCode: cp.project_code,
-          projectTitle: cp.project_title,
-          clientAgency: cp.client_agency,
-          budgetAmount: Number(cp.budget_amount) || 0,
-          egpUrl: cp.egp_url || undefined,
-          announcementDate: cp.announcement_date || undefined,
-          submissionDeadline: cp.submission_deadline || undefined,
-          status: cp.status || 'draft',
-          statusNote: cp.status_note || undefined,
-          attachments: attachmentsMap.get(cp.id) || [],
-          proposalData: cp.proposal_data || {},
-          createdAt: cp.created_at,
-          updatedAt: cp.updated_at,
-        }));
+        const mapped: BiddingProject[] = cloudProjects.map((cp: any) => {
+          const rawProj: BiddingProject = {
+            id: cp.id,
+            projectCode: cp.project_code,
+            projectTitle: cp.project_title,
+            clientAgency: cp.client_agency,
+            budgetAmount: Number(cp.budget_amount) || 0,
+            egpUrl: cp.egp_url || undefined,
+            announcementDate: cp.announcement_date || undefined,
+            submissionDeadline: cp.submission_deadline || undefined,
+            status: cp.status || 'draft',
+            statusNote: cp.status_note || undefined,
+            attachments: attachmentsMap.get(cp.id) || [],
+            proposalData: cp.proposal_data || {},
+            createdAt: cp.created_at,
+            updatedAt: cp.updated_at,
+          };
+          return normalizeProjectBudget(rawProj);
+        });
 
         // เติมเต็ม dataUrl จาก IndexedDB สำหรับไฟล์ที่ไม่มี public url
         for (const p of mapped) {
@@ -177,8 +215,9 @@ export async function loadAllProjects(): Promise<{
     if (saved) {
       const parsed: BiddingProject[] = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // เติมเต็ม dataUrl จาก IndexedDB สำหรับไฟล์แนบทั้งหมด
-        for (const p of parsed) {
+        // เติมเต็ม dataUrl จาก IndexedDB สำหรับไฟล์แนบทั้งหมด และปรับยอดงบประมาณให้สมบูรณ์
+        const normalizedList = parsed.map(normalizeProjectBudget);
+        for (const p of normalizedList) {
           if (p.attachments) {
             for (const a of p.attachments) {
               if (!a.dataUrl || a.dataUrl.startsWith('idb://')) {
@@ -188,14 +227,14 @@ export async function loadAllProjects(): Promise<{
             }
           }
         }
-        return { projects: parsed, source: 'local' };
+        return { projects: normalizedList, source: 'local' };
       }
     }
   } catch (e) {
     console.warn('LocalStorage read error:', e);
   }
 
-  return { projects: DEFAULT_BIDDING_PROJECTS, source: 'local' };
+  return { projects: DEFAULT_BIDDING_PROJECTS.map(normalizeProjectBudget), source: 'local' };
 }
 
 /**
@@ -204,7 +243,9 @@ export async function loadAllProjects(): Promise<{
  * - บันทึกโครงสร้างโครงการลง LocalStorage (sanitize dataUrl ป้องกันโควตาเต็ม)
  * - ซิงค์โครงการและอัปโหลดไฟล์ขึ้น Supabase Cloud & Supabase Storage
  */
-export async function saveProject(project: BiddingProject): Promise<boolean> {
+export async function saveProject(rawProject: BiddingProject): Promise<boolean> {
+  const project = normalizeProjectBudget(rawProject);
+
   // บันทึกไฟล์แนบทุกไฟล์ลงใน IndexedDB ถาวร
   if (project.attachments && project.attachments.length > 0) {
     for (const att of project.attachments) {
