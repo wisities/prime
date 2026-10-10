@@ -201,9 +201,16 @@ export const App: React.FC = () => {
   const handleUpdateProjects = (updatedProjects: BiddingProject[]) => {
     setProjects(updatedProjects);
     try {
-      localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(updatedProjects));
+      const sanitized = updatedProjects.map((p) => ({
+        ...p,
+        attachments: (p.attachments || []).map((a) => ({
+          ...a,
+          dataUrl: a.dataUrl && a.dataUrl.length < 30000 ? a.dataUrl : undefined,
+        })),
+      }));
+      localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(sanitized));
     } catch (e) {
-      console.error('LocalStorage save error', e);
+      console.warn('LocalStorage save error', e);
     }
     updatedProjects.forEach((p) => saveProject(p));
   };

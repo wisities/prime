@@ -4,10 +4,69 @@ import { supabase, isSupabaseConfigured } from './supabaseClient';
 
 const LOCAL_STORAGE_KEY = 'prime_bidding_projects_v2';
 
+// --- IndexedDB for unlimited, large attachment storage ---
+const DB_NAME = 'PrimeProposalAttachmentsDB';
+const DB_VERSION = 1;
+const STORE_NAME = 'attachment_data';
+
+function openIndexedDB(): Promise<IDBDatabase | null> {
+  if (typeof window === 'undefined' || !window.indexedDB) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    try {
+      const request = window.indexedDB.open(DB_NAME, DB_VERSION);
+      request.onupgradeneeded = (e: any) => {
+        const db = e.target.result as IDBDatabase;
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+export async function storeAttachmentInIDB(id: string, dataUrl: string): Promise<void> {
+  if (!id || !dataUrl) return;
+  const db = await openIndexedDB();
+  if (!db) return;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      store.put({ id, dataUrl });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+
+export async function getAttachmentFromIDB(id: string): Promise<string | null> {
+  if (!id) return null;
+  const db = await openIndexedDB();
+  if (!db) return null;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.get(id);
+      req.onsuccess = () => resolve(req.result?.dataUrl || null);
+      req.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
 /**
  * โหลดข้อมูลโครงการทั้งหมด
  * - หากเชื่อมต่อ Supabase สำเร็จ: โหลดจากฐานข้อมูล Cloud PostgreSQL
  * - หากยังไม่ได้เชื่อมต่อหรือเกิดปัญหาเครือข่าย: โหลดจาก LocalStorage สำรอง
+ * - ดึงข้อมูลไฟล์แนบขนาดใหญ่จาก IndexedDB โดยอัตโนมัติ
  */
 export async function loadAllProjects(): Promise<{
   projects: BiddingProject[];
@@ -83,9 +142,26 @@ export async function loadAllProjects(): Promise<{
           updatedAt: cp.updated_at,
         }));
 
-        // แคชเก็บไว้ใน LocalStorage ด้วยเพื่อความต่อเนื่อง
+        // เติมเต็ม dataUrl จาก IndexedDB สำหรับไฟล์ที่ไม่มี public url
+        for (const p of mapped) {
+          for (const a of p.attachments) {
+            if (!a.dataUrl || a.dataUrl.startsWith('idb://')) {
+              const idbUrl = await getAttachmentFromIDB(a.id);
+              if (idbUrl) a.dataUrl = idbUrl;
+            }
+          }
+        }
+
+        // แคชเก็บไว้ใน LocalStorage ด้วยเพื่อความต่อเนื่อง (ตัด base64 ขนาดใหญ่ออกป้องกันโควตาเต็ม)
         try {
-          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(mapped));
+          const sanitized = mapped.map((p) => ({
+            ...p,
+            attachments: (p.attachments || []).map((a) => ({
+              ...a,
+              dataUrl: a.dataUrl && a.dataUrl.length < 30000 ? a.dataUrl : undefined,
+            })),
+          }));
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(sanitized));
         } catch {}
 
         return { projects: mapped, source: 'cloud' };
@@ -99,8 +175,19 @@ export async function loadAllProjects(): Promise<{
   try {
     const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (saved) {
-      const parsed = JSON.parse(saved);
+      const parsed: BiddingProject[] = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) {
+        // เติมเต็ม dataUrl จาก IndexedDB สำหรับไฟล์แนบทั้งหมด
+        for (const p of parsed) {
+          if (p.attachments) {
+            for (const a of p.attachments) {
+              if (!a.dataUrl || a.dataUrl.startsWith('idb://')) {
+                const idbUrl = await getAttachmentFromIDB(a.id);
+                if (idbUrl) a.dataUrl = idbUrl;
+              }
+            }
+          }
+        }
         return { projects: parsed, source: 'local' };
       }
     }
@@ -113,17 +200,37 @@ export async function loadAllProjects(): Promise<{
 
 /**
  * บันทึกหรืออัปเดตโครงการลงฐานข้อมูล
+ * - บันทึกไฟล์แนบลง IndexedDB ถาวร (ไม่จำกัดจำนวนไฟล์ ไม่จำกัดขนาด)
+ * - บันทึกโครงสร้างโครงการลง LocalStorage (sanitize dataUrl ป้องกันโควตาเต็ม)
+ * - ซิงค์โครงการและอัปโหลดไฟล์ขึ้น Supabase Cloud & Supabase Storage
  */
 export async function saveProject(project: BiddingProject): Promise<boolean> {
-  // 1. บันทึกลง LocalStorage เสมอเพื่อความเร็วและความปลอดภัย
+  // บันทึกไฟล์แนบทุกไฟล์ลงใน IndexedDB ถาวร
+  if (project.attachments && project.attachments.length > 0) {
+    for (const att of project.attachments) {
+      if (att.dataUrl && att.dataUrl.startsWith('data:')) {
+        await storeAttachmentInIDB(att.id, att.dataUrl);
+      }
+    }
+  }
+
+  // 1. บันทึกลง LocalStorage เสมอเพื่อความเร็วและความปลอดภัย (ตัด base64 ขนาดใหญ่ออก)
   try {
+    const sanitizedProject: BiddingProject = {
+      ...project,
+      attachments: (project.attachments || []).map((att) => ({
+        ...att,
+        dataUrl: att.dataUrl && att.dataUrl.length < 30000 ? att.dataUrl : undefined,
+      })),
+    };
+
     const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
     let list: BiddingProject[] = saved ? JSON.parse(saved) : [];
-    const index = list.findIndex((p) => p.id === project.id);
+    const index = list.findIndex((p) => p.id === sanitizedProject.id);
     if (index >= 0) {
-      list[index] = project;
+      list[index] = sanitizedProject;
     } else {
-      list = [project, ...list];
+      list = [sanitizedProject, ...list];
     }
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(list));
   } catch (e) {
@@ -156,10 +263,47 @@ export async function saveProject(project: BiddingProject): Promise<boolean> {
         return false;
       }
 
-      // ซิงค์ไฟล์แนบทั้งหมดของโครงการลงตาราง project_attachments
+      // ซิงค์ไฟล์แนบทั้งหมดของโครงการลงตาราง project_attachments และ Supabase Storage
       if (project.attachments && project.attachments.length > 0) {
         for (const att of project.attachments) {
           try {
+            let fileUrl = att.dataUrl;
+
+            // หากเป็น base64 dataUrl ให้พยายามอัปโหลดขึ้น Supabase Storage เพื่อเก็บเป็น publicUrl
+            if (fileUrl && fileUrl.startsWith('data:')) {
+              try {
+                const cleanFileName = att.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+                const storagePath = `${project.id}/${Date.now()}_${cleanFileName}`;
+
+                // Convert base64 dataUrl to Blob
+                const res = await fetch(fileUrl);
+                const blob = await res.blob();
+
+                try {
+                  await supabase.storage.createBucket('project-attachments', { public: true });
+                } catch {}
+
+                const { data: uploadData, error: upErr } = await supabase.storage
+                  .from('project-attachments')
+                  .upload(storagePath, blob, {
+                    contentType: att.type || 'application/octet-stream',
+                    upsert: true,
+                  });
+
+                if (!upErr && uploadData) {
+                  const { data: pubData } = supabase.storage
+                    .from('project-attachments')
+                    .getPublicUrl(storagePath);
+                  if (pubData?.publicUrl) {
+                    fileUrl = pubData.publicUrl;
+                    att.dataUrl = fileUrl;
+                  }
+                }
+              } catch (storageErr) {
+                console.warn('Storage bucket upload fallback:', storageErr);
+              }
+            }
+
             await supabase.from('project_attachments').upsert(
               {
                 id: att.id,
@@ -168,7 +312,7 @@ export async function saveProject(project: BiddingProject): Promise<boolean> {
                 size: att.size,
                 type: att.type || 'application/octet-stream',
                 category: att.category,
-                file_url: att.dataUrl || null,
+                file_url: fileUrl || null,
                 uploaded_at: att.uploadedAt || new Date().toISOString(),
               },
               { onConflict: 'id' }
@@ -278,6 +422,9 @@ export async function uploadAttachmentFile(
       console.warn('Supabase upload exception:', storageErr);
     }
   }
+
+  // บันทึกลง IndexedDB เพื่อให้สามารถเปิดดู/ดาวน์โหลดแบบออฟไลน์ได้ทันที
+  await storeAttachmentInIDB(attachmentId, fileUrl || base64DataUrl);
 
   return {
     id: attachmentId,

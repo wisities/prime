@@ -6,6 +6,8 @@ import {
   testSupabaseConnection,
   SupabaseTestResult,
   saveProject,
+  storeAttachmentInIDB,
+  getAttachmentFromIDB,
 } from '../services/projectStorageService';
 import { isSupabaseConfigured } from '../services/supabaseClient';
 import { extractProjectMetadataFromFile } from '../services/torDocReader';
@@ -77,6 +79,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   const smartFileInputRef = useRef<HTMLInputElement>(null);
   const announcementFileInputRef = useRef<HTMLInputElement>(null);
   const torFileInputRef = useRef<HTMLInputElement>(null);
+  const generalFileInputRef = useRef<HTMLInputElement>(null);
 
   // Smart File Extraction State
   const [isAnalyzingDoc, setIsAnalyzingDoc] = useState(false);
@@ -358,14 +361,18 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     setDocAnalysisMsg(null);
   };
 
-  // Toggle attachment category inside modal between announcement and tor
+  // Toggle attachment category inside modal: announcement -> tor -> other -> announcement
   const handleToggleAttachmentCategory = (attId: string) => {
     if (!editingProject) return;
     const updatedAtts = editingProject.attachments.map((att) => {
       if (att.id === attId) {
+        let nextCat: 'announcement' | 'tor' | 'other' = 'announcement';
+        if (att.category === 'announcement') nextCat = 'tor';
+        else if (att.category === 'tor') nextCat = 'other';
+        else nextCat = 'announcement';
         return {
           ...att,
-          category: (att.category === 'announcement' ? 'tor' : 'announcement') as 'announcement' | 'tor',
+          category: nextCat,
         };
       }
       return att;
@@ -380,10 +387,10 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     setEditingProject({ ...editingProject, attachments: updatedAtts });
   };
 
-  // Process Smart Files (PDF/Word) - Supports BOTH Announcement and TOR files!
+  // Process Smart Files - Supports unlimited files without overwriting or dropping older files!
   const handleProcessSmartFiles = async (
     filesInput: FileList | File[],
-    forcedCategory?: 'announcement' | 'tor'
+    forcedCategory?: 'announcement' | 'tor' | 'other'
   ) => {
     const fileList = Array.from(filesInput);
     if (fileList.length === 0) return;
@@ -391,7 +398,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     setIsAnalyzingDoc(true);
     setDocAnalysisMsg({
       type: 'info',
-      text: `กำลังอ่านและสกัดข้อมูลจาก ${fileList.length} ไฟล์...`,
+      text: `กำลังประมวลผลและแนบ ${fileList.length} ไฟล์...`,
     });
 
     try {
@@ -405,7 +412,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         announcementDate: new Date().toISOString().split('T')[0],
         submissionDeadline: '',
         status: 'draft',
-        statusNote: 'สร้างโครงการอัตโนมัติจากไฟล์ประกาศจัดจ้าง/TOR e-GP',
+        statusNote: 'สร้างโครงการอัตโนมัติจากไฟล์เอกสาร e-GP',
         attachments: [],
         proposalData: projects.length > 0 ? JSON.parse(JSON.stringify(projects[0].proposalData)) : {
           cover: {
@@ -434,19 +441,21 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       const currentAttachments: ProjectAttachment[] = [...(currentProj.attachments || [])];
       const extractedSummary: string[] = [];
 
-      for (const file of fileList) {
+      for (let i = 0; i < fileList.length; i++) {
+        const file = fileList[i];
         const isPdf = file.name.toLowerCase().endsWith('.pdf');
         const isDocx = file.name.toLowerCase().endsWith('.docx');
-        if (!isPdf && !isDocx) continue;
 
-        // Auto determine category: announcement or tor
-        let category: 'announcement' | 'tor' | 'other' = forcedCategory || 'announcement';
+        // Auto determine category: announcement, tor, or other
+        let category: 'announcement' | 'tor' | 'other' = forcedCategory || 'other';
         if (!forcedCategory) {
           const lowerName = file.name.toLowerCase();
           if (lowerName.includes('tor') || lowerName.includes('ขอบเขต') || lowerName.includes('scope')) {
             category = 'tor';
-          } else {
+          } else if (lowerName.includes('ประกาศ') || lowerName.includes('announcement') || lowerName.includes('bidding')) {
             category = 'announcement';
+          } else {
+            category = isPdf || isDocx ? 'announcement' : 'other';
           }
         }
 
@@ -457,39 +466,48 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
           reader.readAsDataURL(file);
         });
 
-        // 2. Extract metadata
-        const { metadata } = await extractProjectMetadataFromFile(file);
+        // Store into IndexedDB immediately for instant offline safety
+        const attId = `att-${Date.now()}-${i}-${Math.floor(Math.random() * 100000)}`;
+        await storeAttachmentInIDB(attId, dataUrl);
 
-        if (metadata.projectCode && (!currentProj.projectCode || currentProj.projectCode.startsWith('EGP-'))) {
-          currentProj.projectCode = metadata.projectCode;
-        }
-        if (metadata.projectTitle && (!currentProj.projectTitle || currentProj.projectTitle.trim() === '')) {
-          currentProj.projectTitle = metadata.projectTitle;
-        }
-        if (metadata.clientAgency && (!currentProj.clientAgency || currentProj.clientAgency.trim() === '')) {
-          currentProj.clientAgency = metadata.clientAgency;
-        }
-        if (metadata.budgetAmount && metadata.budgetAmount > 0) {
-          currentProj.budgetAmount = metadata.budgetAmount;
-        }
-        if (metadata.announcementDate) {
-          currentProj.announcementDate = metadata.announcementDate;
-        }
-        if (metadata.submissionDeadline) {
-          currentProj.submissionDeadline = metadata.submissionDeadline;
-        }
-        if (metadata.egpUrl) {
-          currentProj.egpUrl = metadata.egpUrl;
+        // 2. Extract metadata if PDF or Word
+        if (isPdf || isDocx) {
+          try {
+            const { metadata } = await extractProjectMetadataFromFile(file);
+            if (metadata.projectCode && (!currentProj.projectCode || currentProj.projectCode.startsWith('EGP-'))) {
+              currentProj.projectCode = metadata.projectCode;
+            }
+            if (metadata.projectTitle && (!currentProj.projectTitle || currentProj.projectTitle.trim() === '')) {
+              currentProj.projectTitle = metadata.projectTitle;
+            }
+            if (metadata.clientAgency && (!currentProj.clientAgency || currentProj.clientAgency.trim() === '')) {
+              currentProj.clientAgency = metadata.clientAgency;
+            }
+            if (metadata.budgetAmount && metadata.budgetAmount > 0) {
+              currentProj.budgetAmount = metadata.budgetAmount;
+            }
+            if (metadata.announcementDate) {
+              currentProj.announcementDate = metadata.announcementDate;
+            }
+            if (metadata.submissionDeadline) {
+              currentProj.submissionDeadline = metadata.submissionDeadline;
+            }
+            if (metadata.egpUrl) {
+              currentProj.egpUrl = metadata.egpUrl;
+            }
+          } catch (metaErr) {
+            console.warn('Metadata extraction skipped for file:', file.name, metaErr);
+          }
         }
 
-        // 3. Add to attachments (avoid duplicate name)
-        const existingIdx = currentAttachments.findIndex((a) => a.name === file.name);
+        // 3. Add to attachments (only update if exact name and size match, otherwise add unique)
+        const existingIdx = currentAttachments.findIndex((a) => a.name === file.name && a.size === file.size);
         const attachmentObj: ProjectAttachment = {
-          id: `att-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          id: existingIdx >= 0 ? currentAttachments[existingIdx].id : attId,
           name: file.name,
           size: file.size,
           category,
-          type: file.type || (isPdf ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
+          type: file.type || (isPdf ? 'application/pdf' : isDocx ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/octet-stream'),
           uploadedAt: new Date().toISOString(),
           dataUrl,
         };
@@ -500,7 +518,8 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
           currentAttachments.push(attachmentObj);
         }
 
-        extractedSummary.push(`แนบ [${category === 'announcement' ? 'ประกาศจัดจ้าง' : 'TOR'}] ${file.name}`);
+        const catLabel = category === 'announcement' ? 'ประกาศจัดจ้าง' : category === 'tor' ? 'TOR' : 'เอกสารแนบ';
+        extractedSummary.push(`แนบ [${catLabel}] ${file.name}`);
       }
 
       currentProj.attachments = currentAttachments;
@@ -519,7 +538,25 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         currentProj.proposalData.cover.budgetFormatted = `${currentProj.budgetAmount.toLocaleString()} บาท`;
       }
 
-      setEditingProject(currentProj);
+      // Merge into state safely via functional update
+      setEditingProject((prev) => {
+        const base = prev || currentProj;
+        const mergedAttachments = [...(base.attachments || [])];
+        for (const att of currentAttachments) {
+          const idx = mergedAttachments.findIndex((m) => m.name === att.name && m.size === att.size);
+          if (idx >= 0) {
+            mergedAttachments[idx] = att;
+          } else {
+            mergedAttachments.push(att);
+          }
+        }
+        return {
+          ...base,
+          ...currentProj,
+          attachments: mergedAttachments,
+        };
+      });
+
       if (!editingProject) {
         setIsCreatingNew(true);
       }
@@ -545,19 +582,23 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     }
   };
 
-  // Handle file attachment upload
+  // Handle file attachment upload (supports multiple files simultaneously)
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !uploadTargetProjectId) return;
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    if (files.length === 0 || !uploadTargetProjectId) return;
 
     try {
-      const newAtt = await uploadAttachmentFile(uploadTargetProjectId, file, uploadCategory);
+      const newAttachments: ProjectAttachment[] = [];
+      for (const file of files) {
+        const newAtt = await uploadAttachmentFile(uploadTargetProjectId, file, uploadCategory);
+        newAttachments.push(newAtt);
+      }
 
       const updated = projects.map((p) => {
         if (p.id === uploadTargetProjectId) {
           return {
             ...p,
-            attachments: [...p.attachments, newAtt],
+            attachments: [...(p.attachments || []), ...newAttachments],
             updatedAt: new Date().toISOString(),
           };
         }
@@ -566,7 +607,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
       onUpdateProjects(updated);
       setUploadTargetProjectId(null);
-      alert(`อัปโหลดไฟล์ "${file.name}" เรียบร้อยแล้ว`);
+      alert(`อัปโหลดเอกสารสำเร็จทั้งหมด ${files.length} ไฟล์`);
     } catch (err) {
       console.error(err);
       alert('เกิดข้อผิดพลาดในการอัปโหลดไฟล์');
@@ -642,7 +683,8 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       <input
         type="file"
         ref={fileUploadInputRef}
-        accept=".pdf,.docx,.doc"
+        multiple
+        accept=".pdf,.docx,.doc,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,*/*"
         style={{ display: 'none' }}
         onChange={handleFileUpload}
       />
@@ -1082,7 +1124,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                     <div className="attachments-header">
                       <div className="attachments-title">
                         <Paperclip size={14} />
-                        <span>เอกสารประกาศ & TOR ({project.attachments.length})</span>
+                        <span>เอกสารแนบ ({project.attachments.length})</span>
                       </div>
                       
                       <div className="attachment-add-buttons">
@@ -1094,7 +1136,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                             setUploadCategory('announcement');
                             fileUploadInputRef.current?.click();
                           }}
-                          title="อัปโหลดประกาศจัดจ้าง (PDF / Word)"
+                          title="อัปโหลดประกาศจัดจ้าง (เลือกได้หลายไฟล์พร้อมกัน)"
                         >
                           <Upload size={12} /> ประกาศจัดจ้าง
                         </button>
@@ -1106,9 +1148,22 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                             setUploadCategory('tor');
                             fileUploadInputRef.current?.click();
                           }}
-                          title="อัปโหลดไฟล์ TOR (PDF / Word)"
+                          title="อัปโหลดไฟล์ TOR (เลือกได้หลายไฟล์พร้อมกัน)"
                         >
                           <Upload size={12} /> ไฟล์ TOR
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-add-file"
+                          style={{ borderColor: '#DDD6FE', color: '#7C3AED', backgroundColor: '#F5F3FF' }}
+                          onClick={() => {
+                            setUploadTargetProjectId(project.id);
+                            setUploadCategory('other');
+                            fileUploadInputRef.current?.click();
+                          }}
+                          title="อัปโหลดเอกสารอื่นๆ เพิ่มเติม (BOQ / ตารางราคา / เอกสารแนบ)"
+                        >
+                          <Paperclip size={12} /> เอกสารอื่นๆ
                         </button>
                       </div>
                     </div>
@@ -1229,11 +1284,12 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
             <form onSubmit={handleSaveProjectModal}>
               <div className="modal-body">
-                {/* Hidden File Inputs for Announcement and TOR specifically */}
+                {/* Hidden File Inputs for Announcement, TOR, and General attachments */}
                 <input
                   type="file"
                   ref={announcementFileInputRef}
                   style={{ display: 'none' }}
+                  multiple
                   accept=".pdf,application/pdf"
                   onChange={(e) => {
                     if (e.target.files && e.target.files.length > 0) {
@@ -1246,7 +1302,8 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                   type="file"
                   ref={torFileInputRef}
                   style={{ display: 'none' }}
-                  accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  multiple
+                  accept=".pdf,.docx,.doc,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
                   onChange={(e) => {
                     if (e.target.files && e.target.files.length > 0) {
                       handleProcessSmartFiles(e.target.files, 'tor');
@@ -1254,8 +1311,21 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                     e.target.value = '';
                   }}
                 />
+                <input
+                  type="file"
+                  ref={generalFileInputRef}
+                  style={{ display: 'none' }}
+                  multiple
+                  accept="*/*"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                      handleProcessSmartFiles(e.target.files, 'other');
+                    }
+                    e.target.value = '';
+                  }}
+                />
 
-                {/* Smart Dropzone for e-GP Announcement / TOR */}
+                {/* Smart Dropzone for e-GP Announcement / TOR / All attachments */}
                 <div
                   className={`smart-dropzone ${isDraggingDoc ? 'dragging' : ''}`}
                   onDragOver={(e) => {
@@ -1271,7 +1341,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                     }
                   }}
                   onClick={() => smartFileInputRef.current?.click()}
-                  title="คลิกเพื่อเลือกไฟล์ หรือลากไฟล์ประกาศจัดจ้าง/TOR มาวาง"
+                  title="คลิกเพื่อเลือกไฟล์ หรือลากไฟล์ประกาศจัดจ้าง/TOR/เอกสารแนบมาวาง (รองรับหลายไฟล์พร้อมกัน)"
                 >
                   <div className="smart-dropzone-icon">
                     {isAnalyzingDoc ? (
@@ -1282,13 +1352,13 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                   </div>
                   <div className="smart-dropzone-title">
                     {isAnalyzingDoc
-                      ? '🔍 กำลังอ่านและสกัดข้อมูลจากเอกสารทางการ...'
-                      : '⚡ ลากไฟล์ประกาศจัดจ้าง และ ไฟล์ TOR (PDF / Word) มาวางที่นี่'}
+                      ? '🔍 กำลังประมวลผลและสกัดข้อมูลจากเอกสารทางการ...'
+                      : '⚡ ลากไฟล์ประกาศจัดจ้าง, ไฟล์ TOR และเอกสารแนบทั้งหมดมาวางที่นี่'}
                   </div>
                   <div className="smart-dropzone-desc">
                     {isAnalyzingDoc
-                      ? 'ระบบกำลังวิเคราะห์รหัสโครงการ, ชื่อโครงการ, หน่วยงาน, งบประมาณ และวันเวลายื่นข้อเสนอ...'
-                      : 'สามารถแนบได้ทั้งไฟล์ประกาศจัดจ้างและไฟล์ TOR พร้อมกัน ระบบจะสกัดข้อมูลกรอกลงฟอร์มและบันทึกไฟล์ให้เรียกดูทีหลังได้ตลอดเวลา'}
+                      ? 'ระบบกำลังวิเคราะห์รหัสโครงการ, ชื่อโครงการ, หน่วยงาน, งบประมาณ และบันทึกไฟล์ถาวร...'
+                      : 'สามารถแนบได้กี่ไฟล์ก็ได้ ไม่จำกัดจำนวน (ประกาศจัดจ้าง, TOR, BOQ, ตารางราคา ฯลฯ) ระบบจะบันทึกทุกไฟล์ให้เรียกดูและดาวน์โหลดได้ตลอดเวลา'}
                   </div>
 
                   {/* Quick Action Buttons for Specific File Categories */}
@@ -1318,8 +1388,9 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                         e.stopPropagation();
                         announcementFileInputRef.current?.click();
                       }}
+                      title="เลือกไฟล์ประกาศจัดจ้าง (เลือกได้หลายไฟล์)"
                     >
-                      <Upload size={14} /> 📄 แนบไฟล์ประกาศจัดจ้าง (PDF)
+                      <Upload size={14} /> 📄 แนบประกาศจัดจ้าง (PDF)
                     </button>
                     <button
                       type="button"
@@ -1338,16 +1409,38 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                         e.stopPropagation();
                         torFileInputRef.current?.click();
                       }}
+                      title="เลือกไฟล์ TOR (เลือกได้หลายไฟล์)"
                     >
                       <Upload size={14} /> 📘 แนบไฟล์ TOR (PDF / Word)
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-modal-cancel"
+                      style={{
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                        backgroundColor: '#F5F3FF',
+                        borderColor: '#DDD6FE',
+                        color: '#7C3AED',
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        generalFileInputRef.current?.click();
+                      }}
+                      title="เลือกไฟล์เอกสารอื่นๆ (BOQ / ตารางราคา / เอกสารแนบ)"
+                    >
+                      <Paperclip size={14} /> 📎 แนบเอกสารอื่นๆ (BOQ / เอกสารแนบ)
                     </button>
                   </div>
 
                   <div className="smart-dropzone-badges">
-                    <span className="smart-dropzone-badge">📄 ประกาศจัดจ้าง e-GP (.PDF)</span>
+                    <span className="smart-dropzone-badge">📄 ประกาศจัดจ้าง (.PDF)</span>
                     <span className="smart-dropzone-badge">📘 เอกสาร TOR (.PDF / .DOCX)</span>
-                    <span className="smart-dropzone-badge">💾 บันทึกไฟล์ถาวร</span>
-                    <span className="smart-dropzone-badge">✨ Auto-fill & แนบไฟล์</span>
+                    <span className="smart-dropzone-badge">📎 แนบกี่ไฟล์ก็ได้ไม่จำกัด</span>
+                    <span className="smart-dropzone-badge">💾 บันทึกทุกไฟล์ถาวร</span>
                   </div>
                 </div>
 
@@ -1375,11 +1468,34 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                 {/* Section: Attached Documents for this Project */}
                 {editingProject.attachments && editingProject.attachments.length > 0 && (
                   <div className="modal-section-card" style={{ borderColor: '#CBD5E1' }}>
-                    <div className="modal-section-header">
-                      <div className="modal-section-header-title">
-                        <Paperclip size={16} /> เอกสารแนบประจำโครงการ ({editingProject.attachments.length} ไฟล์ที่แนบแล้ว)
+                    <div className="modal-section-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <div>
+                        <div className="modal-section-header-title">
+                          <Paperclip size={16} /> เอกสารแนบประจำโครงการ ({editingProject.attachments.length} ไฟล์ที่แนบแล้ว)
+                        </div>
+                        <span className="modal-section-subtitle">
+                          ประกาศ: {editingProject.attachments.filter(a => a.category === 'announcement').length} | TOR: {editingProject.attachments.filter(a => a.category === 'tor').length} | อื่นๆ: {editingProject.attachments.filter(a => a.category === 'other').length} (บันทึกถาวร เรียกดูและดาวน์โหลดได้ตลอดเวลา)
+                        </span>
                       </div>
-                      <span className="modal-section-subtitle">ไฟล์จะถูกบันทึกเพื่อเรียกดูและดาวน์โหลดได้ตลอดเวลา</span>
+                      <button
+                        type="button"
+                        className="btn-modal-cancel"
+                        style={{
+                          fontSize: '0.78rem',
+                          fontWeight: 600,
+                          padding: '0.35rem 0.75rem',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.3rem',
+                          color: '#059669',
+                          borderColor: '#86EFAC',
+                          backgroundColor: '#F0FDF4',
+                        }}
+                        onClick={() => generalFileInputRef.current?.click()}
+                        title="แนบไฟล์เอกสารเพิ่มเติมเข้าโครงการนี้ (เลือกได้หลายไฟล์)"
+                      >
+                        <Plus size={14} /> แนบไฟล์เพิ่ม
+                      </button>
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
@@ -1392,8 +1508,8 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                             justifyContent: 'space-between',
                             padding: '0.65rem 0.85rem',
                             borderRadius: '8px',
-                            backgroundColor: att.category === 'tor' ? '#EFF6FF' : '#F0FDF4',
-                            border: `1px solid ${att.category === 'tor' ? '#BFDBFE' : '#BBF7D0'}`,
+                            backgroundColor: att.category === 'tor' ? '#EFF6FF' : att.category === 'announcement' ? '#F0FDF4' : '#F5F3FF',
+                            border: `1px solid ${att.category === 'tor' ? '#BFDBFE' : att.category === 'announcement' ? '#BBF7D0' : '#DDD6FE'}`,
                             gap: '0.75rem',
                           }}
                         >
@@ -1401,7 +1517,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                             <button
                               type="button"
                               onClick={() => handleToggleAttachmentCategory(att.id)}
-                              title="คลิกเพื่อสลับหมวดหมู่ระหว่าง ประกาศจัดจ้าง กับ TOR"
+                              title="คลิกเพื่อสลับหมวดหมู่ระหว่าง ประกาศจัดจ้าง, TOR และ เอกสารแนบ"
                               style={{
                                 fontSize: '0.72rem',
                                 fontWeight: 700,
@@ -1409,12 +1525,12 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                                 borderRadius: '9999px',
                                 border: 'none',
                                 cursor: 'pointer',
-                                backgroundColor: att.category === 'tor' ? '#2563EB' : '#059669',
+                                backgroundColor: att.category === 'tor' ? '#2563EB' : att.category === 'announcement' ? '#059669' : '#7C3AED',
                                 color: '#FFFFFF',
                                 flexShrink: 0,
                               }}
                             >
-                              {att.category === 'tor' ? '📘 TOR' : '📄 ประกาศจัดจ้าง'} (คลิกเพื่อเปลี่ยน)
+                              {att.category === 'tor' ? '📘 TOR' : att.category === 'announcement' ? '📄 ประกาศ' : '📎 แนบ'} (สลับหมวด)
                             </button>
                             <span
                               style={{
