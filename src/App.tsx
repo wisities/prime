@@ -17,6 +17,8 @@ import { TorImportModal } from './components/TorImportModal';
 import { LoginPage } from './components/LoginPage';
 import { AccessDeniedPage } from './components/AccessDeniedPage';
 import { UserManagementModal } from './components/UserManagementModal';
+import { GeminiSettingsModal } from './components/GeminiSettingsModal';
+import { isGeminiAvailable } from './services/geminiService';
 import { checkEmailPermission, signOut } from './services/authService';
 import { supabase, isSupabaseConfigured } from './services/supabaseClient';
 import { User } from '@supabase/supabase-js';
@@ -225,6 +227,8 @@ export const App: React.FC = () => {
   const [showAuditModal, setShowAuditModal] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [showTorImportModal, setShowTorImportModal] = useState(false);
+  const [showGeminiModal, setShowGeminiModal] = useState(false);
+  const [hasGeminiKey, setHasGeminiKey] = useState(isGeminiAvailable());
   const [activeTorAttachmentId, setActiveTorAttachmentId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -489,6 +493,33 @@ export const App: React.FC = () => {
                 </button>
               </>
             )}
+
+            {/* Gemini AI Settings Button */}
+            <button
+              type="button"
+              onClick={() => setShowGeminiModal(true)}
+              className="btn btn-secondary"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                backgroundColor: hasGeminiKey ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.15)',
+                color: '#FFFFFF',
+                borderColor: hasGeminiKey ? 'rgba(52, 211, 153, 0.5)' : 'rgba(255, 255, 255, 0.3)',
+              }}
+              title={hasGeminiKey ? 'Gemini AI: เชื่อมต่อแล้ว (คลิกเพื่อดูหรือเปลี่ยนคีย์)' : 'ตั้งค่า Google Gemini API Key'}
+            >
+              <Sparkles size={15} color={hasGeminiKey ? '#34D399' : '#FFFFFF'} />
+              <span>AI Gemini</span>
+              <span
+                style={{
+                  width: '7px',
+                  height: '7px',
+                  borderRadius: '50%',
+                  backgroundColor: hasGeminiKey ? '#10B981' : '#9CA3AF',
+                }}
+              />
+            </button>
 
             {/* User Access Control / Whitelist Button */}
             <button
@@ -841,6 +872,12 @@ export const App: React.FC = () => {
         isOpen={showUserMgmtModal}
         onClose={() => setShowUserMgmtModal(false)}
         currentUserEmail={currentUser?.email}
+      />
+
+      <GeminiSettingsModal
+        isOpen={showGeminiModal}
+        onClose={() => setShowGeminiModal(false)}
+        onKeyUpdated={(has) => setHasGeminiKey(has)}
       />
     </div>
   );

@@ -4,9 +4,13 @@ import {
   readDocxFile,
   readPdfFile,
   parseTorTextRules,
-  parseTorTextWithGemini,
   readAttachmentContent,
 } from '../services/torDocReader';
+import {
+  getGeminiApiKey,
+  saveGeminiApiKey,
+  parseTorWithGemini,
+} from '../services/geminiService';
 import {
   FileUp,
   FileText,
@@ -89,6 +93,8 @@ export const TorImportModal: React.FC<TorImportModalProps> = ({
       return;
     }
 
+    setApiKey(getGeminiApiKey());
+
     if (selectedAttachmentId && availableDocs.length > 0) {
       const target = availableDocs.find((a) => a.id === selectedAttachmentId);
       if (target) {
@@ -142,7 +148,8 @@ export const TorImportModal: React.FC<TorImportModalProps> = ({
   };
 
   const handleRunAiParser = async () => {
-    if (!apiKey.trim()) {
+    const keyToUse = apiKey.trim() || getGeminiApiKey();
+    if (!keyToUse) {
       alert('กรุณากรอก Gemini API Key เพื่อให้ AI ช่วยสกัดโครงสร้างขอบเขตงาน');
       return;
     }
@@ -151,10 +158,11 @@ export const TorImportModal: React.FC<TorImportModalProps> = ({
       return;
     }
 
+    saveGeminiApiKey(keyToUse);
     setIsLoading(true);
     setErrorMsg(null);
     try {
-      const items = await parseTorTextWithGemini(rawText, apiKey.trim());
+      const items = await parseTorWithGemini(rawText);
       setParsedItems(items);
     } catch (err: any) {
       console.error('AI parse error', err);
@@ -398,7 +406,7 @@ export const TorImportModal: React.FC<TorImportModalProps> = ({
                   type="password"
                   className="form-input"
                   style={{ paddingLeft: '32px', fontSize: '0.85rem' }}
-                  placeholder="ระบุ Gemini API Key สำหรับให้ AI สกัดโครงสร้างขอบเขตงาน..."
+                  placeholder="ระบุ Gemini API Key (หรือบันทึกไว้ที่ปุ่ม AI Gemini ด้านบน)..."
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                 />
@@ -411,7 +419,7 @@ export const TorImportModal: React.FC<TorImportModalProps> = ({
                 style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}
               >
                 {isLoading ? <RefreshCw size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                {isLoading ? 'กำลังประมวลผล...' : 'เริ่ม AI แยกข้อ TOR'}
+                {isLoading ? 'กำลังวิเคราะห์ด้วย Gemini...' : 'เริ่ม AI แยกข้อ TOR (Gemini)'}
               </button>
             </div>
           </div>
