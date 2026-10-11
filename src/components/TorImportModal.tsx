@@ -247,6 +247,16 @@ export const TorImportModal: React.FC<TorImportModalProps> = ({
     });
   };
 
+  // แก้ไขรายละเอียดของแต่ละข้อ (อัปเดตทั้ง title และ requirement ให้ตรงกัน)
+  const handleItemDetailChange = (index: number, text: string) => {
+    setParsedItems((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], title: text, requirement: text };
+      saveDraft(updated, activeDocName);
+      return updated;
+    });
+  };
+
   // ลบข้อกำหนดที่ไม่ต้องการออกก่อนนำเข้า
   const handleDeleteParsedItem = (index: number) => {
     setParsedItems((prev) => {
@@ -258,11 +268,12 @@ export const TorImportModal: React.FC<TorImportModalProps> = ({
 
   // เพิ่มข้อกำหนดใหม่ด้วยตนเอง
   const handleAddNewParsedItem = () => {
+    const defaultText = 'ระบุรายละเอียดข้อกำหนด...';
     const newItem: TorScopeItem = {
       id: `scope-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      clauseNumber: `${parsedItems.length + 1}`,
-      title: 'ระบุหัวข้อข้อกำหนดใหม่',
-      requirement: 'ระบุรายละเอียดข้อกำหนดตาม TOR...',
+      clauseNumber: `ข้อ ${parsedItems.length + 1}`,
+      title: defaultText,
+      requirement: defaultText,
       level: 1,
       startMonth: 1,
       startWeek: 1,
@@ -622,7 +633,7 @@ export const TorImportModal: React.FC<TorImportModalProps> = ({
                   ผลการสกัดขอบเขตงาน ({parsedItems.length} ข้อ) {activeDocName && <span style={{ color: '#2563EB', fontSize: '0.825rem' }}>- จากไฟล์: {activeDocName}</span>}
                 </span>
                 <div style={{ fontSize: '0.78rem', color: 'var(--slate-500)', marginTop: '2px' }}>
-                  ✏️ สามารถแก้ไขเลขข้อ, ชื่อหัวข้อ และข้อความรายละเอียดในแต่ละช่องได้โดยตรง ข้อมูลจะถูกบันทึกร่างอัตโนมัติ
+                  ✏️ สามารถแก้ไขเลขข้อ และข้อความรายละเอียดของแต่ละข้อได้โดยตรง ข้อมูลจะถูกบันทึกร่างอัตโนมัติ
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center' }}>
@@ -649,14 +660,14 @@ export const TorImportModal: React.FC<TorImportModalProps> = ({
 
             <div
               style={{
-                maxHeight: '380px',
+                maxHeight: '400px',
                 overflowY: 'auto',
                 border: '1px solid var(--slate-200)',
                 borderRadius: '8px',
                 padding: '0.75rem',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '0.65rem',
+                gap: '0.55rem',
                 backgroundColor: '#F8FAFC',
               }}
             >
@@ -671,122 +682,108 @@ export const TorImportModal: React.FC<TorImportModalProps> = ({
                   <div
                     key={item.id || idx}
                     style={{
-                      padding: '0.65rem 0.75rem',
+                      padding: '0.55rem 0.75rem',
                       backgroundColor: '#FFFFFF',
                       borderRadius: '6px',
                       border: '1px solid var(--slate-200)',
                       boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
                       marginLeft: `${Math.min((item.level - 1) * 14, 42)}px`,
                       display: 'flex',
-                      flexDirection: 'column',
-                      gap: '0.4rem',
+                      alignItems: 'flex-start',
+                      gap: '0.5rem',
                     }}
                   >
-                    {/* Top Row: Level + Clause Number + Title + Delete Button */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                      <select
-                        value={item.level}
-                        onChange={(e) => handleItemFieldChange(idx, 'level', parseInt(e.target.value) || 1)}
-                        style={{
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          padding: '0.22rem 0.45rem',
-                          borderRadius: '4px',
-                          border: '1px solid var(--primary-300)',
-                          backgroundColor: 'var(--primary-50)',
-                          color: 'var(--primary-800)',
-                          cursor: 'pointer',
-                          flexShrink: 0,
-                        }}
-                        title="เลือกระดับชั้น (L1-L5)"
-                      >
-                        <option value={1}>L1 (ข้อหลัก)</option>
-                        <option value={2}>L2 (ข้อย่อย 1)</option>
-                        <option value={3}>L3 (ข้อย่อย 2)</option>
-                        <option value={4}>L4 (ข้อย่อย 3)</option>
-                        <option value={5}>L5 (ข้อย่อย 4)</option>
-                      </select>
+                    {/* Level Selector */}
+                    <select
+                      value={item.level}
+                      onChange={(e) => handleItemFieldChange(idx, 'level', parseInt(e.target.value) || 1)}
+                      style={{
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        padding: '0.35rem 0.45rem',
+                        borderRadius: '5px',
+                        border: '1px solid var(--primary-300)',
+                        backgroundColor: 'var(--primary-50)',
+                        color: 'var(--primary-800)',
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                        marginTop: '2px',
+                      }}
+                      title="เลือกระดับชั้น (L1-L5)"
+                    >
+                      <option value={1}>L1 (ข้อหลัก)</option>
+                      <option value={2}>L2 (ข้อย่อย 1)</option>
+                      <option value={3}>L3 (ข้อย่อย 2)</option>
+                      <option value={4}>L4 (ข้อย่อย 3)</option>
+                      <option value={5}>L5 (ข้อย่อย 4)</option>
+                    </select>
 
-                      <input
-                        type="text"
-                        value={item.clauseNumber}
-                        onChange={(e) => handleItemFieldChange(idx, 'clauseNumber', e.target.value)}
-                        placeholder="เลขข้อ เช่น 1.1"
-                        style={{
-                          width: '100px',
-                          padding: '0.25rem 0.5rem',
-                          fontSize: '0.825rem',
-                          fontWeight: 700,
-                          color: 'var(--primary-900)',
-                          border: '1px solid var(--slate-300)',
-                          borderRadius: '4px',
-                          backgroundColor: '#F8FAFC',
-                          flexShrink: 0,
-                        }}
-                        title="เลขข้อกำหนด"
-                      />
+                    {/* Clause Number */}
+                    <input
+                      type="text"
+                      value={item.clauseNumber}
+                      onChange={(e) => handleItemFieldChange(idx, 'clauseNumber', e.target.value)}
+                      placeholder="เลขข้อ เช่น ข้อ 1"
+                      style={{
+                        width: '95px',
+                        padding: '0.35rem 0.5rem',
+                        fontSize: '0.85rem',
+                        fontWeight: 700,
+                        color: 'var(--primary-900)',
+                        border: '1px solid var(--slate-300)',
+                        borderRadius: '5px',
+                        backgroundColor: '#FFFFFF',
+                        flexShrink: 0,
+                        marginTop: '2px',
+                      }}
+                      title="เลขข้อกำหนด"
+                    />
 
-                      <input
-                        type="text"
-                        value={item.title}
-                        onChange={(e) => handleItemFieldChange(idx, 'title', e.target.value)}
-                        placeholder="ชื่อหัวข้อข้อกำหนด..."
-                        style={{
-                          flex: 1,
-                          padding: '0.25rem 0.5rem',
-                          fontSize: '0.85rem',
-                          fontWeight: 500,
-                          border: '1px solid var(--slate-300)',
-                          borderRadius: '4px',
-                        }}
-                        title="ชื่อหัวข้อข้อกำหนด"
-                      />
+                    {/* Detail Text Area directly in row */}
+                    <textarea
+                      value={item.requirement || item.title || ''}
+                      onChange={(e) => handleItemDetailChange(idx, e.target.value)}
+                      placeholder="ระบุรายละเอียดข้อกำหนดของข้อนี้..."
+                      rows={2}
+                      style={{
+                        flex: 1,
+                        padding: '0.35rem 0.65rem',
+                        fontSize: '0.85rem',
+                        color: item.level === 1 ? 'var(--primary-900)' : 'var(--slate-800)',
+                        fontWeight: item.level === 1 ? 600 : 400,
+                        border: '1px solid var(--slate-300)',
+                        borderRadius: '5px',
+                        fontFamily: 'inherit',
+                        lineHeight: '1.45',
+                        resize: 'vertical',
+                        minHeight: '40px',
+                        backgroundColor: '#FFFFFF',
+                        boxSizing: 'border-box',
+                      }}
+                    />
 
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteParsedItem(idx)}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: '#EF4444',
-                          cursor: 'pointer',
-                          padding: '0.3rem',
-                          borderRadius: '4px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          opacity: 0.8,
-                        }}
-                        title="ลบข้อนี้ออก"
-                        onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
-                        onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.8')}
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-
-                    {/* Bottom Row: Editable Requirement text */}
-                    <div>
-                      <textarea
-                        value={item.requirement}
-                        onChange={(e) => handleItemFieldChange(idx, 'requirement', e.target.value)}
-                        placeholder="รายละเอียดข้อกำหนดตาม TOR (แก้ไข/ปรับปรุงข้อความในช่องนี้ได้โดยตรง)..."
-                        rows={2}
-                        style={{
-                          width: '100%',
-                          padding: '0.4rem 0.6rem',
-                          fontSize: '0.825rem',
-                          color: 'var(--slate-800)',
-                          border: '1px solid var(--slate-200)',
-                          borderRadius: '4px',
-                          fontFamily: 'inherit',
-                          lineHeight: '1.45',
-                          resize: 'vertical',
-                          minHeight: '48px',
-                          boxSizing: 'border-box',
-                          backgroundColor: '#FFFFFF',
-                        }}
-                      />
-                    </div>
+                    {/* Delete button */}
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteParsedItem(idx)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#EF4444',
+                        cursor: 'pointer',
+                        padding: '0.35rem',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        marginTop: '4px',
+                        opacity: 0.8,
+                      }}
+                      title="ลบข้อนี้ออก"
+                      onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
+                      onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.8')}
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </div>
                 ))
               )}
