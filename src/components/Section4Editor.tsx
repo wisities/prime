@@ -1,14 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Section4TeamAndRisk, TeamMember, RiskItem, TorScopeItem } from '../types/proposal';
 import {
   getMasterTeamLibrary,
+  fetchMasterTeamLibraryFromCloud,
   deleteMasterTeamMember,
   clearAllMasterTeamMembers,
   resetMasterTeamLibrary,
   saveMemberToMasterLibrary,
   saveMultipleMembersToMasterLibrary,
+  MASTER_TEAM_UPDATED_EVENT,
+  initMasterLibraryRealtime,
 } from '../services/masterLibraryService';
-import { Users, ShieldAlert, Plus, Trash2, Library, ChevronDown, ChevronUp, TableProperties, CheckCheck, Sparkles, RotateCcw, Clock, ArrowUp, ArrowDown, BookmarkPlus, BookmarkCheck, Check, Camera, Upload, User } from 'lucide-react';
+import { isSupabaseConfigured } from '../services/supabaseClient';
+import { Users, ShieldAlert, Plus, Trash2, Library, ChevronDown, ChevronUp, TableProperties, CheckCheck, Sparkles, RotateCcw, Clock, ArrowUp, ArrowDown, BookmarkPlus, BookmarkCheck, Check, Camera, Upload, User, Database } from 'lucide-react';
 
 interface Section4EditorProps {
   section4: Section4TeamAndRisk;
@@ -25,9 +29,33 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
 }) => {
   const [showLibraryModal, setShowLibraryModal] = useState(false);
   const [teamLibrary, setTeamLibrary] = useState<TeamMember[]>(getMasterTeamLibrary());
+  const [isLoadingCloud, setIsLoadingCloud] = useState(false);
+
+  useEffect(() => {
+    fetchMasterTeamLibraryFromCloud().then((items) => {
+      setTeamLibrary(items);
+    });
+
+    const handleLocalUpdate = (e: any) => {
+      if (e.detail) setTeamLibrary(e.detail);
+    };
+    window.addEventListener(MASTER_TEAM_UPDATED_EVENT, handleLocalUpdate);
+
+    const unsubscribe = initMasterLibraryRealtime((fresh) => {
+      setTeamLibrary(fresh);
+    });
+
+    return () => {
+      window.removeEventListener(MASTER_TEAM_UPDATED_EVENT, handleLocalUpdate);
+      unsubscribe();
+    };
+  }, []);
 
   const handleOpenLibrary = () => {
-    setTeamLibrary(getMasterTeamLibrary());
+    setIsLoadingCloud(true);
+    fetchMasterTeamLibraryFromCloud()
+      .then((items) => setTeamLibrary(items))
+      .finally(() => setIsLoadingCloud(false));
     setShowLibraryModal(true);
   };
 
@@ -894,11 +922,27 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '780px' }}>
             <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--primary-900)', margin: 0 }}>
-                  คลังข้อมูลบุคลากรกลาง (Prime Digital Talent Pool)
-                </h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--primary-900)', margin: 0 }}>
+                    คลังข้อมูลบุคลากรกลาง (Prime Digital Talent Pool)
+                  </h3>
+                  {isSupabaseConfigured() ? (
+                    <span style={{ fontSize: '0.72rem', backgroundColor: '#ECFDF5', color: '#047857', padding: '2px 8px', borderRadius: '12px', border: '1px solid #A7F3D0', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                      <Database size={11} /> Cloud Database
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '0.72rem', backgroundColor: '#F1F5F9', color: '#64748B', padding: '2px 8px', borderRadius: '12px', border: '1px solid #CBD5E1', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 500 }}>
+                      💾 แคชในเครื่อง
+                    </span>
+                  )}
+                  {isLoadingCloud && (
+                    <span style={{ fontSize: '0.72rem', color: '#2563EB', fontWeight: 500 }}>
+                      กำลังซิงค์...
+                    </span>
+                  )}
+                </div>
                 <div style={{ fontSize: '0.8rem', color: 'var(--slate-500)', marginTop: '2px' }}>
-                  มีทั้งหมด {teamLibrary.length} รายการ (สามารถเลือกเข้าเล่ม หรือลบรายการที่ไม่ต้องการได้)
+                  มีทั้งหมด {teamLibrary.length} รายการ (เชื่อมต่อฐานข้อมูลกลาง ใช้ร่วมกันได้ทุกโครงการและทุกคน)
                 </div>
               </div>
 

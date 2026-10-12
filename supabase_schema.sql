@@ -72,3 +72,68 @@ CREATE POLICY "Public Upload to project-attachments"
 CREATE POLICY "Public Delete from project-attachments"
     ON storage.objects FOR DELETE
     USING (bucket_id = 'project-attachments');
+
+-- ==============================================================================
+-- 6. ตาราง Master Library: บุคลากรกลาง (Prime Digital Talent Pool)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.master_team_library (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    proposed_role TEXT,
+    education TEXT,
+    certifications TEXT,
+    experience_years INT DEFAULT 0,
+    start_work_year_be INT,
+    responsibilities TEXT,
+    highlight_projects TEXT,
+    personal_bio TEXT,
+    photo_url TEXT,
+    data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- ==============================================================================
+-- 7. ตาราง Master Library: ผลงานโครงการย้อนหลังของบริษัท (Company Past Projects Track Record)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.master_projects_library (
+    id TEXT PRIMARY KEY,
+    project_name TEXT NOT NULL,
+    client_name TEXT,
+    contract_value NUMERIC(15, 2) DEFAULT 0,
+    completion_year_be INT,
+    period_duration TEXT,
+    category TEXT,
+    project_type TEXT DEFAULT 'tor_reference',
+    description TEXT,
+    relevance_note TEXT,
+    certificate_file_url TEXT,
+    certificate_file_name TEXT,
+    project_image_url TEXT,
+    project_image_caption TEXT,
+    data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 8. สร้าง Index สำหรับค้นหา Master Library
+CREATE INDEX IF NOT EXISTS idx_master_team_name ON public.master_team_library(name);
+CREATE INDEX IF NOT EXISTS idx_master_projects_name ON public.master_projects_library(project_name);
+CREATE INDEX IF NOT EXISTS idx_master_projects_value ON public.master_projects_library(contract_value);
+
+-- 9. ตั้งค่าสิทธิ์ Row Level Security (RLS) สำหรับ Master Library
+ALTER TABLE public.master_team_library ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.master_projects_library ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public read access to master_team_library" 
+    ON public.master_team_library FOR SELECT USING (true);
+
+CREATE POLICY "Allow public insert/update/delete to master_team_library" 
+    ON public.master_team_library FOR ALL USING (true);
+
+CREATE POLICY "Allow public read access to master_projects_library" 
+    ON public.master_projects_library FOR SELECT USING (true);
+
+CREATE POLICY "Allow public insert/update/delete to master_projects_library" 
+    ON public.master_projects_library FOR ALL USING (true);
+

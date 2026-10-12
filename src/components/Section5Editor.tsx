@@ -1,14 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Section5Company, PastProject } from '../types/proposal';
 import {
   getMasterProjectsLibrary,
+  fetchMasterProjectsLibraryFromCloud,
   deleteMasterProject,
   clearAllMasterProjects,
   resetMasterProjectsLibrary,
   saveProjectToMasterLibrary,
   saveMultipleProjectsToMasterLibrary,
+  MASTER_PROJECTS_UPDATED_EVENT,
+  initMasterLibraryRealtime,
 } from '../services/masterLibraryService';
-import { Building2, Plus, Trash2, Library, Filter, Calendar, AlertTriangle, CheckCircle, Upload, Image, FileText, Paperclip, FileCheck, BookmarkCheck, RotateCcw, ArrowUp, ArrowDown, BookmarkPlus, Check } from 'lucide-react';
+import { isSupabaseConfigured } from '../services/supabaseClient';
+import { Building2, Plus, Trash2, Library, Filter, Calendar, AlertTriangle, CheckCircle, Upload, Image, FileText, Paperclip, FileCheck, BookmarkCheck, RotateCcw, ArrowUp, ArrowDown, BookmarkPlus, Check, Database } from 'lucide-react';
 
 interface Section5EditorProps {
   section5: Section5Company;
@@ -18,10 +22,34 @@ interface Section5EditorProps {
 export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChange }) => {
   const [showLibraryModal, setShowLibraryModal] = useState(false);
   const [projectsLibrary, setProjectsLibrary] = useState<PastProject[]>(getMasterProjectsLibrary());
+  const [isLoadingCloud, setIsLoadingCloud] = useState(false);
   const currentYearBE = 2568;
 
+  useEffect(() => {
+    fetchMasterProjectsLibraryFromCloud().then((items) => {
+      setProjectsLibrary(items);
+    });
+
+    const handleLocalUpdate = (e: any) => {
+      if (e.detail) setProjectsLibrary(e.detail);
+    };
+    window.addEventListener(MASTER_PROJECTS_UPDATED_EVENT, handleLocalUpdate);
+
+    const unsubscribe = initMasterLibraryRealtime(undefined, (fresh) => {
+      setProjectsLibrary(fresh);
+    });
+
+    return () => {
+      window.removeEventListener(MASTER_PROJECTS_UPDATED_EVENT, handleLocalUpdate);
+      unsubscribe();
+    };
+  }, []);
+
   const handleOpenLibrary = () => {
-    setProjectsLibrary(getMasterProjectsLibrary());
+    setIsLoadingCloud(true);
+    fetchMasterProjectsLibraryFromCloud()
+      .then((items) => setProjectsLibrary(items))
+      .finally(() => setIsLoadingCloud(false));
     setShowLibraryModal(true);
   };
 
@@ -877,11 +905,27 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '820px' }}>
             <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--primary-900)', margin: 0 }}>
-                  คลังข้อมูลผลงานโครงการกลาง (Prime Digital Past Track Records)
-                </h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--primary-900)', margin: 0 }}>
+                    คลังข้อมูลผลงานโครงการกลาง (Prime Digital Past Track Records)
+                  </h3>
+                  {isSupabaseConfigured() ? (
+                    <span style={{ fontSize: '0.72rem', backgroundColor: '#ECFDF5', color: '#047857', padding: '2px 8px', borderRadius: '12px', border: '1px solid #A7F3D0', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                      <Database size={11} /> Cloud Database
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '0.72rem', backgroundColor: '#F1F5F9', color: '#64748B', padding: '2px 8px', borderRadius: '12px', border: '1px solid #CBD5E1', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 500 }}>
+                      💾 แคชในเครื่อง
+                    </span>
+                  )}
+                  {isLoadingCloud && (
+                    <span style={{ fontSize: '0.72rem', color: '#2563EB', fontWeight: 500 }}>
+                      กำลังซิงค์...
+                    </span>
+                  )}
+                </div>
                 <div style={{ fontSize: '0.8rem', color: 'var(--slate-500)', marginTop: '2px' }}>
-                  มีทั้งหมด {projectsLibrary.length} โครงการ (สามารถเลือกเข้าเล่ม หรือลบรายการที่ไม่ต้องการได้)
+                  มีทั้งหมด {projectsLibrary.length} โครงการ (เชื่อมต่อฐานข้อมูลกลาง ใช้ร่วมกันได้ทุกโครงการและทุกคน)
                 </div>
               </div>
 
