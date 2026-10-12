@@ -590,3 +590,68 @@ export const DEFAULT_BIDDING_PROJECTS: BiddingProject[] = [
   },
 ];
 
+/**
+ * สร้างข้อมูลโครงสร้างข้อเสนอเปล่าสำหรับเริ่มต้นโครงการใหม่ โดยไม่มีข้อมูลเดิมติดมา
+ */
+export function createBlankProposalData(
+  projectTitle: string = '',
+  projectCode: string = '',
+  clientAgency: string = '',
+  budgetAmount: number = 0,
+  durationDays: number = 180
+): ProposalData {
+  const durationMonths = Math.max(1, Math.round(durationDays / 30));
+  return {
+    cover: {
+      projectTitle,
+      projectCode,
+      clientAgency,
+      clientDepartment: '',
+      submitterCompany: 'บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด',
+      submitterSubtext: 'Prime Digital Consultant Co., Ltd.',
+      submissionDate: '',
+      budgetFormatted: budgetAmount > 0 ? `${budgetAmount.toLocaleString()} บาท` : '0 บาท',
+      includeBackCover: true,
+      includeTOC: true,
+    },
+    section1: {
+      background: '',
+      objectives: [],
+      expectedBenefits: [],
+      targetAudience: '',
+      projectScopeOverview: '',
+      projectDurationDays: durationDays,
+      projectDurationMonths: durationMonths,
+      budgetAmount,
+      scopeItems: [],
+    },
+    section2: {
+      workPlanOverview: '',
+      milestones: [],
+    },
+    section3: {
+      frameworkOverview: '',
+      conceptualDiagramCaption: '',
+    },
+    section4: {
+      teamOverview: '',
+      teamMembers: [],
+      riskManagementOverview: '',
+      riskItems: [],
+      complianceMatrixOverview: '',
+    },
+    section5: {
+      companyName: 'บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด',
+      establishedYearBE: 2558,
+      registeredCapital: '10,000,000 บาท',
+      companyProfile: '',
+      visionMission: '',
+      specializations: [],
+      certifications: [],
+      maxYearsFilter: 3,
+      pastProjects: [],
+    },
+  };
+}
+
+

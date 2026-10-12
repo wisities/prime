@@ -204,30 +204,52 @@ export const Section1Editor: React.FC<Section1EditorProps> = ({ section1, onChan
           <div className="form-group">
             <label className="form-label">
               <Clock size={14} style={{ display: 'inline', marginRight: '4px' }} />
-              ระยะเวลาโครงการ (วัน)
+              ระยะเวลาโครงการ (วัน) <span className="required">*</span>
             </label>
             <input
               type="number"
               className="form-input"
-              value={section1.projectDurationDays}
+              placeholder="เช่น 180, 120, 90, 240 หรือ 360"
+              value={section1.projectDurationDays ?? ''}
               onChange={(e) => {
-                const days = parseInt(e.target.value) || 0;
-                handleFieldChange('projectDurationDays', days);
-                handleFieldChange('projectDurationMonths', Math.max(1, Math.round(days / 30)));
+                const val = e.target.value;
+                const days = val === '' ? 0 : parseInt(val, 10) || 0;
+                const months = Math.max(1, Math.round(days / 30));
+                onChange({
+                  ...section1,
+                  projectDurationDays: days,
+                  projectDurationMonths: months,
+                });
               }}
             />
+            <div className="form-hint">
+              {(section1.projectDurationDays || 0).toLocaleString()} วัน (~{section1.projectDurationMonths || 1} เดือน)
+            </div>
           </div>
 
           <div className="form-group">
-            <label className="form-label">ระยะเวลาโครงการ (เดือนสำหรับจัด Gantt Chart)</label>
+            <label className="form-label">
+              ระยะเวลาโครงการ (เดือนสำหรับจัด Gantt Chart) <span className="required">*</span>
+            </label>
             <input
               type="number"
               className="form-input"
               min={1}
               max={36}
-              value={section1.projectDurationMonths}
-              onChange={(e) => handleFieldChange('projectDurationMonths', parseInt(e.target.value) || 1)}
+              value={section1.projectDurationMonths ?? ''}
+              onChange={(e) => {
+                const val = e.target.value;
+                const months = val === '' ? 1 : parseInt(val, 10) || 1;
+                onChange({
+                  ...section1,
+                  projectDurationMonths: months,
+                  projectDurationDays: months * 30,
+                });
+              }}
             />
+            <div className="form-hint">
+              ครอบคลุม {section1.projectDurationMonths || 1} เดือน ({(section1.projectDurationMonths || 1) * 4} สัปดาห์)
+            </div>
           </div>
         </div>
 

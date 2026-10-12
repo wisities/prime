@@ -76,6 +76,12 @@ export function normalizeProjectBudget(p: BiddingProject): BiddingProject {
       if (!pData.section1.budgetAmount || pData.section1.budgetAmount === 0) {
         pData.section1 = { ...pData.section1, budgetAmount: effBudget };
       }
+      if (pData.section1.projectDurationDays === undefined || pData.section1.projectDurationDays === null) {
+        pData.section1.projectDurationDays = 180;
+      }
+      if (pData.section1.projectDurationMonths === undefined || pData.section1.projectDurationMonths === null) {
+        pData.section1.projectDurationMonths = Math.max(1, Math.round(pData.section1.projectDurationDays / 30));
+      }
     } else {
       pData.section1 = {
         background: '',
@@ -85,6 +91,8 @@ export function normalizeProjectBudget(p: BiddingProject): BiddingProject {
         projectScopeOverview: '',
         scopeItems: [],
         budgetAmount: effBudget,
+        projectDurationDays: 180,
+        projectDurationMonths: 6,
       };
     }
     if (pData.cover) {

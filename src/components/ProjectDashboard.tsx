@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { BiddingProject, ProposalStatus, ProjectAttachment } from '../types/proposal';
+import { createBlankProposalData } from '../data/defaultData';
 import { exportProposalToDocx } from '../services/docxExport';
 import {
   uploadAttachmentFile,
@@ -282,6 +283,10 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       newProj.proposalData.cover.budgetFormatted = `${newProj.budgetAmount.toLocaleString()} บาท`;
       if (newProj.proposalData.section1) {
         newProj.proposalData.section1.budgetAmount = newProj.budgetAmount;
+        if (editingProject.proposalData?.section1?.projectDurationDays) {
+          newProj.proposalData.section1.projectDurationDays = editingProject.proposalData.section1.projectDurationDays;
+          newProj.proposalData.section1.projectDurationMonths = Math.max(1, Math.round(editingProject.proposalData.section1.projectDurationDays / 30));
+        }
       }
 
       onUpdateProjects([newProj, ...projects]);
@@ -298,6 +303,10 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
           synced.proposalData.cover.budgetFormatted = `${synced.budgetAmount.toLocaleString()} บาท`;
           if (synced.proposalData.section1) {
             synced.proposalData.section1.budgetAmount = synced.budgetAmount;
+            if (editingProject.proposalData?.section1?.projectDurationDays) {
+              synced.proposalData.section1.projectDurationDays = editingProject.proposalData.section1.projectDurationDays;
+              synced.proposalData.section1.projectDurationMonths = Math.max(1, Math.round(editingProject.proposalData.section1.projectDurationDays / 30));
+            }
           }
           return synced;
         }
@@ -310,13 +319,17 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     setIsCreatingNew(false);
   };
 
-  // Open edit modal with synchronized budget
+  // Open edit modal with synchronized budget & duration
   const handleOpenEditModal = (project: BiddingProject) => {
     const projToEdit: BiddingProject = JSON.parse(JSON.stringify(project));
     const eff = projToEdit.budgetAmount || projToEdit.proposalData?.section1?.budgetAmount || 0;
     projToEdit.budgetAmount = eff;
     if (projToEdit.proposalData?.section1) {
       projToEdit.proposalData.section1.budgetAmount = eff;
+      if (!projToEdit.proposalData.section1.projectDurationDays) {
+        projToEdit.proposalData.section1.projectDurationDays = 180;
+        projToEdit.proposalData.section1.projectDurationMonths = 6;
+      }
     }
     if (projToEdit.proposalData?.cover && (!projToEdit.proposalData.cover.budgetFormatted || projToEdit.proposalData.cover.budgetFormatted.trim() === '')) {
       projToEdit.proposalData.cover.budgetFormatted = `${eff.toLocaleString()} บาท`;
@@ -325,12 +338,13 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     setIsCreatingNew(false);
   };
 
-  // Create new project template
+  // Create new project template - always starts completely blank without copying previous projects
   const handleOpenCreateModal = () => {
-    const defaultData = projects.length > 0 ? JSON.parse(JSON.stringify(projects[0].proposalData)) : null;
+    const code = `EGP-${new Date().getFullYear() + 543 - 2500}-${Math.floor(10000 + Math.random() * 90000)}`;
+    const blankProposal = createBlankProposalData('', code, '', 5000000, 180);
     const newProj: BiddingProject = {
       id: '',
-      projectCode: `EGP-${new Date().getFullYear() + 543 - 2500}-${Math.floor(10000 + Math.random() * 90000)}`,
+      projectCode: code,
       projectTitle: '',
       clientAgency: '',
       budgetAmount: 5000000,
@@ -340,34 +354,10 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       status: 'draft',
       statusNote: 'เริ่มต้นจัดทำร่างข้อเสนอโครงการ',
       attachments: [],
-      proposalData: defaultData || {
-        cover: {
-          projectTitle: '',
-          projectCode: '',
-          clientAgency: '',
-          clientDepartment: '',
-          submitterCompany: 'บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด',
-          submitterSubtext: 'Prime Digital Consultant Co., Ltd.',
-          submissionDate: '',
-          budgetFormatted: '5,000,000 บาท',
-          includeBackCover: true,
-          includeTOC: true,
-        },
-        section1: { background: '', objectives: [], expectedBenefits: [], targetAudience: '', projectScopeOverview: '', scopeItems: [], budgetAmount: 5000000 },
-        section2: { methodologyStrategy: '', milestones: [] },
-        section3: { frameworkOverview: '', conceptualDiagramCaption: '' },
-        section4: { teamOverview: '', teamMembers: [], riskManagementOverview: '', riskItems: [], complianceMatrixOverview: '' },
-        section5: { companyName: '', establishedYearBE: 2558, registeredCapital: '', companyProfile: '', visionMission: '', specializations: [], certifications: [], maxYearsFilter: 3, pastProjects: [] },
-      },
+      proposalData: blankProposal,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    if (newProj.proposalData?.section1) {
-      newProj.proposalData.section1.budgetAmount = newProj.budgetAmount;
-    }
-    if (newProj.proposalData?.cover) {
-      newProj.proposalData.cover.budgetFormatted = `${newProj.budgetAmount.toLocaleString()} บาท`;
-    }
     setEditingProject(newProj);
     setIsCreatingNew(true);
   };
@@ -442,25 +432,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         status: 'draft',
         statusNote: 'สร้างโครงการอัตโนมัติจากไฟล์เอกสาร e-GP',
         attachments: [],
-        proposalData: projects.length > 0 ? JSON.parse(JSON.stringify(projects[0].proposalData)) : {
-          cover: {
-            projectTitle: '',
-            projectCode: '',
-            clientAgency: '',
-            clientDepartment: '',
-            submitterCompany: 'บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด',
-            submitterSubtext: 'Prime Digital Consultant Co., Ltd.',
-            submissionDate: '',
-            budgetFormatted: '5,000,000 บาท',
-            includeBackCover: true,
-            includeTOC: true,
-          },
-          section1: { background: '', objectives: [], expectedBenefits: [], targetAudience: '', projectScopeOverview: '', scopeItems: [] },
-          section2: { methodologyStrategy: '', milestones: [] },
-          section3: { frameworkOverview: '', conceptualDiagramCaption: '' },
-          section4: { teamOverview: '', teamMembers: [], riskManagementOverview: '', riskItems: [], complianceMatrixOverview: '' },
-          section5: { companyName: '', establishedYearBE: 2558, registeredCapital: '', companyProfile: '', visionMission: '', specializations: [], certifications: [], maxYearsFilter: 3, pastProjects: [] },
-        },
+        proposalData: createBlankProposalData('', '', '', 5000000, 180),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -1091,11 +1063,19 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                     <span>{project.clientAgency || 'ไม่ได้ระบุหน่วยงานผู้ว่าจ้าง'}</span>
                   </div>
 
-                  {/* Budget & e-GP Link Bar */}
+                  {/* Budget & Duration & e-GP Link Bar */}
                   <div className="project-budget-egp-row">
                     <div className="project-budget-chip">
                       <span className="budget-label">งบประมาณ:</span>
                       <span className="budget-amount">{(project.budgetAmount || 0).toLocaleString()} บาท</span>
+                    </div>
+
+                    <div className="project-budget-chip" style={{ backgroundColor: '#F8FAFC', border: '1px solid #CBD5E1' }}>
+                      <Clock size={12} style={{ color: 'var(--primary-700)' }} />
+                      <span className="budget-label">ระยะเวลา:</span>
+                      <span className="budget-amount" style={{ color: 'var(--slate-800)' }}>
+                        {(project.proposalData?.section1?.projectDurationDays || 180).toLocaleString()} วัน
+                      </span>
                     </div>
 
                     {/* e-GP Link button */}
@@ -1739,10 +1719,10 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                     <div className="modal-section-header-title">
                       <Calendar size={16} /> วงเงินงบประมาณและกำหนดการ e-GP
                     </div>
-                    <span className="modal-section-subtitle">วงเงินและเวลาที่ต้องยื่นเสนอราคา</span>
+                    <span className="modal-section-subtitle">วงเงิน ระยะเวลาดำเนินงาน และเวลาที่ต้องยื่นเสนอราคา</span>
                   </div>
 
-                  <div className="form-grid-3">
+                  <div className="form-grid-2">
                     <div className="form-group">
                       <label className="form-label">
                         <span>วงเงินงบประมาณ (บาท)</span>
@@ -1766,6 +1746,48 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                           ฿ {editingProject.budgetAmount.toLocaleString('th-TH')} บาท
                         </span>
                       )}
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">
+                        <span>ระยะเวลาดำเนินโครงการ (วัน)</span>
+                        <span className="req-star">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        className="form-input font-mono"
+                        placeholder="เช่น 180, 120, 90, 240 หรือ 360"
+                        value={editingProject.proposalData?.section1?.projectDurationDays ?? 180}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const days = val === '' ? 0 : parseInt(val, 10) || 0;
+                          const months = Math.max(1, Math.round(days / 30));
+                          const curSection1 = editingProject.proposalData?.section1 || {
+                            background: '',
+                            objectives: [],
+                            expectedBenefits: [],
+                            targetAudience: '',
+                            projectScopeOverview: '',
+                            scopeItems: [],
+                            budgetAmount: editingProject.budgetAmount,
+                          };
+                          setEditingProject({
+                            ...editingProject,
+                            proposalData: {
+                              ...editingProject.proposalData,
+                              section1: {
+                                ...curSection1,
+                                projectDurationDays: days,
+                                projectDurationMonths: months,
+                              },
+                            },
+                          });
+                        }}
+                        required
+                      />
+                      <span className="field-hint">
+                        {(editingProject.proposalData?.section1?.projectDurationDays ?? 180).toLocaleString()} วัน (~{Math.max(1, Math.round((editingProject.proposalData?.section1?.projectDurationDays ?? 180) / 30))} เดือน)
+                      </span>
                     </div>
 
                     <div className="form-group">
