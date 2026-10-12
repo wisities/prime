@@ -278,7 +278,7 @@ export async function exportBomToExcel(
     { wch: 35 }, // หมายเหตุ / สัดส่วน
   ];
 
-  XLSX.utils.book_append_sheet(wb, ws1, 'สรุปภาพรวมงบประมาณ (Summary)');
+  XLSX.utils.book_append_sheet(wb, ws1, 'สรุปงบประมาณ (Summary)');
 
   // =========================================================================
   // SHEET 2: รายละเอียดถอดแบบงาน BOM (BOM Breakdown)
@@ -343,7 +343,7 @@ export async function exportBomToExcel(
     { wch: 30 }, // หมายเหตุ
   ];
 
-  XLSX.utils.book_append_sheet(wb, ws2, 'รายละเอียดถอดแบบงาน (BOM Detail)');
+  XLSX.utils.book_append_sheet(wb, ws2, 'ถอดแบบงาน (BOM Detail)');
 
   // =========================================================================
   // SHEET 3: อัตรากำลังคนมาตรฐาน Rate Card (ICT Rate Card)
@@ -377,16 +377,21 @@ export async function exportBomToExcel(
     { wch: 60 }, // หน้าที่
   ];
 
-  XLSX.utils.book_append_sheet(wb, ws3, 'อัตรากำลังคนมาตรฐาน (Rate Card)');
+  XLSX.utils.book_append_sheet(wb, ws3, 'บัญชีราคา (Rate Card)');
 
-  // Generate binary Excel file and download
-  const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-  const dataBlob = new Blob([excelBuffer], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8',
-  });
+  // Generate and download Excel file
+  const safeCode = (proposal.cover?.projectCode || 'PDC').replace(/[^a-zA-Z0-9_\u0E00-\u0E7F-]/g, '_');
+  const safeTitle = (proposal.cover?.projectTitle || 'Project').replace(/[^a-zA-Z0-9_\u0E00-\u0E7F-]/g, '_').substring(0, 30);
+  const fileName = `BOM_${safeCode}_${safeTitle}.xlsx`;
 
-  const safeTitle = (proposal.cover?.projectTitle || 'Project').replace(/[\/\\?%*:|"<>]/g, '_').substring(0, 30);
-  const fileName = `BOM_ถอดปริมาณงาน_${safeTitle}_${proposal.cover?.projectCode || 'PDC'}.xlsx`;
-
-  saveAs(dataBlob, fileName);
+  try {
+    XLSX.writeFile(wb, fileName);
+  } catch (err) {
+    console.warn('XLSX.writeFile failed, falling back to Blob saveAs', err);
+    const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const dataBlob = new Blob([excelBuffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    saveAs(dataBlob, fileName);
+  }
 }

@@ -126,7 +126,8 @@ export const BomExportModal: React.FC<BomExportModalProps> = ({
       await exportBomToExcel(proposal, items, overheadProfitPct, vatPct);
     } catch (error) {
       console.error('Export BOM error', error);
-      alert('เกิดข้อผิดพลาดในการสร้างไฟล์ Excel');
+      const msg = error instanceof Error ? error.message : String(error);
+      alert(`เกิดข้อผิดพลาดในการสร้างไฟล์ Excel: ${msg}`);
     } finally {
       setIsExporting(false);
     }
