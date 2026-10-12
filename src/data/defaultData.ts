@@ -1,4 +1,4 @@
-import { ProposalData, PastProject, TeamMember, TorScopeItem, BiddingProject } from '../types/proposal';
+import { ProposalData, PastProject, TeamMember, TorScopeItem, BiddingProject, DocumentStructureConfig } from '../types/proposal';
 
 export const MASTER_PROJECTS_LIBRARY: PastProject[] = [
   {
@@ -318,7 +318,265 @@ export const DEFAULT_SCOPE_ITEMS: TorScopeItem[] = [
   },
 ];
 
+export const DEFAULT_DOCUMENT_STRUCTURE: DocumentStructureConfig = {
+  autoRenumber: true,
+  sections: [
+    {
+      id: 'section1',
+      sectionNumber: 'ส่วนที่ 1',
+      title: 'บทนำ ภาพรวมโครงการ และขอบเขตงานตามประกาศจัดจ้าง',
+      enabled: true,
+      order: 1,
+      headings: [
+        {
+          id: 's1_background',
+          title: 'ความเป็นมาและความสำคัญ',
+          originalCode: '1.1',
+          description: 'ความเป็นมา วัตถุประสงค์เชิงยุทธศาสตร์ และความจำเป็นของโครงการ',
+          enabled: true,
+          order: 1,
+        },
+        {
+          id: 's1_objectives',
+          title: 'วัตถุประสงค์ของโครงการ',
+          originalCode: '1.2',
+          description: 'รายการวัตถุประสงค์เป้าหมายของโครงการ',
+          enabled: true,
+          order: 2,
+        },
+        {
+          id: 's1_expected_benefits',
+          title: 'ประโยชน์ที่คาดว่าจะได้รับ',
+          originalCode: '1.3',
+          description: 'ประโยชน์และความคุ้มค่าที่จะได้รับหลังโครงการแล้วเสร็จ',
+          enabled: true,
+          order: 3,
+        },
+        {
+          id: 's1_target_audience',
+          title: 'กลุ่มเป้าหมายและกรอบระยะเวลาดำเนินงาน',
+          originalCode: '1.4',
+          description: 'กลุ่มเป้าหมายผู้ใช้งาน ระยะเวลาโครงการ และวงเงินงบประมาณ',
+          enabled: true,
+          order: 4,
+        },
+        {
+          id: 's1_scope',
+          title: 'ขอบเขตงานตามประกาศจัดจ้าง (TOR)',
+          originalCode: '1.5',
+          description: 'ภาพรวมขอบเขตงานและรายการขอบเขตงานจำแนกตามโครงสร้างข้อกำหนด TOR',
+          enabled: true,
+          order: 5,
+        },
+      ],
+    },
+    {
+      id: 'section2',
+      sectionNumber: 'ส่วนที่ 2',
+      title: 'แผนการดำเนินงานตลอดโครงการ (Work Plan & Gantt Chart)',
+      enabled: true,
+      order: 2,
+      headings: [
+        {
+          id: 's2_gantt',
+          title: 'แผนภูมิแกนต์ (Gantt Chart) แสดงการปฏิบัติงานรายสัปดาห์',
+          originalCode: '2.1',
+          description: 'ภาพแผนภูมิแกนต์แนวนอน (Landscape) แสดงไทม์ไลน์รายสัปดาห์ตลอดโครงการ',
+          enabled: true,
+          order: 1,
+        },
+        {
+          id: 's2_timeline',
+          title: 'ตารางกำหนดช่วงเวลาการทำงานตามขอบเขตงาน TOR',
+          originalCode: '2.2',
+          description: 'ตารางจำแนกเดือนที่เริ่ม สัปดาห์ ระยะเวลาวัน และผู้รับผิดชอบหลักของแต่ละข้อ',
+          enabled: true,
+          order: 2,
+        },
+        {
+          id: 's2_milestones',
+          title: 'แผนการส่งมอบงานและการเบิกจ่ายเงิน (Milestones & Deliverables)',
+          originalCode: '2.3',
+          description: 'ตารางแสดงงวดงาน ร้อยละเบิกจ่าย วงเงิน และเอกสารผลงานที่ส่งมอบในแต่ละงวด',
+          enabled: true,
+          order: 3,
+        },
+      ],
+    },
+    {
+      id: 'section3',
+      sectionNumber: 'ส่วนที่ 3',
+      title: 'กรอบแนวคิดและวิธีการดำเนินงานตามข้อกำหนด (TOR Mapping)',
+      enabled: true,
+      order: 3,
+      headings: [
+        {
+          id: 's3_framework',
+          title: 'แผนภาพกรอบแนวคิดการดำเนินงาน (Conceptual Framework)',
+          originalCode: '3.1',
+          description: 'ภาพแผนภาพสถาปัตยกรรมและกรอบแนวคิด พร้อมคำบรรยายภาพรวม',
+          enabled: true,
+          order: 1,
+        },
+        {
+          id: 's3_methodology',
+          title: 'วิธีการดำเนินงานและส่งมอบตามข้อกำหนด TOR แต่ละข้อ',
+          originalCode: '3.2',
+          description: 'แนวคิด ขั้นตอนการดำเนินงาน เครื่องมือ สิ่งส่งมอบ และรูปภาพประกอบรายข้อ',
+          enabled: true,
+          order: 2,
+        },
+      ],
+    },
+    {
+      id: 'section4',
+      sectionNumber: 'ส่วนที่ 4',
+      title: 'คณะผู้ดำเนินงาน แนวทางบริหารความเสี่ยง และตารางเปรียบเทียบข้อเสนอ',
+      enabled: true,
+      order: 4,
+      headings: [
+        {
+          id: 's4_team_overview',
+          title: 'โครงสร้างบุคลากรและคณะผู้ดำเนินงาน (ตารางภาพรวม)',
+          originalCode: '4.1',
+          description: 'ตารางรายชื่อบุคลากร ตำแหน่งในโครงการ ประสบการณ์ และวุฒิการศึกษา',
+          enabled: true,
+          order: 1,
+        },
+        {
+          id: 's4_team_cv',
+          title: 'ประวัติส่วนตัวและประสบการณ์การทำงานรายบุคคล (CV พร้อมรูปถ่าย)',
+          originalCode: '4.1.2',
+          description: 'การ์ดประวัติส่วนตัว รูปถ่าย 1.5 นิ้ว บทบาทความรับผิดชอบ และผลงานเด่นรายบุคคล',
+          enabled: true,
+          order: 2,
+        },
+        {
+          id: 's4_risk',
+          title: 'แผนการบริหารจัดการความเสี่ยงโครงการ (Risk Management Plan)',
+          originalCode: '4.2',
+          description: 'ตารางวิเคราะห์ความเสี่ยง 5 มิติ โอกาส ผลกระทบ มาตรการป้องกัน และแผนสำรอง',
+          enabled: true,
+          order: 3,
+        },
+        {
+          id: 's4_compliance',
+          title: 'ตารางเปรียบเทียบข้อเสนอโครงการกับข้อกำหนด TOR (Compliance Matrix)',
+          originalCode: '4.3',
+          description: 'ตารางยืนยันการปฏิบัติตาม TOR พร้อมระบุรายการที่บริษัทฯ เสนอแนวทางเหนือกว่าเกณฑ์',
+          enabled: true,
+          order: 4,
+        },
+      ],
+    },
+    {
+      id: 'section5',
+      sectionNumber: 'ส่วนที่ 5',
+      title: 'ประวัติและประสบการณ์ของบริษัทที่เกี่ยวข้อง',
+      enabled: true,
+      order: 5,
+      headings: [
+        {
+          id: 's5_profile',
+          title: 'ข้อมูลทั่วไปของบริษัท (ประวัติ, โลโก้, รูปสำนักงาน, ทุนจดทะเบียน)',
+          originalCode: '5.1',
+          description: 'ประวัติความเป็นมา โลโก้ ภาพสำนักงาน ทุนจดทะเบียน และวิสัยทัศน์พันธกิจ',
+          enabled: true,
+          order: 1,
+        },
+        {
+          id: 's5_certifications',
+          title: 'มาตรฐานและการรับรองคุณภาพ',
+          originalCode: '5.2',
+          description: 'รายการมาตรฐานสากล เช่น ISO, CMMI และการรับรองคุณภาพองค์กร',
+          enabled: true,
+          order: 2,
+        },
+        {
+          id: 's5_tor_reference',
+          title: 'ผลงานอ้างอิงหลักตามเกณฑ์ TOR (ย้อนหลังไม่เกินเกณฑ์กำหนด)',
+          originalCode: '5.3.1',
+          description: 'ตารางสัญญาจ้างผลงานอ้างอิงหลักตรงตาม TOR พร้อมภาพประกอบผลงาน',
+          enabled: true,
+          order: 3,
+        },
+        {
+          id: 's5_supplementary',
+          title: 'ผลงานและประสบการณ์เสริมที่สอดคล้องกับงานจ้างโครงการนี้',
+          originalCode: '5.3.2',
+          description: 'ตารางผลงานเสริมที่สอดคล้องและเป็นประโยชน์ต่อโครงการจ้าง',
+          enabled: true,
+          order: 4,
+        },
+        {
+          id: 's5_appendix_certs',
+          title: 'ภาคผนวก ก: สำเนาสัญญาจ้างและหนังสือรับรองผลงาน',
+          originalCode: 'ภาคผนวก ก',
+          description: 'แนบสำเนาสัญญาจ้างและหนังสือรับรองผลงานตามประกาศจัดจ้าง',
+          enabled: true,
+          order: 5,
+        },
+      ],
+    },
+  ],
+};
+
+export function getDefaultDocumentStructure(): DocumentStructureConfig {
+  return JSON.parse(JSON.stringify(DEFAULT_DOCUMENT_STRUCTURE));
+}
+
+export function normalizeDocumentStructure(
+  existing?: DocumentStructureConfig
+): DocumentStructureConfig {
+  const defaultStruct = getDefaultDocumentStructure();
+  if (!existing || !Array.isArray(existing.sections) || existing.sections.length === 0) {
+    return defaultStruct;
+  }
+
+  const autoRenumber = existing.autoRenumber ?? true;
+  const existingSectionMap = new Map(existing.sections.map((s) => [s.id, s]));
+
+  const mergedSections = defaultStruct.sections.map((defSec) => {
+    const userSec = existingSectionMap.get(defSec.id);
+    if (!userSec) return defSec;
+
+    const existingHeadingMap = new Map((userSec.headings || []).map((h) => [h.id, h]));
+    const userHeadings = (userSec.headings || []).filter((h) =>
+      defSec.headings.some((dh) => dh.id === h.id)
+    );
+
+    defSec.headings.forEach((dh) => {
+      if (!existingHeadingMap.has(dh.id)) {
+        userHeadings.push(dh);
+      }
+    });
+
+    return {
+      ...defSec,
+      enabled: userSec.enabled ?? defSec.enabled,
+      order: userSec.order ?? defSec.order,
+      headings: userHeadings.map((h, idx) => {
+        const defH = defSec.headings.find((dh) => dh.id === h.id) || h;
+        return {
+          ...defH,
+          title: h.title || defH.title,
+          enabled: h.enabled ?? defH.enabled,
+          order: h.order ?? idx + 1,
+        };
+      }),
+    };
+  });
+
+  mergedSections.sort((a, b) => a.order - b.order);
+
+  return {
+    autoRenumber,
+    sections: mergedSections,
+  };
+}
+
 export const INITIAL_PROPOSAL_DATA: ProposalData = {
+  documentStructure: getDefaultDocumentStructure(),
   cover: {
     projectTitle: 'ข้อเสนอด้านเทคนิค โครงการพัฒนาระบบบริการประชาชนดิจิทัลและการบูรณาการฐานข้อมูลอัจฉริยะ',
     projectCode: 'PRIME-GOV-2568-001',
@@ -602,6 +860,7 @@ export function createBlankProposalData(
 ): ProposalData {
   const durationMonths = Math.max(1, Math.round(durationDays / 30));
   return {
+    documentStructure: getDefaultDocumentStructure(),
     cover: {
       projectTitle,
       projectCode,

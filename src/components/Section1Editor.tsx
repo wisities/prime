@@ -1,15 +1,16 @@
 import React from 'react';
 import { Section1Intro, TorScopeItem } from '../types/proposal';
 import { ScopeHierarchyManager } from './ScopeHierarchyManager';
-import { Plus, Trash2, BookMarked, Target, Award, Clock, ListTree, FileUp } from 'lucide-react';
+import { Plus, Trash2, BookMarked, Target, Award, Clock, ListTree, FileUp, FileSpreadsheet } from 'lucide-react';
 
 interface Section1EditorProps {
   section1: Section1Intro;
   onChange: (section1: Section1Intro) => void;
   onOpenTorImport?: () => void;
+  onOpenBomModal?: () => void;
 }
 
-export const Section1Editor: React.FC<Section1EditorProps> = ({ section1, onChange, onOpenTorImport }) => {
+export const Section1Editor: React.FC<Section1EditorProps> = ({ section1, onChange, onOpenTorImport, onOpenBomModal }) => {
   const handleFieldChange = (field: keyof Section1Intro, value: any) => {
     onChange({ ...section1, [field]: value });
   };
@@ -276,18 +277,43 @@ export const Section1Editor: React.FC<Section1EditorProps> = ({ section1, onChan
               ระบุข้อกำหนดขอบเขตงานของหน่วยงานรัฐให้ครบถ้วนทุกข้อ มีข้อหลักและข้อย่อยได้ถึง 5 ระดับ (Level 1 - 5) พร้อมระบุช่วงเวลาทำงาน (สัปดาห์ในเดือน และจำนวนวัน)
             </p>
           </div>
-          {onOpenTorImport && (
-            <button
-              type="button"
-              onClick={onOpenTorImport}
-              className="btn btn-secondary"
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', whiteSpace: 'nowrap' }}
-              title="เปิดหน้าต่างนำเข้าไฟล์ Word / PDF หรือใช้ Gemini AI สกัดขอบเขตงาน"
-            >
-              <FileUp size={16} color="var(--primary-700)" />
-              <span>นำเข้า TOR (Word / PDF / AI สกัด)</span>
-            </button>
-          )}
+          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            {onOpenTorImport && (
+              <button
+                type="button"
+                onClick={onOpenTorImport}
+                className="btn btn-secondary"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', whiteSpace: 'nowrap' }}
+                title="เปิดหน้าต่างนำเข้าไฟล์ Word / PDF หรือใช้ Gemini AI สกัดขอบเขตงาน"
+              >
+                <FileUp size={16} color="var(--primary-700)" />
+                <span>นำเข้า TOR (Word / PDF / AI สกัด)</span>
+              </button>
+            )}
+
+            {onOpenBomModal && (
+              <button
+                type="button"
+                onClick={onOpenBomModal}
+                className="btn btn-secondary"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '0.85rem',
+                  whiteSpace: 'nowrap',
+                  backgroundColor: '#DCFCE7',
+                  color: '#15803D',
+                  borderColor: '#86EFAC',
+                  fontWeight: 600,
+                }}
+                title="ถอดแบบปริมาณงานและราคาค่าใช้จ่าย (BOM) เป็นไฟล์ Excel (.xlsx)"
+              >
+                <FileSpreadsheet size={16} />
+                <span>ถอดแบบ BOM (Excel)</span>
+              </button>
+            )}
+          </div>
         </div>
 
         <ScopeHierarchyManager

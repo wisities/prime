@@ -152,6 +152,29 @@ export interface Section5Company {
   pastProjects: PastProject[];
 }
 
+export interface HeadingItemConfig {
+  id: string; // e.g. "s1_background"
+  title: string; // e.g. "ความเป็นมาและความสำคัญ"
+  originalCode: string; // e.g. "1.1"
+  description?: string; // คำอธิบายขอบเขตเนื้อหา
+  enabled: boolean; // true = แสดงในเล่ม, false = ยกเลิก/ซ่อน
+  order: number; // ลำดับแสดงผล
+}
+
+export interface SectionItemConfig {
+  id: string; // e.g. "section1", "section2", etc.
+  sectionNumber: string; // e.g. "ส่วนที่ 1"
+  title: string; // e.g. "บทนำ ภาพรวมโครงการ และขอบเขตงานตามประกาศจัดจ้าง"
+  enabled: boolean; // true = แสดงทั้งส่วน, false = ยกเลิกทั้งส่วน
+  order: number; // ลำดับของส่วน
+  headings: HeadingItemConfig[];
+}
+
+export interface DocumentStructureConfig {
+  autoRenumber: boolean; // default true (คำนวณเลข 1.1, 1.2... ตามลำดับและหัวข้อที่เปิดใช้งาน)
+  sections: SectionItemConfig[];
+}
+
 export interface ProposalData {
   cover: CoverConfig;
   section1: Section1Intro;
@@ -159,6 +182,7 @@ export interface ProposalData {
   section3: Section3Methodology;
   section4: Section4TeamAndRisk;
   section5: Section5Company;
+  documentStructure?: DocumentStructureConfig;
 }
 
 export interface AuditIssue {

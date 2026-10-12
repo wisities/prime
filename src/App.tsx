@@ -13,6 +13,8 @@ import { Section4Editor } from './components/Section4Editor';
 import { Section5Editor } from './components/Section5Editor';
 import { AuditModal } from './components/AuditModal';
 import { LiveDocxPreviewModal } from './components/LiveDocxPreviewModal';
+import { DocumentStructureModal } from './components/DocumentStructureModal';
+import { BomExportModal } from './components/BomExportModal';
 import { TorImportModal } from './components/TorImportModal';
 import { LoginPage } from './components/LoginPage';
 import { AccessDeniedPage } from './components/AccessDeniedPage';
@@ -45,6 +47,8 @@ import {
   Calendar,
   Clock,
   LogOut,
+  SlidersHorizontal,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 import { loadAllProjects, saveProject, normalizeProjectBudget } from './services/projectStorageService';
@@ -243,6 +247,8 @@ export const App: React.FC = () => {
   const [showAuditModal, setShowAuditModal] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [showTorImportModal, setShowTorImportModal] = useState(false);
+  const [showStructureModal, setShowStructureModal] = useState(false);
+  const [showBomModal, setShowBomModal] = useState(false);
   const [showGeminiModal, setShowGeminiModal] = useState(false);
   const [hasGeminiKey, setHasGeminiKey] = useState(isGeminiAvailable());
   const [activeTorAttachmentId, setActiveTorAttachmentId] = useState<string | null>(null);
@@ -473,6 +479,44 @@ export const App: React.FC = () => {
                   title="นำเข้าเอกสาร TOR (.docx / .pdf) เพื่อแยกขอบเขตงานและเติมลงระบบอัตโนมัติ"
                 >
                   <FileUp size={15} /> นำเข้า TOR (Word/PDF)
+                </button>
+
+                {/* Document Structure Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowStructureModal(true)}
+                  className="btn btn-secondary"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    backgroundColor: '#F0FDF4',
+                    color: '#166534',
+                    borderColor: '#BBF7D0',
+                    fontWeight: 600,
+                  }}
+                  title="เปิด/ปิดหัวข้อที่ไม่ได้ใช้ หรือจัดลำดับหัวข้อในเอกสาร Word (Document Structure)"
+                >
+                  <SlidersHorizontal size={15} /> โครงสร้างหัวข้อ
+                </button>
+
+                {/* BOM Export Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowBomModal(true)}
+                  className="btn btn-secondary"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    backgroundColor: '#DCFCE7',
+                    color: '#15803D',
+                    borderColor: '#86EFAC',
+                    fontWeight: 600,
+                  }}
+                  title="ถอดแบบปริมาณงานและราคาค่าใช้จ่าย (BOM) และส่งออกเป็นไฟล์ Excel (.xlsx)"
+                >
+                  <FileSpreadsheet size={15} /> ถอดแบบ BOM (Excel)
                 </button>
 
                 {/* Audit Button */}
@@ -793,6 +837,7 @@ export const App: React.FC = () => {
                   updateProposalAndProject((prev) => ({ ...prev, section1: newSection1 }))
                 }
                 onOpenTorImport={() => setShowTorImportModal(true)}
+                onOpenBomModal={() => setShowBomModal(true)}
               />
             )}
 
@@ -871,6 +916,32 @@ export const App: React.FC = () => {
         onClose={() => setShowPreviewModal(false)}
         isExporting={isExporting}
         onExport={handleExportDocx}
+        onOpenStructureModal={() => {
+          setShowPreviewModal(false);
+          setShowStructureModal(true);
+        }}
+      />
+
+      <DocumentStructureModal
+        isOpen={showStructureModal}
+        onClose={() => setShowStructureModal(false)}
+        documentStructure={proposal.documentStructure}
+        onChange={(newStructure) => {
+          updateProposalAndProject((prev) => ({
+            ...prev,
+            documentStructure: newStructure,
+          }));
+        }}
+        onOpenPreview={() => {
+          setShowStructureModal(false);
+          setShowPreviewModal(true);
+        }}
+      />
+
+      <BomExportModal
+        isOpen={showBomModal}
+        onClose={() => setShowBomModal(false)}
+        proposal={proposal}
       />
 
       <TorImportModal

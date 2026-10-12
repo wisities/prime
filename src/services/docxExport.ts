@@ -18,9 +18,11 @@ import {
   TableOfContents,
   PageOrientation,
   LineRuleType,
+  ISectionOptions,
 } from 'docx';
 import saveAs from 'file-saver';
 import { ProposalData } from '../types/proposal';
+import { normalizeDocumentStructure } from '../data/defaultData';
 import { generateGanttChartImage, generateDefaultConceptualDiagram } from '../utils/ganttRenderer';
 
 function base64ToUint8Array(base64: string): Uint8Array {
@@ -239,7 +241,7 @@ function createHeaderCell(text: string, widthPercent: number): TableCell {
 function createDataCell(
   text: string,
   widthPercent: number,
-  options?: { align?: (typeof AlignmentType)[keyof typeof AlignmentType]; bold?: boolean; bg?: string }
+  options?: { align?: (typeof AlignmentType)[keyof typeof AlignmentType]; bold?: boolean; bg?: string; color?: string }
 ): TableCell {
   const lines = (text || '').split(/\r?\n/);
   const paraChildren = lines.map((l, idx) => {
@@ -257,7 +259,7 @@ function createDataCell(
           font: FONT_FAMILY,
           size: 28, // 14pt
           bold: options?.bold ?? false,
-          color: COLOR_TEXT,
+          color: options?.color || COLOR_TEXT,
         }),
       ],
     });
@@ -429,6 +431,8 @@ function renderMethodologyParagraphsAndTables(text: string): (Paragraph | Table)
 
 export async function exportProposalToDocx(data: ProposalData): Promise<void> {
   const { cover, section1, section2, section3, section4, section5 } = data;
+  const docStructure = normalizeDocumentStructure(data.documentStructure);
+  const autoRenumber = docStructure.autoRenumber ?? true;
 
   // Render weekly Gantt chart image as PNG (optimized for Landscape width)
   const ganttImageBase64 = generateGanttChartImage(
@@ -631,987 +635,259 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
   }
 
   // ส่วนที่ 1: บทนำ
-  part1Children.push(
-    createSectionHeader('ส่วนที่ 1', 'บทนำ ภาพรวมโครงการ และขอบเขตงานตามประกาศจัดจ้าง', true),
-    createH2('1.1 ความเป็นมาและความสำคัญ'),
-    ...createBodyParagraphs(section1.background),
-    createH2('1.2 วัตถุประสงค์ของโครงการ')
-  );
-
-  section1.objectives.forEach((obj, idx) => {
-    const cleanObj = obj.replace(/^\(\d+\.\d+\)\s*/, '').replace(/^1\.\d+\.\d+\s*/, '');
+  const s1Config = docStructure.sections.find((s) => s.id === 'section1');
+  if (s1Config && s1Config.enabled) {
     part1Children.push(
-      new Paragraph({
-        alignment: AlignmentType.LEFT,
-        indent: { firstLine: 450 },
-        spacing: { after: 60, before: 0, line: 240, lineRule: LineRuleType.AUTO },
-        children: [
-          new TextRun({
-            text: `1.2.${idx + 1} ${cleanObj}`,
-            font: FONT_FAMILY,
-            size: 32,
-            color: COLOR_TEXT,
-          }),
-        ],
-      })
+      createSectionHeader('ส่วนที่ 1', 'บทนำ ภาพรวมโครงการ และขอบเขตงานตามประกาศจัดจ้าง', true)
     );
-  });
 
-  part1Children.push(createH2('1.3 ประโยชน์ที่คาดว่าจะได้รับ'));
-  section1.expectedBenefits.forEach((benefit, idx) => {
-    const cleanBenefit = benefit.replace(/^\(\d+\.\d+\)\s*/, '').replace(/^2\.\d+\.\d+\s*/, '').replace(/^1\.\d+\.\d+\s*/, '');
-    part1Children.push(
-      new Paragraph({
-        alignment: AlignmentType.LEFT,
-        indent: { firstLine: 450 },
-        spacing: { after: 60, before: 0, line: 240, lineRule: LineRuleType.AUTO },
-        children: [
-          new TextRun({
-            text: `1.3.${idx + 1} ${cleanBenefit}`,
-            font: FONT_FAMILY,
-            size: 32,
-            color: COLOR_TEXT,
-          }),
-        ],
-      })
-    );
-  });
+    const activeS1Headings = s1Config.headings
+      .filter((h) => h.enabled)
+      .sort((a, b) => a.order - b.order);
 
-  part1Children.push(
-    createH2('1.4 กลุ่มเป้าหมายและกรอบระยะเวลาดำเนินงาน'),
-    createP(`กลุ่มเป้าหมายผู้ใช้งาน: ${section1.targetAudience}`, { firstLineIndent: 450, align: AlignmentType.LEFT }),
-    createP(`ระยะเวลาดำเนินการรวม: ${section1.projectDurationDays} วัน (${section1.projectDurationMonths} เดือน / ${section1.projectDurationMonths * 4} สัปดาห์)`, { firstLineIndent: 450, align: AlignmentType.LEFT }),
-    createP(`วงเงินงบประมาณโครงการ: ${section1.budgetAmount.toLocaleString()} บาท`, { firstLineIndent: 450, align: AlignmentType.LEFT }),
-    createH2('1.5 ขอบเขตงานตามประกาศจัดจ้าง'),
-    ...createBodyParagraphs(section1.projectScopeOverview)
-  );
+    activeS1Headings.forEach((h, hIdx) => {
+      const numPrefix = autoRenumber ? `1.${hIdx + 1}` : h.originalCode;
+      if (h.id === 's1_background') {
+        part1Children.push(
+          createH2(`${numPrefix} ความเป็นมาและความสำคัญ`),
+          ...createBodyParagraphs(section1.background)
+        );
+      } else if (h.id === 's1_objectives') {
+        part1Children.push(createH2(`${numPrefix} วัตถุประสงค์ของโครงการ`));
+        section1.objectives.forEach((obj, idx) => {
+          const cleanObj = obj.replace(/^\(\d+\.\d+\)\s*/, '').replace(/^1\.\d+\.\d+\s*/, '');
+          part1Children.push(
+            new Paragraph({
+              alignment: AlignmentType.LEFT,
+              indent: { firstLine: 450 },
+              spacing: { after: 60, before: 0, line: 240, lineRule: LineRuleType.AUTO },
+              children: [
+                new TextRun({
+                  text: `${numPrefix}.${idx + 1} ${cleanObj}`,
+                  font: FONT_FAMILY,
+                  size: 32,
+                  color: COLOR_TEXT,
+                }),
+              ],
+            })
+          );
+        });
+      } else if (h.id === 's1_expected_benefits') {
+        part1Children.push(createH2(`${numPrefix} ประโยชน์ที่คาดว่าจะได้รับ`));
+        section1.expectedBenefits.forEach((benefit, idx) => {
+          const cleanBenefit = benefit.replace(/^\(\d+\.\d+\)\s*/, '').replace(/^2\.\d+\.\d+\s*/, '').replace(/^1\.\d+\.\d+\s*/, '');
+          part1Children.push(
+            new Paragraph({
+              alignment: AlignmentType.LEFT,
+              indent: { firstLine: 450 },
+              spacing: { after: 60, before: 0, line: 240, lineRule: LineRuleType.AUTO },
+              children: [
+                new TextRun({
+                  text: `${numPrefix}.${idx + 1} ${cleanBenefit}`,
+                  font: FONT_FAMILY,
+                  size: 32,
+                  color: COLOR_TEXT,
+                }),
+              ],
+            })
+          );
+        });
+      } else if (h.id === 's1_target_audience') {
+        part1Children.push(
+          createH2(`${numPrefix} กลุ่มเป้าหมายและกรอบระยะเวลาดำเนินงาน`),
+          createP(`กลุ่มเป้าหมายผู้ใช้งาน: ${section1.targetAudience}`, { firstLineIndent: 450, align: AlignmentType.LEFT }),
+          createP(`ระยะเวลาดำเนินการรวม: ${section1.projectDurationDays} วัน (${section1.projectDurationMonths} เดือน / ${section1.projectDurationMonths * 4} สัปดาห์)`, { firstLineIndent: 450, align: AlignmentType.LEFT }),
+          createP(`วงเงินงบประมาณโครงการ: ${section1.budgetAmount.toLocaleString()} บาท`, { firstLineIndent: 450, align: AlignmentType.LEFT })
+        );
+      } else if (h.id === 's1_scope') {
+        part1Children.push(
+          createH2(`${numPrefix} ขอบเขตงานตามประกาศจัดจ้าง`),
+          ...createBodyParagraphs(section1.projectScopeOverview)
+        );
 
-  // Hierarchical Scope items (Level 1 to 5)
-  (section1.scopeItems || []).forEach((item) => {
-    const isLevel1 = item.level === 1;
-    const indentLeft = (item.level - 1) * 720;
-    const torText = (item.requirement || item.title || '').trim();
+        // Hierarchical Scope items (Level 1 to 5)
+        (section1.scopeItems || []).forEach((item) => {
+          const isLevel1 = item.level === 1;
+          const indentLeft = (item.level - 1) * 720;
+          const torText = (item.requirement || item.title || '').trim();
 
-    part1Children.push(
-      new Paragraph({
-        alignment: AlignmentType.LEFT,
-        indent: isLevel1 ? undefined : { left: indentLeft, firstLine: 720 },
-        spacing: { before: isLevel1 ? 120 : 60, after: 60, line: 240, lineRule: LineRuleType.AUTO },
-        children: [
-          new TextRun({
-            text: `${formatTorClauseNumber(item.clauseNumber)} `,
-            font: FONT_FAMILY,
-            size: isLevel1 ? 30 : 28,
-            bold: true,
-            color: isLevel1 ? COLOR_PRIMARY : COLOR_SECONDARY,
-          }),
-          new TextRun({
-            text: torText,
-            font: FONT_FAMILY,
-            size: isLevel1 ? 30 : 28,
-            bold: isLevel1,
-            color: COLOR_TEXT,
-          }),
-        ],
-      })
-    );
-  });
+          part1Children.push(
+            new Paragraph({
+              alignment: AlignmentType.LEFT,
+              indent: isLevel1 ? undefined : { left: indentLeft, firstLine: 720 },
+              spacing: { before: isLevel1 ? 120 : 60, after: 60, line: 240, lineRule: LineRuleType.AUTO },
+              children: [
+                new TextRun({
+                  text: `${formatTorClauseNumber(item.clauseNumber)} `,
+                  font: FONT_FAMILY,
+                  size: isLevel1 ? 30 : 28,
+                  bold: true,
+                  color: isLevel1 ? COLOR_PRIMARY : COLOR_SECONDARY,
+                }),
+                new TextRun({
+                  text: torText,
+                  font: FONT_FAMILY,
+                  size: isLevel1 ? 30 : 28,
+                  bold: isLevel1,
+                  color: COLOR_TEXT,
+                }),
+              ],
+            })
+          );
+        });
+      }
+    });
+  }
 
   // =========================================================================
   // SECTION 2 (LANDSCAPE - แนวนอน): 2.1 แผนภูมิแกนต์ Gantt Chart & งวดงาน
   // =========================================================================
   const part2Children: (Paragraph | Table)[] = [];
-
-  part2Children.push(
-    createSectionHeader('ส่วนที่ 2', 'แผนการดำเนินงานตลอดโครงการ (Work Plan & Weekly Gantt Chart)'),
-    ...createBodyParagraphs(section2.workPlanOverview),
-    createH2('2.1 แผนภูมิแกนต์ (Gantt Chart) แสดงการปฏิบัติงานรายสัปดาห์ตลอดโครงการ')
-  );
-
-  // Embed Weekly Gantt Chart Image in Landscape (width: 850px for wide A4 page)
-  try {
-    const ganttBytes = base64ToUint8Array(ganttImageBase64);
+  const s2Config = docStructure.sections.find((s) => s.id === 'section2');
+  if (s2Config && s2Config.enabled) {
     part2Children.push(
-      new Paragraph({
-        alignment: AlignmentType.CENTER,
-        spacing: { before: 140, after: 180 },
-        children: [
-          new ImageRun({
-            data: ganttBytes,
-            transformation: { width: 850, height: Math.min(460, 110 + (section1.scopeItems || []).length * 28) },
-          } as any),
-        ],
-      })
+      createSectionHeader('ส่วนที่ 2', 'แผนการดำเนินงานตลอดโครงการ (Work Plan & Weekly Gantt Chart)'),
+      ...createBodyParagraphs(section2.workPlanOverview)
     );
-  } catch (e) {
-    console.error('Failed to embed Gantt chart in landscape', e);
+
+    const activeS2Headings = s2Config.headings
+      .filter((h) => h.enabled)
+      .sort((a, b) => a.order - b.order);
+
+    activeS2Headings.forEach((h, hIdx) => {
+      const numPrefix = autoRenumber ? `2.${hIdx + 1}` : h.originalCode;
+      if (h.id === 's2_gantt') {
+        part2Children.push(
+          createH2(`${numPrefix} แผนภูมิแกนต์ (Gantt Chart) แสดงการปฏิบัติงานรายสัปดาห์ตลอดโครงการ`)
+        );
+        try {
+          const ganttBytes = base64ToUint8Array(ganttImageBase64);
+          part2Children.push(
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { before: 140, after: 180 },
+              children: [
+                new ImageRun({
+                  data: ganttBytes,
+                  transformation: { width: 850, height: Math.min(460, 110 + (section1.scopeItems || []).length * 28) },
+                } as any),
+              ],
+            })
+          );
+        } catch (e) {
+          console.error('Failed to embed Gantt chart in landscape', e);
+        }
+      } else if (h.id === 's2_timeline') {
+        part2Children.push(
+          createH2(`${numPrefix} ตารางกำหนดช่วงเวลาการทำงานตามขอบเขตงาน TOR (รายสัปดาห์และจำนวนวัน)`)
+        );
+
+        const taskRows = [
+          createHeaderRow([
+            createHeaderCell('ระดับ / ข้อกำหนด TOR', 42),
+            createHeaderCell('ช่วงเวลาเริ่มต้น', 18),
+            createHeaderCell('ระยะเวลาทำงาน', 16),
+            createHeaderCell('ผู้รับผิดชอบหลัก', 24),
+          ]),
+        ];
+
+        (section1.scopeItems || []).forEach((item) => {
+          taskRows.push(
+            createDataRow([
+              createDataCell(`${formatTorClauseNumber(item.clauseNumber)} ${item.title}`, 42, { bold: item.level === 1 }),
+              createDataCell(`เดือนที่ ${item.startMonth} (สัปดาห์ W${item.startWeek})`, 18, { align: AlignmentType.CENTER }),
+              createDataCell(`${item.durationDays} วัน (~${Math.max(1, Math.round(item.durationDays / 7))} วีค)`, 16, { align: AlignmentType.CENTER, bold: true }),
+              createDataCell(item.responsibleRole || '-', 24),
+            ])
+          );
+        });
+
+        part2Children.push(
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            rows: taskRows,
+          })
+        );
+      } else if (h.id === 's2_milestones') {
+        part2Children.push(
+          createH2(`${numPrefix} แผนการส่งมอบงานและการเบิกจ่ายเงิน (Milestones & Deliverables)`)
+        );
+
+        const milestoneRows = [
+          createHeaderRow([
+            createHeaderCell('งวดงาน', 12),
+            createHeaderCell('ชื่อและขอบเขตงวดงาน', 32),
+            createHeaderCell('ระยะเวลาส่งมอบ', 20),
+            createHeaderCell('ร้อยละ / วงเงิน', 16),
+            createHeaderCell('เอกสารและผลงานที่ส่งมอบ', 20),
+          ]),
+        ];
+
+        section2.milestones.forEach((m) => {
+          milestoneRows.push(
+            createDataRow([
+              createDataCell(`งวดที่ ${m.installment}`, 12, { align: AlignmentType.CENTER, bold: true }),
+              createDataCell(m.title, 32),
+              createDataCell(m.timeframe, 20),
+              createDataCell(`${m.percentage}%\n(${m.amount.toLocaleString()} บาท)`, 16, { align: AlignmentType.RIGHT, bold: true }),
+              createDataCell(m.deliverables.join('\n• '), 20),
+            ])
+          );
+        });
+
+        part2Children.push(
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            rows: milestoneRows,
+          })
+        );
+      }
+    });
   }
-
-  // Task Timeline Table in Landscape
-  part2Children.push(
-    createH2('2.2 ตารางกำหนดช่วงเวลาการทำงานตามขอบเขตงาน TOR (รายสัปดาห์และจำนวนวัน)')
-  );
-
-  const taskRows = [
-    createHeaderRow([
-      createHeaderCell('ระดับ / ข้อกำหนด TOR', 42),
-      createHeaderCell('ช่วงเวลาเริ่มต้น', 18),
-      createHeaderCell('ระยะเวลาทำงาน', 16),
-      createHeaderCell('ผู้รับผิดชอบหลัก', 24),
-    ]),
-  ];
-
-  (section1.scopeItems || []).forEach((item) => {
-    taskRows.push(
-      createDataRow([
-        createDataCell(`${formatTorClauseNumber(item.clauseNumber)} ${item.title}`, 42, { bold: item.level === 1 }),
-        createDataCell(`เดือนที่ ${item.startMonth} (สัปดาห์ W${item.startWeek})`, 18, { align: AlignmentType.CENTER }),
-        createDataCell(`${item.durationDays} วัน (~${Math.max(1, Math.round(item.durationDays / 7))} วีค)`, 16, { align: AlignmentType.CENTER, bold: true }),
-        createDataCell(item.responsibleRole || '-', 24),
-      ])
-    );
-  });
-
-  part2Children.push(
-    new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      rows: taskRows,
-    })
-  );
-
-  // Milestones table in Landscape
-  part2Children.push(
-    createH2('2.3 แผนการส่งมอบงานและการเบิกจ่ายเงิน (Milestones & Deliverables)')
-  );
-
-  const milestoneRows = [
-    createHeaderRow([
-      createHeaderCell('งวดงาน', 12),
-      createHeaderCell('ชื่อและขอบเขตงวดงาน', 32),
-      createHeaderCell('ระยะเวลาส่งมอบ', 20),
-      createHeaderCell('ร้อยละ / วงเงิน', 16),
-      createHeaderCell('เอกสารและผลงานที่ส่งมอบ', 20),
-    ]),
-  ];
-
-  section2.milestones.forEach((m) => {
-    milestoneRows.push(
-      createDataRow([
-        createDataCell(`งวดที่ ${m.installment}`, 12, { align: AlignmentType.CENTER, bold: true }),
-        createDataCell(m.title, 32),
-        createDataCell(m.timeframe, 20),
-        createDataCell(`${m.percentage}%\n(${m.amount.toLocaleString()} บาท)`, 16, { align: AlignmentType.RIGHT, bold: true }),
-        createDataCell(m.deliverables.join('\n• '), 20),
-      ])
-    );
-  });
-
-  part2Children.push(
-    new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      rows: milestoneRows,
-    })
-  );
 
   // =========================================================================
   // SECTION 3 (Portrait - แนวตั้ง): ส่วนที่ 3 ตอบ TOR, ส่วนที่ 4 ทีมงาน, ส่วนที่ 5 บริษัท & ปกหลัง
   // =========================================================================
   const part3Children: (Paragraph | Table)[] = [];
-
-  part3Children.push(
-    createSectionHeader('ส่วนที่ 3', 'กรอบแนวคิดและวิธีการดำเนินงานตามข้อกำหนด (TOR Mapping)', true),
-    createH2('3.1 แผนภาพกรอบแนวคิดการดำเนินงาน (Conceptual Framework Diagram)'),
-    ...createBodyParagraphs(section3.frameworkOverview)
-  );
-
-  try {
-    const conceptualBytes = base64ToUint8Array(conceptualImageBase64);
+  const s3Config = docStructure.sections.find((s) => s.id === 'section3');
+  if (s3Config && s3Config.enabled) {
     part3Children.push(
-      new Paragraph({
-        alignment: AlignmentType.CENTER,
-        spacing: { before: 140, after: 80 },
-        children: [
-          new ImageRun({
-            data: conceptualBytes,
-            transformation: { width: 620, height: 300 },
-          } as any),
-        ],
-      }),
-      new Paragraph({
-        alignment: AlignmentType.CENTER,
-        spacing: { after: 200 },
-        children: [
-          new TextRun({
-            text: section3.conceptualDiagramCaption,
-            font: FONT_FAMILY,
-            size: 26,
-            italics: true,
-            color: COLOR_MUTED,
-          }),
-        ],
-      })
-    );
-  } catch (e) {
-    console.error('Failed to embed conceptual diagram', e);
-  }
-
-  part3Children.push(
-    createH2('3.2 วิธีการดำเนินงาน')
-  );
-
-  (section1.scopeItems || []).forEach((item, idx) => {
-    part3Children.push(
-      new Paragraph({
-        heading: HeadingLevel.HEADING_3,
-        spacing: { before: 200, after: 100, line: 240, lineRule: LineRuleType.AUTO },
-        children: [
-          new TextRun({
-            text: `3.2.${idx + 1} ${formatTorClauseNumber(item.clauseNumber)}: ${item.title}`,
-            font: FONT_FAMILY,
-            size: 32,
-            bold: true,
-            color: COLOR_PRIMARY,
-          }),
-        ],
-      })
+      createSectionHeader('ส่วนที่ 3', 'กรอบแนวคิดและวิธีการดำเนินงานตามข้อกำหนด (TOR Mapping)', true)
     );
 
-    // เนื้อหาคำอธิบายพรรณาวิธีการดำเนินงาน, บูลเล็ตพ้อยต์, หรือตารางขั้นตอนการทำงาน
-    part3Children.push(
-      ...renderMethodologyParagraphsAndTables(item.proposedMethodology)
-    );
+    const activeS3Headings = s3Config.headings
+      .filter((h) => h.enabled)
+      .sort((a, b) => a.order - b.order);
 
-    // แบบที่ 1: ภาพอธิบายการทำงาน 1 รูป กว้าง 6 นิ้ว (576 px) จัดกึ่งกลาง
-    const showSingle =
-      (item.imageLayout === 'single_centered' || item.imageLayout === 'both') &&
-      Boolean(item.singleImage?.url);
-
-    if (showSingle && item.singleImage?.url) {
-      try {
-        const imgBytes = base64ToUint8Array(item.singleImage.url);
+    activeS3Headings.forEach((h, hIdx) => {
+      const numPrefix = autoRenumber ? `3.${hIdx + 1}` : h.originalCode;
+      if (h.id === 's3_framework') {
         part3Children.push(
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing: { before: 140, after: 60 },
-            children: [
-              new ImageRun({
-                data: imgBytes,
-                transformation: { width: 576, height: 260 }, // กว้าง 6 นิ้ว (576 px)
-              } as any),
-            ],
-          }),
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing: { after: 140 },
-            children: [
-              new TextRun({
-                text: item.singleImage.caption || `ภาพที่ 3.2.${idx + 1}-1 ภาพอธิบายขั้นตอนและวิธีการดำเนินงาน`,
-                font: FONT_FAMILY,
-                size: 26,
-                italics: true,
-                color: COLOR_MUTED,
-              }),
-            ],
-          })
+          createH2(`${numPrefix} แผนภาพกรอบแนวคิดการดำเนินงาน (Conceptual Framework Diagram)`),
+          ...createBodyParagraphs(section3.frameworkOverview)
         );
-      } catch (e) {
-        console.error('Failed to embed single image', e);
-      }
-    }
 
-    // แบบที่ 2: ภาพประกอบการทำงาน แทรกในตาราง 2 คอลัมน์ ขนาดภาพละ กว้าง 3 นิ้ว (288 px)
-    const showTwoCols =
-      (item.imageLayout === 'two_columns' || item.imageLayout === 'both') &&
-      Boolean(item.twoColumnImageLeft?.url || item.twoColumnImageRight?.url);
-
-    if (showTwoCols) {
-      try {
-        const leftCellChildren: Paragraph[] = [];
-        const rightCellChildren: Paragraph[] = [];
-
-        if (item.twoColumnImageLeft?.url) {
-          const leftBytes = base64ToUint8Array(item.twoColumnImageLeft.url);
-          leftCellChildren.push(
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              spacing: { after: 40 },
-              children: [
-                new ImageRun({
-                  data: leftBytes,
-                  transformation: { width: 288, height: 160 }, // กว้าง 3 นิ้ว (288 px)
-                } as any),
-              ],
-            }),
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              children: [
-                new TextRun({
-                  text: item.twoColumnImageLeft.caption || 'ภาพประกอบ (กว้าง 3 นิ้ว)',
-                  font: FONT_FAMILY,
-                  size: 24,
-                  italics: true,
-                  color: COLOR_MUTED,
-                }),
-              ],
-            })
-          );
-        } else {
-          leftCellChildren.push(new Paragraph({ children: [] }));
-        }
-
-        if (item.twoColumnImageRight?.url) {
-          const rightBytes = base64ToUint8Array(item.twoColumnImageRight.url);
-          rightCellChildren.push(
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              spacing: { after: 40 },
-              children: [
-                new ImageRun({
-                  data: rightBytes,
-                  transformation: { width: 288, height: 160 }, // กว้าง 3 นิ้ว (288 px)
-                } as any),
-              ],
-            }),
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              children: [
-                new TextRun({
-                  text: item.twoColumnImageRight.caption || 'ภาพประกอบ (กว้าง 3 นิ้ว)',
-                  font: FONT_FAMILY,
-                  size: 24,
-                  italics: true,
-                  color: COLOR_MUTED,
-                }),
-              ],
-            })
-          );
-        } else {
-          rightCellChildren.push(new Paragraph({ children: [] }));
-        }
-
-        const twoColTable = new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          borders: {
-            top: { style: BorderStyle.NONE },
-            bottom: { style: BorderStyle.NONE },
-            left: { style: BorderStyle.NONE },
-            right: { style: BorderStyle.NONE },
-            insideHorizontal: { style: BorderStyle.NONE },
-            insideVertical: { style: BorderStyle.NONE },
-          },
-          rows: [
-            new TableRow({
-              children: [
-                new TableCell({
-                  width: { size: 50, type: WidthType.PERCENTAGE },
-                  margins: { top: 60, bottom: 60, left: 60, right: 60 },
-                  children: leftCellChildren,
-                }),
-                new TableCell({
-                  width: { size: 50, type: WidthType.PERCENTAGE },
-                  margins: { top: 60, bottom: 60, left: 60, right: 60 },
-                  children: rightCellChildren,
-                }),
-              ],
-            }),
-          ],
-        });
-
-        part3Children.push(twoColTable);
-      } catch (e) {
-        console.error('Failed to embed two-column images', e);
-      }
-    }
-
-    part3Children.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
-  });
-
-  // =========================================================================
-  // SECTION 4 (LANDSCAPE - แนวนอน): 4.1 คณะผู้ดำเนินงาน, 4.2 บริหารความเสี่ยง, 4.3 Compliance Matrix
-  // =========================================================================
-  const part4Children: (Paragraph | Table)[] = [];
-
-  part4Children.push(
-    createSectionHeader('ส่วนที่ 4', 'คณะผู้ดำเนินงาน แนวทางบริหารความเสี่ยง และตารางเปรียบเทียบข้อเสนอ'),
-    createH2('4.1 โครงสร้างบุคลากรและคณะผู้ดำเนินงาน'),
-    ...createBodyParagraphs(section4.teamOverview)
-  );
-
-  const teamRows = [
-    createHeaderRow([
-      createHeaderCell('ลำดับ', 6),
-      createHeaderCell('ชื่อ - นามสกุล', 24),
-      createHeaderCell('ตำแหน่งในโครงการ', 26),
-      createHeaderCell('อายุงาน', 16),
-      createHeaderCell('วุฒิการศึกษา', 28),
-    ]),
-  ];
-
-  section4.teamMembers.forEach((member, idx) => {
-    teamRows.push(
-      createDataRow([
-        createDataCell(String(idx + 1), 6, { align: AlignmentType.CENTER, bold: true }),
-        createDataCell(member.name, 24, { bold: true }),
-        createDataCell(member.proposedRole, 26),
-        createDataCell(
-          `${member.experienceYears} ปี${member.startWorkYearBE ? `\n(เริ่มงาน พ.ศ. ${member.startWorkYearBE})` : ''}`,
-          16,
-          { align: AlignmentType.CENTER }
-        ),
-        createDataCell(
-          `${member.education}${member.certifications ? `\n• ใบรับรอง: ${member.certifications}` : ''}`,
-          28
-        ),
-      ])
-    );
-  });
-
-  part4Children.push(
-    new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      rows: teamRows,
-    })
-  );
-
-  // 4.1.2 ประวัติส่วนตัวและประสบการณ์การทำงานรายบุคคล (Detailed Curriculum Vitae - CV)
-  part4Children.push(
-    new Paragraph({ spacing: { before: 240, after: 120 } }),
-    createH3('4.1.2 ประวัติส่วนตัวและประสบการณ์การทำงานรายบุคคล (Curriculum Vitae - CV)'),
-    ...createBodyParagraphs(
-      'คณะผู้ดำเนินงานที่ได้รับการคัดเลือกเข้าร่วมโครงการ มีคุณวุฒิ ประสบการณ์ และประวัติด้านวิชาชีพตรงตามขอบเขตงาน (TOR) โดยมีรายละเอียดประวัติส่วนตัวและผลงานรายบุคคลดังต่อไปนี้'
-    )
-  );
-
-  section4.teamMembers.forEach((member, idx) => {
-    // ซ้าย: รูปถ่าย 1.5 นิ้ว (กว้าง ~108 pt, สูง 144 pt ในสัดส่วน 3:4)
-    let photoParagraph: Paragraph;
-    if (member.photoUrl) {
-      try {
-        const imgType = member.photoUrl.startsWith('data:image/png') ? 'png' : 'jpg';
-        photoParagraph = new Paragraph({
-          alignment: AlignmentType.CENTER,
-          children: [
-            new ImageRun({
-              type: imgType,
-              data: member.photoUrl,
-              transformation: {
-                width: 108,
-                height: 144,
-              },
-            }),
-          ],
-        });
-      } catch (e) {
-        console.error('Failed to parse member photo base64:', e);
-        photoParagraph = new Paragraph({
-          alignment: AlignmentType.CENTER,
-          spacing: { before: 180, after: 180 },
-          children: [
-            new TextRun({
-              text: '[ รูปถ่าย 1.5 นิ้ว ]',
-              font: FONT_FAMILY,
-              size: 20,
-              color: COLOR_MUTED,
-            }),
-          ],
-        });
-      }
-    } else {
-      photoParagraph = new Paragraph({
-        alignment: AlignmentType.CENTER,
-        spacing: { before: 180, after: 180 },
-        children: [
-          new TextRun({
-            text: '[ รูปถ่ายขนาด 1.5 นิ้ว ]\n(หน้าตรงทางการ)',
-            font: FONT_FAMILY,
-            size: 20,
-            color: COLOR_MUTED,
-          }),
-        ],
-      });
-    }
-
-    const leftPhotoCell = new TableCell({
-      width: { size: 24, type: WidthType.PERCENTAGE },
-      verticalAlign: AlignmentType.CENTER,
-      shading: { fill: 'F8FAFC' },
-      margins: { top: 120, bottom: 120, left: 120, right: 120 },
-      borders: {
-        top: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
-        bottom: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
-        left: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
-        right: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
-      },
-      children: [
-        photoParagraph,
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          spacing: { before: 60 },
-          children: [
-            new TextRun({
-              text: `ลำดับที่ ${idx + 1}`,
-              font: FONT_FAMILY,
-              size: 20,
-              bold: true,
-              color: COLOR_PRIMARY,
-            }),
-          ],
-        }),
-      ],
-    });
-
-    // ขวา: รายละเอียดประวัติส่วนตัว
-    const rightInfoParagraphs: Paragraph[] = [
-      new Paragraph({
-        spacing: { before: 40, after: 60 },
-        children: [
-          new TextRun({
-            text: member.name,
-            font: FONT_FAMILY,
-            size: 28, // 14pt bold
-            bold: true,
-            color: COLOR_PRIMARY,
-          }),
-        ],
-      }),
-      new Paragraph({
-        spacing: { before: 30, after: 30 },
-        children: [
-          new TextRun({ text: '• ตำแหน่งในโครงการ: ', font: FONT_FAMILY, size: 24, bold: true, color: COLOR_TEXT }),
-          new TextRun({ text: member.proposedRole, font: FONT_FAMILY, size: 24, bold: true, color: COLOR_SECONDARY }),
-        ],
-      }),
-      new Paragraph({
-        spacing: { before: 30, after: 30 },
-        children: [
-          new TextRun({ text: '• อายุงานและประสบการณ์: ', font: FONT_FAMILY, size: 24, bold: true, color: COLOR_TEXT }),
-          new TextRun({
-            text: `${member.experienceYears} ปี${member.startWorkYearBE ? ` (เริ่มงานปี พ.ศ. ${member.startWorkYearBE})` : ''}`,
-            font: FONT_FAMILY,
-            size: 24,
-            color: COLOR_TEXT,
-          }),
-        ],
-      }),
-      new Paragraph({
-        spacing: { before: 30, after: 30 },
-        children: [
-          new TextRun({ text: '• วุฒิการศึกษา: ', font: FONT_FAMILY, size: 24, bold: true, color: COLOR_TEXT }),
-          new TextRun({ text: member.education, font: FONT_FAMILY, size: 24, color: COLOR_TEXT }),
-        ],
-      }),
-      new Paragraph({
-        spacing: { before: 30, after: 30 },
-        children: [
-          new TextRun({ text: '• ใบรับรองมาตรฐานวิชาชีพ: ', font: FONT_FAMILY, size: 24, bold: true, color: COLOR_TEXT }),
-          new TextRun({ text: member.certifications || '-', font: FONT_FAMILY, size: 24, color: COLOR_TEXT }),
-        ],
-      }),
-      new Paragraph({
-        spacing: { before: 40, after: 30 },
-        children: [
-          new TextRun({ text: '• ประวัติส่วนตัว: ', font: FONT_FAMILY, size: 24, bold: true, color: COLOR_TEXT }),
-          new TextRun({
-            text: member.personalBio || 'มีความรู้ความสามารถและประสบการณ์ตรงในการพัฒนาระบบเทคโนโลยีสารสนเทศภาครัฐ',
-            font: FONT_FAMILY,
-            size: 24,
-            color: COLOR_TEXT,
-          }),
-        ],
-      }),
-      new Paragraph({
-        spacing: { before: 30, after: 30 },
-        children: [
-          new TextRun({ text: '• หน้าที่ความรับผิดชอบในโครงการ: ', font: FONT_FAMILY, size: 24, bold: true, color: COLOR_TEXT }),
-          new TextRun({ text: member.responsibilities, font: FONT_FAMILY, size: 24, color: COLOR_TEXT }),
-        ],
-      }),
-      new Paragraph({
-        spacing: { before: 30, after: 30 },
-        children: [
-          new TextRun({ text: '• ประสบการณ์และผลงานเด่น: ', font: FONT_FAMILY, size: 24, bold: true, color: COLOR_TEXT }),
-          new TextRun({ text: member.highlightProjects, font: FONT_FAMILY, size: 24, color: COLOR_TEXT }),
-        ],
-      }),
-    ];
-
-    const rightInfoCell = new TableCell({
-      width: { size: 76, type: WidthType.PERCENTAGE },
-      margins: { top: 120, bottom: 120, left: 160, right: 120 },
-      borders: {
-        top: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
-        bottom: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
-        left: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
-        right: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
-      },
-      children: rightInfoParagraphs,
-    });
-
-    const memberProfileTable = new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      rows: [
-        new TableRow({
-          children: [leftPhotoCell, rightInfoCell],
-        }),
-      ],
-    });
-
-    part4Children.push(
-      memberProfileTable,
-      new Paragraph({ spacing: { before: 120, after: 120 } })
-    );
-  });
-
-  part4Children.push(
-    createH2('4.2 แผนการบริหารจัดการความเสี่ยงโครงการ (Risk Management Plan)'),
-    ...createBodyParagraphs(section4.riskManagementOverview)
-  );
-
-  const riskRows = [
-    createHeaderRow([
-      createHeaderCell('หมวดหมู่', 14),
-      createHeaderCell('ประเด็นความเสี่ยง', 24),
-      createHeaderCell('โอกาส x ผลกระทบ', 14),
-      createHeaderCell('มาตรการป้องกันและลดความเสี่ยง (Mitigation)', 26),
-      createHeaderCell('แผนรองรับกรณีเกิดเหตุ (Contingency)', 22),
-    ]),
-  ];
-
-  section4.riskItems.forEach((risk) => {
-    riskRows.push(
-      createDataRow([
-        createDataCell(risk.category, 14, { bold: true }),
-        createDataCell(risk.riskTitle, 24),
-        createDataCell(`${risk.likelihood} / ${risk.impact}`, 14, { align: AlignmentType.CENTER }),
-        createDataCell(risk.mitigationPlan, 26),
-        createDataCell(risk.contingencyPlan, 22),
-      ])
-    );
-  });
-
-  part4Children.push(
-    new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      rows: riskRows,
-    })
-  );
-
-  // 4.3 ตารางเปรียบเทียบข้อเสนอโครงการกับข้อกำหนด TOR (Compliance Matrix)
-  part4Children.push(
-    createH2('4.3 ตารางเปรียบเทียบข้อเสนอโครงการกับข้อกำหนดของหน่วยงาน (TOR Compliance Matrix)'),
-    ...createBodyParagraphs(
-      section4.complianceMatrixOverview ||
-        'บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด ยืนยันการปฏิบัติตามข้อกำหนดในขอบเขตงาน (TOR) ทุกประการ โดยในบางรายการสำคัญ บริษัทฯ ได้นำเสนอเทคโนโลยีและมาตรฐานที่ยกระดับให้มีประสิทธิภาพและความมั่นคงปลอดภัยสูงกว่าเกณฑ์ที่ TOR กำหนด ดังรายละเอียดต่อไปนี้'
-    )
-  );
-
-  const complianceRows = [
-    createHeaderRow([
-      createHeaderCell('ข้อกำหนดตามประกาศจัดจ้าง (TOR)', 40),
-      createHeaderCell('การดำเนินการ', 22),
-      createHeaderCell('หมายเหตุ / รายละเอียดที่เสนอดีกว่า TOR', 38),
-    ]),
-  ];
-
-  (section1.scopeItems || []).forEach((item) => {
-    const isExceed = item.complianceStatus === 'exceed';
-    const actionText = isExceed
-      ? 'ยอมรับและเสนอแนวทางดีกว่า TOR'
-      : 'ยอมรับและดำเนินการตาม TOR';
-    const noteText = isExceed
-      ? (item.complianceNote || 'บริษัทฯ เสนอแนวทาง เทคโนโลยี และระดับมาตรฐานการบริการ (SLA) ที่สูงกว่าเกณฑ์ที่กำหนด')
-      : (item.complianceNote || '-');
-
-    complianceRows.push(
-      createDataRow([
-        createDataCell(
-          (item.requirement && item.requirement !== item.title)
-            ? `${formatTorClauseNumber(item.clauseNumber)} ${item.title}\n• ${item.requirement}`
-            : `${formatTorClauseNumber(item.clauseNumber)} ${item.title || item.requirement}`,
-          40,
-          { bold: item.level === 1 }
-        ),
-        createDataCell(
-          actionText,
-          22,
-          {
-            align: AlignmentType.CENTER,
-            bold: true,
-            bg: isExceed ? 'FEF3C7' : 'EFF6FF',
-          }
-        ),
-        createDataCell(
-          noteText,
-          38,
-          {
-            bold: isExceed,
-          }
-        ),
-      ])
-    );
-  });
-
-  part4Children.push(
-    new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      rows: complianceRows,
-    })
-  );
-
-  // =========================================================================
-  // SECTION 5A (PORTRAIT - แนวตั้ง): 5.1 ข้อมูลบริษัท, โลโก้, รูปสำนักงาน, 5.2 มาตรฐาน
-  // =========================================================================
-  const part5AChildren: (Paragraph | Table)[] = [];
-
-  part5AChildren.push(
-    createSectionHeader('ส่วนที่ 5', 'ประวัติและประสบการณ์ของบริษัทที่เกี่ยวข้อง'),
-    createH2('5.1 ข้อมูลทั่วไปของ บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด')
-  );
-
-  // Logo & Office images in Section 5.1
-  if (section5.companyLogoUrl) {
-    try {
-      const logoBytes = base64ToUint8Array(section5.companyLogoUrl);
-      part5AChildren.push(
-        new Paragraph({
-          alignment: AlignmentType.LEFT,
-          spacing: { before: 80, after: 120 },
-          children: [
-            new ImageRun({
-              data: logoBytes,
-              transformation: { width: 160, height: 70 },
-            } as any),
-          ],
-        })
-      );
-    } catch (e) {
-      console.warn('Failed to embed company logo', e);
-    }
-  }
-
-  part5AChildren.push(
-    ...createBodyParagraphs(section5.companyProfile),
-    createP(`ทุนจดทะเบียน: ${section5.registeredCapital}`, { firstLineIndent: 450, align: AlignmentType.LEFT, spaceAfter: 60 }),
-    createP(`วิสัยทัศน์และพันธกิจ: ${section5.visionMission}`, { firstLineIndent: 450, align: AlignmentType.LEFT, spaceAfter: 100 })
-  );
-
-  if (section5.companyOfficeImageUrl) {
-    try {
-      const officeBytes = base64ToUint8Array(section5.companyOfficeImageUrl);
-      part5AChildren.push(
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          spacing: { before: 100, after: 60 },
-          children: [
-            new ImageRun({
-              data: officeBytes,
-              transformation: { width: 480, height: 220 },
-            } as any),
-          ],
-        }),
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          spacing: { after: 140 },
-          children: [
-            new TextRun({
-              text: section5.companyOfficeImageCaption || 'ภาพสำนักงานและสถานที่ปฏิบัติงาน บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด',
-              font: FONT_FAMILY,
-              size: 24,
-              italics: true,
-              color: COLOR_MUTED,
-            }),
-          ],
-        })
-      );
-    } catch (e) {
-      console.warn('Failed to embed office image', e);
-    }
-  }
-
-  part5AChildren.push(
-    createH2('5.2 มาตรฐานและการรับรองคุณภาพ')
-  );
-
-  section5.certifications.forEach((cert) => {
-    part5AChildren.push(createP(`✓ ${cert}`, { spaceAfter: 60, firstLineIndent: 450, align: AlignmentType.LEFT }));
-  });
-
-  // =========================================================================
-  // SECTION 5B (LANDSCAPE - แนวนอน): 5.3 ผลงานและประสบการณ์ที่เกี่ยวข้อง (ตารางสัญญาจ้าง)
-  // =========================================================================
-  const part5BChildren: (Paragraph | Table)[] = [];
-
-  const currentYearBE = 2568;
-  const selectedProjects = (section5.pastProjects || []).filter((p) => p.isSelected);
-
-  const torReferenceProjects = selectedProjects.filter(
-    (p) => (p.projectType || 'tor_reference') === 'tor_reference' &&
-      (section5.maxYearsFilter > 0 ? currentYearBE - p.completionYearBE <= section5.maxYearsFilter : true)
-  );
-
-  const supplementaryProjects = selectedProjects.filter(
-    (p) => p.projectType === 'supplementary'
-  );
-
-  // 5.3.1 ผลงานอ้างอิงหลักตามเกณฑ์ TOR
-  part5BChildren.push(
-    createH2(`5.3 ผลงานและประสบการณ์ที่เกี่ยวข้อง`),
-    new Paragraph({
-      heading: HeadingLevel.HEADING_3,
-      spacing: { before: 140, after: 80, line: 240, lineRule: LineRuleType.AUTO },
-      children: [
-        new TextRun({
-          text: `5.3.1 ผลงานอ้างอิงหลักตามเกณฑ์ TOR (ย้อนหลังไม่เกิน ${section5.maxYearsFilter} ปี พ.ศ. ${currentYearBE - section5.maxYearsFilter} - ${currentYearBE})`,
-          font: FONT_FAMILY,
-          size: 30,
-          bold: true,
-          color: COLOR_PRIMARY,
-        }),
-      ],
-    }),
-    ...createBodyParagraphs(`บริษัทฯ ขอเสนอผลงานที่มีขอบเขตงานและลักษณะงานสอดคล้องกับข้อกำหนดของ TOR โดยเป็นผลงานที่แล้วเสร็จย้อนหลังไม่เกิน ${section5.maxYearsFilter} ปี พร้อมทั้งได้แนบสำเนาสัญญาจ้างและหนังสือรับรองผลงานไว้ในภาคผนวก ก ของข้อเสนอนี้อย่างครบถ้วน`)
-  );
-
-  const torRefRows = [
-    createHeaderRow([
-      createHeaderCell('ลำดับ', 5),
-      createHeaderCell('ชื่อโครงการและลักษณะงาน', 33),
-      createHeaderCell('หน่วยงานผู้ว่าจ้าง', 18),
-      createHeaderCell('ปี พ.ศ.', 8),
-      createHeaderCell('มูลค่าสัญญา (บาท)', 18),
-      createHeaderCell('หลักฐานสัญญา/รับรอง', 18),
-    ]),
-  ];
-
-  torReferenceProjects.forEach((proj, idx) => {
-    const hasCert = !!proj.certificateFileUrl;
-    torRefRows.push(
-      createDataRow([
-        createDataCell(String(idx + 1), 5, { align: AlignmentType.CENTER, bold: true }),
-        createDataCell(`${proj.projectName}\n• ${proj.description}`, 33, { bold: true }),
-        createDataCell(proj.clientName, 18),
-        createDataCell(String(proj.completionYearBE), 8, { align: AlignmentType.CENTER }),
-        createDataCell(`${proj.contractValue.toLocaleString()} บาท`, 18, { align: AlignmentType.RIGHT, bold: true }),
-        createDataCell(hasCert ? '✓ มีแนบในภาคผนวก ก' : 'หนังสือรับรองผลงาน', 18, { align: AlignmentType.CENTER, bold: hasCert }),
-      ])
-    );
-  });
-
-  part5BChildren.push(
-    new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      rows: torRefRows,
-    })
-  );
-
-  // Embed project screenshot images if present (Landscape width up to 560px)
-  torReferenceProjects.forEach((proj, idx) => {
-    if (proj.projectImageUrl) {
-      try {
-        const pImgBytes = base64ToUint8Array(proj.projectImageUrl);
-        part5BChildren.push(
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing: { before: 120, after: 40 },
-            children: [
-              new ImageRun({
-                data: pImgBytes,
-                transformation: { width: 560, height: 250 },
-              } as any),
-            ],
-          }),
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing: { after: 120 },
-            children: [
-              new TextRun({
-                text: proj.projectImageCaption || `ภาพที่ 5-1.${idx + 1} ภาพหน้าจอระบบ/ผลงาน: ${proj.projectName}`,
-                font: FONT_FAMILY,
-                size: 24,
-                italics: true,
-                color: COLOR_MUTED,
-              }),
-            ],
-          })
-        );
-      } catch (e) {
-        console.warn('Failed to embed project image', e);
-      }
-    }
-  });
-
-  // 5.3.2 ผลงานเสริมที่สอดคล้อง (ขึ้นหน้าใหม่ตามความต้องการของผู้ใช้)
-  if (supplementaryProjects.length > 0) {
-    part5BChildren.push(
-      new Paragraph({
-        pageBreakBefore: true,
-        heading: HeadingLevel.HEADING_3,
-        spacing: { before: 200, after: 80, line: 240, lineRule: LineRuleType.AUTO },
-        children: [
-          new TextRun({
-            text: `5.3.2 ผลงานและประสบการณ์เสริมที่สอดคล้องกับงานจ้างโครงการนี้ (Supplementary Experience)`,
-            font: FONT_FAMILY,
-            size: 30,
-            bold: true,
-            color: COLOR_PRIMARY,
-          }),
-        ],
-      }),
-      ...createBodyParagraphs('ผลงานเพิ่มเติมที่มีกิจกรรม เทคโนโลยี หรือแนวทางการดำเนินงานที่สอดคล้องและเป็นประโยชน์ต่อโครงการจ้างนี้เพื่อประกอบการพิจารณาความพร้อมและความเชี่ยวชาญ')
-    );
-
-    const suppRows = [
-      createHeaderRow([
-        createHeaderCell('ลำดับ', 5),
-        createHeaderCell('ชื่อโครงการและผู้ว่าจ้าง', 27),
-        createHeaderCell('กิจกรรมและประเด็นที่สอดคล้องกับงานจ้างโครงการนี้', 44),
-        createHeaderCell('ปี พ.ศ.', 8),
-        createHeaderCell('มูลค่าสัญญา', 16),
-      ]),
-    ];
-
-    supplementaryProjects.forEach((proj, idx) => {
-      suppRows.push(
-        createDataRow([
-          createDataCell(String(idx + 1), 5, { align: AlignmentType.CENTER, bold: true }),
-          createDataCell(`${proj.projectName}\n• ผู้ว่าจ้าง: ${proj.clientName}`, 27, { bold: true }),
-          createDataCell(proj.relevanceNote || proj.description, 44),
-          createDataCell(String(proj.completionYearBE), 8, { align: AlignmentType.CENTER }),
-          createDataCell(`${proj.contractValue.toLocaleString()} บาท`, 16, { align: AlignmentType.RIGHT }),
-        ])
-      );
-    });
-
-    part5BChildren.push(
-      new Table({
-        width: { size: 100, type: WidthType.PERCENTAGE },
-        rows: suppRows,
-      })
-    );
-
-    supplementaryProjects.forEach((proj, idx) => {
-      if (proj.projectImageUrl) {
         try {
-          const pImgBytes = base64ToUint8Array(proj.projectImageUrl);
-          part5BChildren.push(
+          const conceptualBytes = base64ToUint8Array(conceptualImageBase64);
+          part3Children.push(
             new Paragraph({
               alignment: AlignmentType.CENTER,
-              spacing: { before: 120, after: 40 },
+              spacing: { before: 140, after: 80 },
               children: [
                 new ImageRun({
-                  data: pImgBytes,
-                  transformation: { width: 560, height: 250 },
+                  data: conceptualBytes,
+                  transformation: { width: 620, height: 300 },
                 } as any),
               ],
             }),
             new Paragraph({
               alignment: AlignmentType.CENTER,
-              spacing: { after: 120 },
+              spacing: { after: 200 },
               children: [
                 new TextRun({
-                  text: proj.projectImageCaption || `ภาพที่ 5-2.${idx + 1} ภาพผลงานเสริม: ${proj.projectName}`,
+                  text: section3.conceptualDiagramCaption,
                   font: FONT_FAMILY,
-                  size: 24,
+                  size: 26,
                   italics: true,
                   color: COLOR_MUTED,
                 }),
@@ -1619,71 +895,858 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
             })
           );
         } catch (e) {
-          console.warn('Failed to embed supplementary project image', e);
+          console.error('Failed to embed conceptual diagram', e);
         }
+      } else if (h.id === 's3_methodology') {
+        part3Children.push(
+          createH2(`${numPrefix} วิธีการดำเนินงาน`)
+        );
+
+        (section1.scopeItems || []).forEach((item, idx) => {
+          part3Children.push(
+            new Paragraph({
+              heading: HeadingLevel.HEADING_3,
+              spacing: { before: 200, after: 100, line: 240, lineRule: LineRuleType.AUTO },
+              children: [
+                new TextRun({
+                  text: `${numPrefix}.${idx + 1} ${formatTorClauseNumber(item.clauseNumber)}: ${item.title}`,
+                  font: FONT_FAMILY,
+                  size: 32,
+                  bold: true,
+                  color: COLOR_PRIMARY,
+                }),
+              ],
+            })
+          );
+
+          // เนื้อหาคำอธิบายพรรณาวิธีการดำเนินงาน, บูลเล็ตพ้อยต์, หรือตารางขั้นตอนการทำงาน
+          part3Children.push(
+            ...renderMethodologyParagraphsAndTables(item.proposedMethodology)
+          );
+
+          // แบบที่ 1: ภาพอธิบายการทำงาน 1 รูป กว้าง 6 นิ้ว (576 px) จัดกึ่งกลาง
+          const showSingle =
+            (item.imageLayout === 'single_centered' || item.imageLayout === 'both') &&
+            Boolean(item.singleImage?.url);
+
+          if (showSingle && item.singleImage?.url) {
+            try {
+              const imgBytes = base64ToUint8Array(item.singleImage.url);
+              part3Children.push(
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  spacing: { before: 140, after: 60 },
+                  children: [
+                    new ImageRun({
+                      data: imgBytes,
+                      transformation: { width: 576, height: 260 }, // กว้าง 6 นิ้ว (576 px)
+                    } as any),
+                  ],
+                }),
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  spacing: { after: 140 },
+                  children: [
+                    new TextRun({
+                      text: item.singleImage.caption || `ภาพที่ ${numPrefix}.${idx + 1}-1 ภาพอธิบายขั้นตอนและวิธีการดำเนินงาน`,
+                      font: FONT_FAMILY,
+                      size: 26,
+                      italics: true,
+                      color: COLOR_MUTED,
+                    }),
+                  ],
+                })
+              );
+            } catch (e) {
+              console.error('Failed to embed single image', e);
+            }
+          }
+
+          // แบบที่ 2: ภาพประกอบการทำงาน แทรกในตาราง 2 คอลัมน์ ขนาดภาพละ กว้าง 3 นิ้ว (288 px)
+          const showTwoCols =
+            (item.imageLayout === 'two_columns' || item.imageLayout === 'both') &&
+            Boolean(item.twoColumnImageLeft?.url || item.twoColumnImageRight?.url);
+
+          if (showTwoCols) {
+            try {
+              const leftCellChildren: Paragraph[] = [];
+              const rightCellChildren: Paragraph[] = [];
+
+              if (item.twoColumnImageLeft?.url) {
+                const leftBytes = base64ToUint8Array(item.twoColumnImageLeft.url);
+                leftCellChildren.push(
+                  new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    spacing: { after: 40 },
+                    children: [
+                      new ImageRun({
+                        data: leftBytes,
+                        transformation: { width: 288, height: 160 }, // กว้าง 3 นิ้ว (288 px)
+                      } as any),
+                    ],
+                  }),
+                  new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    children: [
+                      new TextRun({
+                        text: item.twoColumnImageLeft.caption || 'ภาพประกอบ (กว้าง 3 นิ้ว)',
+                        font: FONT_FAMILY,
+                        size: 24,
+                        italics: true,
+                        color: COLOR_MUTED,
+                      }),
+                    ],
+                  })
+                );
+              } else {
+                leftCellChildren.push(new Paragraph({ children: [] }));
+              }
+
+              if (item.twoColumnImageRight?.url) {
+                const rightBytes = base64ToUint8Array(item.twoColumnImageRight.url);
+                rightCellChildren.push(
+                  new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    spacing: { after: 40 },
+                    children: [
+                      new ImageRun({
+                        data: rightBytes,
+                        transformation: { width: 288, height: 160 }, // กว้าง 3 นิ้ว (288 px)
+                      } as any),
+                    ],
+                  }),
+                  new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    children: [
+                      new TextRun({
+                        text: item.twoColumnImageRight.caption || 'ภาพประกอบ (กว้าง 3 นิ้ว)',
+                        font: FONT_FAMILY,
+                        size: 24,
+                        italics: true,
+                        color: COLOR_MUTED,
+                      }),
+                    ],
+                  })
+                );
+              } else {
+                rightCellChildren.push(new Paragraph({ children: [] }));
+              }
+
+              const twoColTable = new Table({
+                width: { size: 100, type: WidthType.PERCENTAGE },
+                borders: {
+                  top: { style: BorderStyle.NONE },
+                  bottom: { style: BorderStyle.NONE },
+                  left: { style: BorderStyle.NONE },
+                  right: { style: BorderStyle.NONE },
+                  insideHorizontal: { style: BorderStyle.NONE },
+                  insideVertical: { style: BorderStyle.NONE },
+                },
+                rows: [
+                  new TableRow({
+                    children: [
+                      new TableCell({
+                        width: { size: 50, type: WidthType.PERCENTAGE },
+                        margins: { top: 60, bottom: 60, left: 60, right: 60 },
+                        children: leftCellChildren,
+                      }),
+                      new TableCell({
+                        width: { size: 50, type: WidthType.PERCENTAGE },
+                        margins: { top: 60, bottom: 60, left: 60, right: 60 },
+                        children: rightCellChildren,
+                      }),
+                    ],
+                  }),
+                ],
+              });
+
+              part3Children.push(twoColTable);
+            } catch (e) {
+              console.error('Failed to embed two-column images', e);
+            }
+          }
+
+          part3Children.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
+        });
       }
     });
   }
 
   // =========================================================================
-  // SECTION 6 (PORTRAIT - แนวตั้ง): ภาคผนวก ก & ปกหลัง
+  // SECTION 4 (LANDSCAPE - แนวนอน): 4.1 คณะผู้ดำเนินงาน, 4.2 บริหารความเสี่ยง, 4.3 Compliance Matrix
   // =========================================================================
-  const part6Children: (Paragraph | Table)[] = [];
-
-  const projectsWithCerts = torReferenceProjects.filter((p) => !!p.certificateFileUrl);
-  if (projectsWithCerts.length > 0) {
-    part6Children.push(
-      createH1('ภาคผนวก ก: สำเนาสัญญาจ้างและหนังสือรับรองผลงานอ้างอิงตามเกณฑ์ TOR'),
-      ...createBodyParagraphs('เอกสารสำเนาสัญญาจ้างและหนังสือรับรองผลงานโครงการที่แล้วเสร็จ เพื่อประกอบการพิจารณาคุณสมบัติและผลงานตามประกาศจัดจ้างของหน่วยงานภาครัฐ')
+  const part4Children: (Paragraph | Table)[] = [];
+  const s4Config = docStructure.sections.find((s) => s.id === 'section4');
+  if (s4Config && s4Config.enabled) {
+    part4Children.push(
+      createSectionHeader('ส่วนที่ 4', 'คณะผู้ดำเนินงาน แนวทางบริหารความเสี่ยง และตารางเปรียบเทียบข้อเสนอ')
     );
 
-    projectsWithCerts.forEach((proj, idx) => {
-      part6Children.push(
-        new Paragraph({
-          heading: HeadingLevel.HEADING_2,
-          spacing: { before: 180, after: 60 },
-          children: [
-            new TextRun({
-              text: `เอกสารแนบ ก.${idx + 1}: ${proj.projectName}`,
-              font: FONT_FAMILY,
-              size: 28,
-              bold: true,
-              color: COLOR_PRIMARY,
-            }),
-          ],
-        }),
-        createP(`หน่วยงานผู้ว่าจ้าง: ${proj.clientName} | ปีที่แล้วเสร็จ: พ.ศ. ${proj.completionYearBE} | มูลค่าสัญญา: ${proj.contractValue.toLocaleString()} บาท`, { spaceAfter: 80, align: AlignmentType.LEFT })
-      );
+    const activeS4Headings = s4Config.headings
+      .filter((h) => h.enabled)
+      .sort((a, b) => a.order - b.order);
 
-      try {
-        const certBytes = base64ToUint8Array(proj.certificateFileUrl!);
-        part6Children.push(
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing: { before: 80, after: 60 },
-            children: [
-              new ImageRun({
-                data: certBytes,
-                transformation: { width: 520, height: 420 },
-              } as any),
-            ],
-          }),
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing: { after: 200 },
-            children: [
-              new TextRun({
-                text: `สำเนาสัญญาจ้างหรือหนังสือรับรองผลงาน: ${proj.projectName}`,
-                font: FONT_FAMILY,
-                size: 24,
-                italics: true,
-                color: COLOR_MUTED,
-              }),
-            ],
+    activeS4Headings.forEach((h, hIdx) => {
+      const numPrefix = autoRenumber ? `4.${hIdx + 1}` : h.originalCode;
+      if (h.id === 's4_team_overview') {
+        part4Children.push(
+          createH2(`${numPrefix} โครงสร้างบุคลากรและคณะผู้ดำเนินงาน`),
+          ...createBodyParagraphs(section4.teamOverview)
+        );
+
+        const teamRows = [
+          createHeaderRow([
+            createHeaderCell('ลำดับ', 6),
+            createHeaderCell('ชื่อ - นามสกุล', 24),
+            createHeaderCell('ตำแหน่งในโครงการ', 26),
+            createHeaderCell('อายุงาน', 16),
+            createHeaderCell('วุฒิการศึกษา', 28),
+          ]),
+        ];
+
+        section4.teamMembers.forEach((member, idx) => {
+          teamRows.push(
+            createDataRow([
+              createDataCell(String(idx + 1), 6, { align: AlignmentType.CENTER, bold: true }),
+              createDataCell(member.name, 24, { bold: true }),
+              createDataCell(member.proposedRole, 26),
+              createDataCell(
+                `${member.experienceYears} ปี${member.startWorkYearBE ? `\n(เริ่มงาน พ.ศ. ${member.startWorkYearBE})` : ''}`,
+                16,
+                { align: AlignmentType.CENTER }
+              ),
+              createDataCell(
+                `${member.education}${member.certifications ? `\n• ใบรับรอง: ${member.certifications}` : ''}`,
+                28
+              ),
+            ])
+          );
+        });
+
+        part4Children.push(
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            rows: teamRows,
           })
         );
-      } catch (e) {
-        console.warn('Failed to embed certificate image in appendix', e);
+      } else if (h.id === 's4_team_cv') {
+        // 4.1.2 ประวัติส่วนตัวและประสบการณ์การทำงานรายบุคคล (Detailed Curriculum Vitae - CV)
+        part4Children.push(
+          new Paragraph({ spacing: { before: 240, after: 120 } }),
+          createH3(`${numPrefix} ประวัติส่วนตัวและประสบการณ์การทำงานรายบุคคล (Curriculum Vitae - CV)`),
+          ...createBodyParagraphs(
+            'คณะผู้ดำเนินงานที่ได้รับการคัดเลือกเข้าร่วมโครงการ มีคุณวุฒิ ประสบการณ์ และประวัติด้านวิชาชีพตรงตามขอบเขตงาน (TOR) โดยมีรายละเอียดประวัติส่วนตัวและผลงานรายบุคคลดังต่อไปนี้'
+          )
+        );
+
+        section4.teamMembers.forEach((member, idx) => {
+          let photoParagraph: Paragraph;
+          if (member.photoUrl) {
+            try {
+              const imgType = member.photoUrl.startsWith('data:image/png') ? 'png' : 'jpg';
+              photoParagraph = new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [
+                  new ImageRun({
+                    type: imgType,
+                    data: member.photoUrl,
+                    transformation: {
+                      width: 108,
+                      height: 144,
+                    },
+                  }),
+                ],
+              });
+            } catch (e) {
+              console.error('Failed to parse member photo base64:', e);
+              photoParagraph = new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 180, after: 180 },
+                children: [
+                  new TextRun({
+                    text: '[ รูปถ่าย 1.5 นิ้ว ]',
+                    font: FONT_FAMILY,
+                    size: 20,
+                    color: COLOR_MUTED,
+                  }),
+                ],
+              });
+            }
+          } else {
+            photoParagraph = new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { before: 180, after: 180 },
+              children: [
+                new TextRun({
+                  text: '[ รูปถ่ายขนาด 1.5 นิ้ว ]\n(หน้าตรงทางการ)',
+                  font: FONT_FAMILY,
+                  size: 20,
+                  color: COLOR_MUTED,
+                }),
+              ],
+            });
+          }
+
+          const leftPhotoCell = new TableCell({
+            width: { size: 24, type: WidthType.PERCENTAGE },
+            verticalAlign: AlignmentType.CENTER,
+            shading: { fill: 'F8FAFC' },
+            margins: { top: 120, bottom: 120, left: 120, right: 120 },
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
+              bottom: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
+              left: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
+              right: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
+            },
+            children: [
+              photoParagraph,
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 60 },
+                children: [
+                  new TextRun({
+                    text: `ลำดับที่ ${idx + 1}`,
+                    font: FONT_FAMILY,
+                    size: 20,
+                    bold: true,
+                    color: COLOR_PRIMARY,
+                  }),
+                ],
+              }),
+            ],
+          });
+
+          const rightInfoParagraphs: Paragraph[] = [
+            new Paragraph({
+              spacing: { before: 40, after: 60 },
+              children: [
+                new TextRun({
+                  text: member.name,
+                  font: FONT_FAMILY,
+                  size: 28,
+                  bold: true,
+                  color: COLOR_PRIMARY,
+                }),
+              ],
+            }),
+            new Paragraph({
+              spacing: { before: 30, after: 30 },
+              children: [
+                new TextRun({ text: '• ตำแหน่งในโครงการ: ', font: FONT_FAMILY, size: 24, bold: true, color: COLOR_TEXT }),
+                new TextRun({ text: member.proposedRole, font: FONT_FAMILY, size: 24, bold: true, color: COLOR_SECONDARY }),
+              ],
+            }),
+            new Paragraph({
+              spacing: { before: 30, after: 30 },
+              children: [
+                new TextRun({ text: '• อายุงานและประสบการณ์: ', font: FONT_FAMILY, size: 24, bold: true, color: COLOR_TEXT }),
+                new TextRun({
+                  text: `${member.experienceYears} ปี${member.startWorkYearBE ? ` (เริ่มงานปี พ.ศ. ${member.startWorkYearBE})` : ''}`,
+                  font: FONT_FAMILY,
+                  size: 24,
+                  color: COLOR_TEXT,
+                }),
+              ],
+            }),
+            new Paragraph({
+              spacing: { before: 30, after: 30 },
+              children: [
+                new TextRun({ text: '• วุฒิการศึกษา: ', font: FONT_FAMILY, size: 24, bold: true, color: COLOR_TEXT }),
+                new TextRun({ text: member.education, font: FONT_FAMILY, size: 24, color: COLOR_TEXT }),
+              ],
+            }),
+            new Paragraph({
+              spacing: { before: 30, after: 30 },
+              children: [
+                new TextRun({ text: '• ใบรับรองมาตรฐานวิชาชีพ: ', font: FONT_FAMILY, size: 24, bold: true, color: COLOR_TEXT }),
+                new TextRun({ text: member.certifications || '-', font: FONT_FAMILY, size: 24, color: COLOR_TEXT }),
+              ],
+            }),
+            new Paragraph({
+              spacing: { before: 40, after: 30 },
+              children: [
+                new TextRun({ text: '• ประวัติส่วนตัว: ', font: FONT_FAMILY, size: 24, bold: true, color: COLOR_TEXT }),
+                new TextRun({
+                  text: member.personalBio || 'มีความรู้ความสามารถและประสบการณ์ตรงในการพัฒนาระบบเทคโนโลยีสารสนเทศภาครัฐ',
+                  font: FONT_FAMILY,
+                  size: 24,
+                  color: COLOR_TEXT,
+                }),
+              ],
+            }),
+            new Paragraph({
+              spacing: { before: 30, after: 30 },
+              children: [
+                new TextRun({ text: '• หน้าที่ความรับผิดชอบในโครงการ: ', font: FONT_FAMILY, size: 24, bold: true, color: COLOR_TEXT }),
+                new TextRun({ text: member.responsibilities, font: FONT_FAMILY, size: 24, color: COLOR_TEXT }),
+              ],
+            }),
+            new Paragraph({
+              spacing: { before: 30, after: 30 },
+              children: [
+                new TextRun({ text: '• ประสบการณ์และผลงานเด่น: ', font: FONT_FAMILY, size: 24, bold: true, color: COLOR_TEXT }),
+                new TextRun({ text: member.highlightProjects, font: FONT_FAMILY, size: 24, color: COLOR_TEXT }),
+              ],
+            }),
+          ];
+
+          const rightInfoCell = new TableCell({
+            width: { size: 76, type: WidthType.PERCENTAGE },
+            margins: { top: 120, bottom: 120, left: 160, right: 120 },
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
+              bottom: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
+              left: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
+              right: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' },
+            },
+            children: rightInfoParagraphs,
+          });
+
+          const cvCardTable = new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            rows: [
+              new TableRow({
+                children: [leftPhotoCell, rightInfoCell],
+              }),
+            ],
+          });
+
+          part4Children.push(
+            cvCardTable,
+            new Paragraph({ spacing: { after: 180 }, children: [] })
+          );
+        });
+      } else if (h.id === 's4_risk') {
+        part4Children.push(
+          new Paragraph({ spacing: { before: 200, after: 120 } }),
+          createH2(`${numPrefix} แผนการบริหารจัดการความเสี่ยงโครงการ (Risk Management Plan)`),
+          ...createBodyParagraphs(
+            'เพื่อให้การดำเนินโครงการบรรลุวัตถุประสงค์ตามกรอบระยะเวลาและงบประมาณที่กำหนด บริษัทฯ ได้วิเคราะห์และกำหนดมาตรการบริหารความเสี่ยงครอบคลุมทั้ง 5 มิติดังนี้'
+          )
+        );
+
+        const riskRows = [
+          createHeaderRow([
+            createHeaderCell('หมวดความเสี่ยง', 18),
+            createHeaderCell('ประเด็นความเสี่ยง', 26),
+            createHeaderCell('โอกาส/ผลกระทบ', 16),
+            createHeaderCell('มาตรการป้องกันและแผนรองรับ', 40),
+          ]),
+        ];
+
+        section4.riskItems.forEach((r) => {
+          riskRows.push(
+            createDataRow([
+              createDataCell(r.category, 18, { bold: true }),
+              createDataCell(r.riskTitle, 26),
+              createDataCell(`${r.likelihood} / ${r.impact}`, 16, { align: AlignmentType.CENTER }),
+              createDataCell(r.mitigationPlan, 40),
+            ])
+          );
+        });
+
+        part4Children.push(
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            rows: riskRows,
+          })
+        );
+      } else if (h.id === 's4_compliance') {
+        part4Children.push(
+          new Paragraph({ spacing: { before: 240, after: 120 } }),
+          createH2(`${numPrefix} ตารางเปรียบเทียบข้อเสนอโครงการกับข้อกำหนด TOR (Compliance Matrix)`),
+          ...createBodyParagraphs(
+            section4.complianceMatrixOverview ||
+              'ตารางเปรียบเทียบการตอบสนองข้อกำหนด TOR โดยระบุสถานะการยอมรับปฏิบัติตาม และรายละเอียดข้อเสนอทางเทคนิคที่บริษัทฯ เสนอให้เหนือกว่าเกณฑ์มาตรฐานที่ TOR กำหนด'
+          )
+        );
+
+        const compRows = [
+          createHeaderRow([
+            createHeaderCell('ข้อกำหนดตามประกาศจัดจ้าง (TOR)', 38),
+            createHeaderCell('สถานะการตอบสนอง', 26),
+            createHeaderCell('รายละเอียดข้อเสนอทางเทคนิค / สิ่งที่เสนอดีกว่า TOR', 36),
+          ]),
+        ];
+
+        (section1.scopeItems || []).forEach((item) => {
+          const isExceed = item.complianceStatus === 'exceed';
+          const statusText = isExceed
+            ? '★ ยอมรับและเสนอแนวทางดีกว่า TOR'
+            : '✓ ยอมรับและปฏิบัติตาม TOR ครบถ้วน';
+          const statusColor = isExceed ? 'B45309' : '1E40AF';
+          const noteText =
+            item.complianceNote ||
+            (isExceed ? 'เสนอแนวทางและระดับมาตรฐานสูงกว่าเกณฑ์ที่กำหนด' : 'ปฏิบัติตามมาตรฐาน TOR อย่างเคร่งครัด');
+
+          compRows.push(
+            createDataRow([
+              createDataCell(`${formatTorClauseNumber(item.clauseNumber)}: ${item.title || item.requirement}`, 38, {
+                bold: item.level === 1,
+              }),
+              createDataCell(statusText, 26, {
+                align: AlignmentType.CENTER,
+                bold: true,
+                color: statusColor,
+              }),
+              createDataCell(noteText, 36, {
+                color: isExceed ? 'B45309' : undefined,
+                bold: isExceed,
+              }),
+            ])
+          );
+        });
+
+        part4Children.push(
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            rows: compRows,
+          })
+        );
+      }
+    });
+  }
+
+  // =========================================================================
+  // SECTION 5A (PORTRAIT - แนวตั้ง): 5.1 ข้อมูลบริษัท, โลโก้, รูปสำนักงาน, 5.2 มาตรฐาน
+  // SECTION 5B (LANDSCAPE - แนวนอน): 5.3 ผลงานและประสบการณ์ที่เกี่ยวข้อง (ตารางสัญญาจ้าง)
+  // SECTION 6 (PORTRAIT - แนวตั้ง): ภาคผนวก ก & ปกหลัง
+  // =========================================================================
+  const part5AChildren: (Paragraph | Table)[] = [];
+  const part5BChildren: (Paragraph | Table)[] = [];
+  const part6Children: (Paragraph | Table)[] = [];
+
+  const s5Config = docStructure.sections.find((s) => s.id === 'section5');
+  if (s5Config && s5Config.enabled) {
+    const is5AActive = s5Config.headings.some(
+      (h) => (h.id === 's5_profile' || h.id === 's5_certifications') && h.enabled
+    );
+    if (is5AActive) {
+      part5AChildren.push(
+        createSectionHeader('ส่วนที่ 5', 'ประวัติและประสบการณ์ของบริษัทที่เกี่ยวข้อง')
+      );
+    }
+
+    const activeS5Headings = s5Config.headings
+      .filter((h) => h.enabled)
+      .sort((a, b) => a.order - b.order);
+
+    const currentYearBE = 2568;
+    const selectedProjects = (section5.pastProjects || []).filter((p) => p.isSelected);
+
+    const torReferenceProjects = selectedProjects.filter(
+      (p) => (p.projectType || 'tor_reference') === 'tor_reference' &&
+        (section5.maxYearsFilter > 0 ? currentYearBE - p.completionYearBE <= section5.maxYearsFilter : true)
+    );
+
+    const supplementaryProjects = selectedProjects.filter(
+      (p) => p.projectType === 'supplementary'
+    );
+
+    const has53 = activeS5Headings.some((h) => h.id === 's5_tor_reference' || h.id === 's5_supplementary');
+    if (has53) {
+      part5BChildren.push(
+        createH2('5.3 ผลงานและประสบการณ์ที่เกี่ยวข้อง')
+      );
+    }
+
+    activeS5Headings.forEach((h, hIdx) => {
+      const numPrefix = autoRenumber ? `5.${hIdx + 1}` : h.originalCode;
+      if (h.id === 's5_profile') {
+        part5AChildren.push(
+          createH2(`${numPrefix} ข้อมูลทั่วไปของ บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด`)
+        );
+        if (section5.companyLogoUrl) {
+          try {
+            const logoBytes = base64ToUint8Array(section5.companyLogoUrl);
+            part5AChildren.push(
+              new Paragraph({
+                alignment: AlignmentType.LEFT,
+                spacing: { before: 80, after: 120 },
+                children: [
+                  new ImageRun({
+                    data: logoBytes,
+                    transformation: { width: 160, height: 70 },
+                  } as any),
+                ],
+              })
+            );
+          } catch (e) {
+            console.warn('Failed to embed company logo', e);
+          }
+        }
+
+        part5AChildren.push(
+          ...createBodyParagraphs(section5.companyProfile),
+          createP(`ทุนจดทะเบียน: ${section5.registeredCapital}`, { firstLineIndent: 450, align: AlignmentType.LEFT, spaceAfter: 60 }),
+          createP(`วิสัยทัศน์และพันธกิจ: ${section5.visionMission}`, { firstLineIndent: 450, align: AlignmentType.LEFT, spaceAfter: 100 })
+        );
+
+        if (section5.companyOfficeImageUrl) {
+          try {
+            const officeBytes = base64ToUint8Array(section5.companyOfficeImageUrl);
+            part5AChildren.push(
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 100, after: 60 },
+                children: [
+                  new ImageRun({
+                    data: officeBytes,
+                    transformation: { width: 480, height: 220 },
+                  } as any),
+                ],
+              }),
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 140 },
+                children: [
+                  new TextRun({
+                    text: section5.companyOfficeImageCaption || 'ภาพสำนักงานและสถานที่ปฏิบัติงาน บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด',
+                    font: FONT_FAMILY,
+                    size: 24,
+                    italics: true,
+                    color: COLOR_MUTED,
+                  }),
+                ],
+              })
+            );
+          } catch (e) {
+            console.warn('Failed to embed office image', e);
+          }
+        }
+      } else if (h.id === 's5_certifications') {
+        part5AChildren.push(
+          createH2(`${numPrefix} มาตรฐานและการรับรองคุณภาพ`)
+        );
+        section5.certifications.forEach((cert) => {
+          part5AChildren.push(createP(`✓ ${cert}`, { spaceAfter: 60, firstLineIndent: 450, align: AlignmentType.LEFT }));
+        });
+      } else if (h.id === 's5_tor_reference') {
+        part5BChildren.push(
+          new Paragraph({
+            heading: HeadingLevel.HEADING_3,
+            spacing: { before: 140, after: 80, line: 240, lineRule: LineRuleType.AUTO },
+            children: [
+              new TextRun({
+                text: `${autoRenumber ? '5.3.1' : numPrefix} ผลงานอ้างอิงหลักตามเกณฑ์ TOR (ย้อนหลังไม่เกิน ${section5.maxYearsFilter} ปี พ.ศ. ${currentYearBE - section5.maxYearsFilter} - ${currentYearBE})`,
+                font: FONT_FAMILY,
+                size: 30,
+                bold: true,
+                color: COLOR_PRIMARY,
+              }),
+            ],
+          }),
+          ...createBodyParagraphs(`บริษัทฯ ขอเสนอผลงานที่มีขอบเขตงานและลักษณะงานสอดคล้องกับข้อกำหนดของ TOR โดยเป็นผลงานที่แล้วเสร็จย้อนหลังไม่เกิน ${section5.maxYearsFilter} ปี พร้อมทั้งได้แนบสำเนาสัญญาจ้างและหนังสือรับรองผลงานไว้ในภาคผนวก ก ของข้อเสนอนี้อย่างครบถ้วน`)
+        );
+
+        const torRefRows = [
+          createHeaderRow([
+            createHeaderCell('ลำดับ', 5),
+            createHeaderCell('ชื่อโครงการและลักษณะงาน', 33),
+            createHeaderCell('หน่วยงานผู้ว่าจ้าง', 18),
+            createHeaderCell('ปี พ.ศ.', 8),
+            createHeaderCell('มูลค่าสัญญา (บาท)', 18),
+            createHeaderCell('หลักฐานสัญญา/รับรอง', 18),
+          ]),
+        ];
+
+        torReferenceProjects.forEach((proj, idx) => {
+          const hasCert = !!proj.certificateFileUrl;
+          torRefRows.push(
+            createDataRow([
+              createDataCell(String(idx + 1), 5, { align: AlignmentType.CENTER, bold: true }),
+              createDataCell(`${proj.projectName}\n• ${proj.description}`, 33, { bold: true }),
+              createDataCell(proj.clientName, 18),
+              createDataCell(String(proj.completionYearBE), 8, { align: AlignmentType.CENTER }),
+              createDataCell(`${proj.contractValue.toLocaleString()} บาท`, 18, { align: AlignmentType.RIGHT, bold: true }),
+              createDataCell(hasCert ? '✓ มีแนบในภาคผนวก ก' : 'หนังสือรับรองผลงาน', 18, { align: AlignmentType.CENTER, bold: hasCert }),
+            ])
+          );
+        });
+
+        part5BChildren.push(
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            rows: torRefRows,
+          })
+        );
+
+        torReferenceProjects.forEach((proj, idx) => {
+          if (proj.projectImageUrl) {
+            try {
+              const pImgBytes = base64ToUint8Array(proj.projectImageUrl);
+              part5BChildren.push(
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  spacing: { before: 120, after: 40 },
+                  children: [
+                    new ImageRun({
+                      data: pImgBytes,
+                      transformation: { width: 560, height: 250 },
+                    } as any),
+                  ],
+                }),
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  spacing: { after: 120 },
+                  children: [
+                    new TextRun({
+                      text: proj.projectImageCaption || `ภาพที่ 5-1.${idx + 1} ภาพหน้าจอระบบ/ผลงาน: ${proj.projectName}`,
+                      font: FONT_FAMILY,
+                      size: 24,
+                      italics: true,
+                      color: COLOR_MUTED,
+                    }),
+                  ],
+                })
+              );
+            } catch (e) {
+              console.warn('Failed to embed project image', e);
+            }
+          }
+        });
+      } else if (h.id === 's5_supplementary') {
+        if (supplementaryProjects.length > 0) {
+          part5BChildren.push(
+            new Paragraph({
+              pageBreakBefore: true,
+              heading: HeadingLevel.HEADING_3,
+              spacing: { before: 200, after: 80, line: 240, lineRule: LineRuleType.AUTO },
+              children: [
+                new TextRun({
+                  text: `${autoRenumber ? '5.3.2' : numPrefix} ผลงานและประสบการณ์เสริมที่สอดคล้องกับงานจ้างโครงการนี้ (Supplementary Experience)`,
+                  font: FONT_FAMILY,
+                  size: 30,
+                  bold: true,
+                  color: COLOR_PRIMARY,
+                }),
+              ],
+            }),
+            ...createBodyParagraphs('ผลงานเพิ่มเติมที่มีกิจกรรม เทคโนโลยี หรือแนวทางการดำเนินงานที่สอดคล้องและเป็นประโยชน์ต่อโครงการจ้างนี้เพื่อประกอบการพิจารณาความพร้อมและความเชี่ยวชาญ')
+          );
+
+          const suppRows = [
+            createHeaderRow([
+              createHeaderCell('ลำดับ', 5),
+              createHeaderCell('ชื่อโครงการและผู้ว่าจ้าง', 27),
+              createHeaderCell('กิจกรรมและประเด็นที่สอดคล้องกับงานจ้างโครงการนี้', 44),
+              createHeaderCell('ปี พ.ศ.', 8),
+              createHeaderCell('มูลค่าสัญญา', 16),
+            ]),
+          ];
+
+          supplementaryProjects.forEach((proj, idx) => {
+            suppRows.push(
+              createDataRow([
+                createDataCell(String(idx + 1), 5, { align: AlignmentType.CENTER, bold: true }),
+                createDataCell(`${proj.projectName}\n• ผู้ว่าจ้าง: ${proj.clientName}`, 27, { bold: true }),
+                createDataCell(proj.relevanceNote || proj.description, 44),
+                createDataCell(String(proj.completionYearBE), 8, { align: AlignmentType.CENTER }),
+                createDataCell(`${proj.contractValue.toLocaleString()} บาท`, 16, { align: AlignmentType.RIGHT }),
+              ])
+            );
+          });
+
+          part5BChildren.push(
+            new Table({
+              width: { size: 100, type: WidthType.PERCENTAGE },
+              rows: suppRows,
+            })
+          );
+
+          supplementaryProjects.forEach((proj, idx) => {
+            if (proj.projectImageUrl) {
+              try {
+                const pImgBytes = base64ToUint8Array(proj.projectImageUrl);
+                part5BChildren.push(
+                  new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    spacing: { before: 120, after: 40 },
+                    children: [
+                      new ImageRun({
+                        data: pImgBytes,
+                        transformation: { width: 560, height: 250 },
+                      } as any),
+                    ],
+                  }),
+                  new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    spacing: { after: 120 },
+                    children: [
+                      new TextRun({
+                        text: proj.projectImageCaption || `ภาพที่ 5-2.${idx + 1} ภาพผลงานเสริม: ${proj.projectName}`,
+                        font: FONT_FAMILY,
+                        size: 24,
+                        italics: true,
+                        color: COLOR_MUTED,
+                      }),
+                    ],
+                  })
+                );
+              } catch (e) {
+                console.warn('Failed to embed supplementary project image', e);
+              }
+            }
+          });
+        }
+      } else if (h.id === 's5_appendix_certs') {
+        const projectsWithCerts = torReferenceProjects.filter((p) => !!p.certificateFileUrl);
+        if (projectsWithCerts.length > 0) {
+          part6Children.push(
+            createH1('ภาคผนวก ก: สำเนาสัญญาจ้างและหนังสือรับรองผลงานอ้างอิงตามเกณฑ์ TOR'),
+            ...createBodyParagraphs('เอกสารสำเนาสัญญาจ้างและหนังสือรับรองผลงานโครงการที่แล้วเสร็จ เพื่อประกอบการพิจารณาคุณสมบัติและผลงานตามประกาศจัดจ้างของหน่วยงานภาครัฐ')
+          );
+
+          projectsWithCerts.forEach((proj, idx) => {
+            part6Children.push(
+              new Paragraph({
+                heading: HeadingLevel.HEADING_2,
+                spacing: { before: 180, after: 60 },
+                children: [
+                  new TextRun({
+                    text: `เอกสารแนบ ก.${idx + 1}: ${proj.projectName}`,
+                    font: FONT_FAMILY,
+                    size: 28,
+                    bold: true,
+                    color: COLOR_PRIMARY,
+                  }),
+                ],
+              }),
+              createP(`หน่วยงานผู้ว่าจ้าง: ${proj.clientName} | ปีที่แล้วเสร็จ: พ.ศ. ${proj.completionYearBE} | มูลค่าสัญญา: ${proj.contractValue.toLocaleString()} บาท`, { spaceAfter: 80, align: AlignmentType.LEFT })
+            );
+
+            try {
+              const certBytes = base64ToUint8Array(proj.certificateFileUrl!);
+              part6Children.push(
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  spacing: { before: 80, after: 60 },
+                  children: [
+                    new ImageRun({
+                      data: certBytes,
+                      transformation: { width: 520, height: 420 },
+                    } as any),
+                  ],
+                }),
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  spacing: { after: 200 },
+                  children: [
+                    new TextRun({
+                      text: `สำเนาสัญญาจ้างหรือหนังสือรับรองผลงาน: ${proj.projectName}`,
+                      font: FONT_FAMILY,
+                      size: 24,
+                      italics: true,
+                      color: COLOR_MUTED,
+                    }),
+                  ],
+                })
+              );
+            } catch (e) {
+              console.warn('Failed to embed certificate image in appendix', e);
+            }
+          });
+        }
       }
     });
   }
@@ -1698,11 +1761,11 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
         part6Children.push(
           new Paragraph({
             alignment: AlignmentType.CENTER,
-            spacing: { before: 200, after: 200 },
+            spacing: { before: 800, after: 200 },
             children: [
               new ImageRun({
                 data: backBytes,
-                transformation: { width: 550, height: 400 },
+                transformation: { width: 550, height: 350 },
               } as any),
             ],
           })
@@ -1767,16 +1830,106 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
     }
   }
 
-  // =========================================================================
-  // Construct Multi-Section Document with Dynamic Orientations:
-  // Section 1: Portrait (ปก, สารบัญ, ส่วนที่ 1)
-  // Section 2: Landscape (ส่วนที่ 2: Gantt Chart, แผนงาน)
-  // Section 3: Portrait (ส่วนที่ 3: กรอบแนวคิด 3.1 & วิธีการ 3.2)
-  // Section 4: Landscape (ส่วนที่ 4: 4.1 ทีมงาน, 4.2 ความเสี่ยง, 4.3 Compliance Matrix)
-  // Section 5A: Portrait (ส่วนที่ 5: 5.1 ข้อมูลบริษัท, 5.2 มาตรฐาน)
-  // Section 5B: Landscape (ส่วนที่ 5.3: ตารางผลงานอ้างอิง TOR 5.3.1 & 5.3.2)
-  // Section 6: Portrait (ภาคผนวก ก สำเนาสัญญา & ปกหลัง)
-  // =========================================================================
+  // Construct sections array dynamically
+  const docSections: ISectionOptions[] = [
+    // Section 1: Portrait (Cover, TOC, Section 1)
+    {
+      properties: {
+        page: {
+          size: { orientation: PageOrientation.PORTRAIT },
+          margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
+        },
+      },
+      headers: { default: createCommonHeader() },
+      footers: { default: createCommonFooter() },
+      children: part1Children,
+    },
+  ];
+
+  if (part2Children.length > 0) {
+    docSections.push({
+      properties: {
+        page: {
+          size: { orientation: PageOrientation.LANDSCAPE },
+          margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
+        },
+      },
+      headers: { default: createCommonHeader() },
+      footers: { default: createCommonFooter() },
+      children: part2Children,
+    });
+  }
+
+  if (part3Children.length > 0) {
+    docSections.push({
+      properties: {
+        page: {
+          size: { orientation: PageOrientation.PORTRAIT },
+          margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
+        },
+      },
+      headers: { default: createCommonHeader() },
+      footers: { default: createCommonFooter() },
+      children: part3Children,
+    });
+  }
+
+  if (part4Children.length > 0) {
+    docSections.push({
+      properties: {
+        page: {
+          size: { orientation: PageOrientation.LANDSCAPE },
+          margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
+        },
+      },
+      headers: { default: createCommonHeader() },
+      footers: { default: createCommonFooter() },
+      children: part4Children,
+    });
+  }
+
+  if (part5AChildren.length > 0) {
+    docSections.push({
+      properties: {
+        page: {
+          size: { orientation: PageOrientation.PORTRAIT },
+          margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
+        },
+      },
+      headers: { default: createCommonHeader() },
+      footers: { default: createCommonFooter() },
+      children: part5AChildren,
+    });
+  }
+
+  if (part5BChildren.length > 0) {
+    docSections.push({
+      properties: {
+        page: {
+          size: { orientation: PageOrientation.LANDSCAPE },
+          margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
+        },
+      },
+      headers: { default: createCommonHeader() },
+      footers: { default: createCommonFooter() },
+      children: part5BChildren,
+    });
+  }
+
+  if (part6Children.length > 0) {
+    docSections.push({
+      properties: {
+        page: {
+          size: { orientation: PageOrientation.PORTRAIT },
+          margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
+        },
+      },
+      headers: { default: createCommonHeader() },
+      footers: { default: createCommonFooter() },
+      children: part6Children,
+    });
+  }
+
   const doc = new Document({
     styles: {
       default: {
@@ -1795,98 +1948,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
         },
       },
     },
-    sections: [
-      // Section 1: Portrait (Cover, TOC, Section 1)
-      {
-        properties: {
-          page: {
-            size: { orientation: PageOrientation.PORTRAIT },
-            margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
-          },
-        },
-        headers: { default: createCommonHeader() },
-        footers: { default: createCommonFooter() },
-        children: part1Children,
-      },
-
-      // Section 2: LANDSCAPE (ส่วนที่ 2: Gantt Chart & แผนงาน)
-      {
-        properties: {
-          page: {
-            size: { orientation: PageOrientation.LANDSCAPE },
-            margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
-          },
-        },
-        headers: { default: createCommonHeader() },
-        footers: { default: createCommonFooter() },
-        children: part2Children,
-      },
-
-      // Section 3: Portrait (ส่วนที่ 3: 3.1 กรอบแนวคิด & 3.2 วิธีการดำเนินงานตาม TOR)
-      {
-        properties: {
-          page: {
-            size: { orientation: PageOrientation.PORTRAIT },
-            margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
-          },
-        },
-        headers: { default: createCommonHeader() },
-        footers: { default: createCommonFooter() },
-        children: part3Children,
-      },
-
-      // Section 4: LANDSCAPE (ส่วนที่ 4: คณะผู้ดำเนินงาน 4.1, บริหารความเสี่ยง 4.2, Compliance Matrix 4.3)
-      {
-        properties: {
-          page: {
-            size: { orientation: PageOrientation.LANDSCAPE },
-            margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
-          },
-        },
-        headers: { default: createCommonHeader() },
-        footers: { default: createCommonFooter() },
-        children: part4Children,
-      },
-
-      // Section 5A: Portrait (ส่วนที่ 5: 5.1 ข้อมูลบริษัท, โลโก้, รูปสำนักงาน, 5.2 มาตรฐาน)
-      {
-        properties: {
-          page: {
-            size: { orientation: PageOrientation.PORTRAIT },
-            margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
-          },
-        },
-        headers: { default: createCommonHeader() },
-        footers: { default: createCommonFooter() },
-        children: part5AChildren,
-      },
-
-      // Section 5B: LANDSCAPE (ส่วนที่ 5.3: ผลงานและประสบการณ์ที่เกี่ยวข้อง 5.3.1, 5.3.2)
-      {
-        properties: {
-          page: {
-            size: { orientation: PageOrientation.LANDSCAPE },
-            margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
-          },
-        },
-        headers: { default: createCommonHeader() },
-        footers: { default: createCommonFooter() },
-        children: part5BChildren,
-      },
-
-      // Section 6: Portrait (ภาคผนวก ก & ปกหลัง)
-      {
-        properties: {
-          page: {
-            size: { orientation: PageOrientation.PORTRAIT },
-            margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
-          },
-        },
-        headers: { default: createCommonHeader() },
-        footers: { default: createCommonFooter() },
-        children: part6Children,
-      },
-    ],
+    sections: docSections,
   });
 
   const blob = await Packer.toBlob(doc);
