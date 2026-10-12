@@ -116,14 +116,36 @@ CREATE TABLE IF NOT EXISTS public.master_projects_library (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 8. สร้าง Index สำหรับค้นหา Master Library
+-- ==============================================================================
+-- 8. ตาราง Master Library: คลังรายการถอดแบบและอัตราค่าใช้จ่ายกลาง (Master BOM & Cost Catalog)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.master_bom_catalog (
+    id TEXT PRIMARY KEY,
+    category TEXT NOT NULL,
+    title TEXT NOT NULL,
+    responsible_role TEXT,
+    unit TEXT DEFAULT 'ชุด',
+    default_rate NUMERIC(15, 2) DEFAULT 0,
+    default_quantity NUMERIC(15, 2) DEFAULT 1,
+    description TEXT,
+    deliverable TEXT,
+    is_standard BOOLEAN DEFAULT false,
+    data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 9. สร้าง Index สำหรับค้นหา Master Library
 CREATE INDEX IF NOT EXISTS idx_master_team_name ON public.master_team_library(name);
 CREATE INDEX IF NOT EXISTS idx_master_projects_name ON public.master_projects_library(project_name);
 CREATE INDEX IF NOT EXISTS idx_master_projects_value ON public.master_projects_library(contract_value);
+CREATE INDEX IF NOT EXISTS idx_master_bom_category ON public.master_bom_catalog(category);
+CREATE INDEX IF NOT EXISTS idx_master_bom_title ON public.master_bom_catalog(title);
 
--- 9. ตั้งค่าสิทธิ์ Row Level Security (RLS) สำหรับ Master Library
+-- 10. ตั้งค่าสิทธิ์ Row Level Security (RLS) สำหรับ Master Library
 ALTER TABLE public.master_team_library ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.master_projects_library ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.master_bom_catalog ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Allow public read access to master_team_library" 
     ON public.master_team_library FOR SELECT USING (true);
@@ -136,4 +158,10 @@ CREATE POLICY "Allow public read access to master_projects_library"
 
 CREATE POLICY "Allow public insert/update/delete to master_projects_library" 
     ON public.master_projects_library FOR ALL USING (true);
+
+CREATE POLICY "Allow public read access to master_bom_catalog" 
+    ON public.master_bom_catalog FOR SELECT USING (true);
+
+CREATE POLICY "Allow public insert/update/delete to master_bom_catalog" 
+    ON public.master_bom_catalog FOR ALL USING (true);
 

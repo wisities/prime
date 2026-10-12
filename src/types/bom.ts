@@ -27,3 +27,16 @@ export interface BomCategorySummary {
   itemCount: number;
   percentage: number;
 }
+
+export interface MasterBomItem {
+  id: string;
+  category: string;
+  title: string;
+  responsibleRole: string;
+  unit: string;
+  defaultRate: number;
+  defaultQuantity: number;
+  description?: string;
+  deliverable?: string;
+  isStandard?: boolean;
+}

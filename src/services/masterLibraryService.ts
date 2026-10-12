@@ -1,12 +1,15 @@
 import { TeamMember, PastProject } from '../types/proposal';
-import { MASTER_TEAM_LIBRARY, MASTER_PROJECTS_LIBRARY } from '../data/defaultData';
+import { MasterBomItem } from '../types/bom';
+import { MASTER_TEAM_LIBRARY, MASTER_PROJECTS_LIBRARY, MASTER_BOM_LIBRARY } from '../data/defaultData';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 
 const TEAM_LIBRARY_KEY = 'prime_master_team_library';
 const PROJECTS_LIBRARY_KEY = 'prime_master_projects_library';
+const BOM_LIBRARY_KEY = 'prime_master_bom_catalog';
 
 export const MASTER_TEAM_UPDATED_EVENT = 'prime_master_team_updated';
 export const MASTER_PROJECTS_UPDATED_EVENT = 'prime_master_projects_updated';
+export const MASTER_BOM_UPDATED_EVENT = 'prime_master_bom_updated';
 
 // Helper to broadcast custom events to window
 function dispatchTeamUpdatedEvent(items: TeamMember[]) {
@@ -18,6 +21,12 @@ function dispatchTeamUpdatedEvent(items: TeamMember[]) {
 function dispatchProjectsUpdatedEvent(items: PastProject[]) {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(MASTER_PROJECTS_UPDATED_EVENT, { detail: items }));
+  }
+}
+
+function dispatchBomUpdatedEvent(items: MasterBomItem[]) {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(MASTER_BOM_UPDATED_EVENT, { detail: items }));
   }
 }
 
@@ -136,6 +145,53 @@ function cloudRowToPastProject(row: any): PastProject {
   };
 }
 
+function masterBomItemToCloudRow(item: MasterBomItem) {
+  return {
+    id: item.id,
+    category: item.category,
+    title: item.title,
+    responsible_role: item.responsibleRole || null,
+    unit: item.unit || 'ชุด',
+    default_rate: Number(item.defaultRate) || 0,
+    default_quantity: Number(item.defaultQuantity) || 1,
+    description: item.description || null,
+    deliverable: item.deliverable || null,
+    is_standard: Boolean(item.isStandard),
+    data: item,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function cloudRowToMasterBomItem(row: any): MasterBomItem {
+  if (row.data && typeof row.data === 'object' && row.data.title) {
+    return {
+      ...row.data,
+      id: row.id,
+      category: row.category || row.data.category || '',
+      title: row.title || row.data.title,
+      responsibleRole: row.responsible_role || row.data.responsibleRole || '',
+      unit: row.unit || row.data.unit || 'ชุด',
+      defaultRate: Number(row.default_rate) || Number(row.data.defaultRate) || 0,
+      defaultQuantity: Number(row.default_quantity) || Number(row.data.defaultQuantity) || 1,
+      description: row.description || row.data.description || '',
+      deliverable: row.deliverable || row.data.deliverable || '',
+      isStandard: row.is_standard !== undefined ? Boolean(row.is_standard) : Boolean(row.data.isStandard),
+    };
+  }
+  return {
+    id: row.id,
+    category: row.category || '',
+    title: row.title || '',
+    responsibleRole: row.responsible_role || '',
+    unit: row.unit || 'ชุด',
+    defaultRate: Number(row.default_rate) || 0,
+    defaultQuantity: Number(row.default_quantity) || 1,
+    description: row.description || '',
+    deliverable: row.deliverable || '',
+    isStandard: Boolean(row.is_standard),
+  };
+}
+
 // ==============================================================================
 // Asynchronous Cloud Sync Helpers
 // ==============================================================================
@@ -214,6 +270,43 @@ async function clearAllProjectsFromCloud(): Promise<void> {
   }
 }
 
+async function syncBomItemsToCloud(items: MasterBomItem[]): Promise<void> {
+  if (!isSupabaseConfigured() || !supabase || items.length === 0) return;
+  try {
+    const rows = items.map(masterBomItemToCloudRow);
+    const { error } = await supabase.from('master_bom_catalog').upsert(rows, { onConflict: 'id' });
+    if (error) {
+      console.warn('Failed to upsert BOM items to Supabase:', error);
+    }
+  } catch (err) {
+    console.warn('Error in syncBomItemsToCloud:', err);
+  }
+}
+
+async function deleteBomItemFromCloud(id: string): Promise<void> {
+  if (!isSupabaseConfigured() || !supabase) return;
+  try {
+    const { error } = await supabase.from('master_bom_catalog').delete().eq('id', id);
+    if (error) {
+      console.warn('Failed to delete BOM item from Supabase:', error);
+    }
+  } catch (err) {
+    console.warn('Error in deleteBomItemFromCloud:', err);
+  }
+}
+
+async function clearAllBomItemsFromCloud(): Promise<void> {
+  if (!isSupabaseConfigured() || !supabase) return;
+  try {
+    const { error } = await supabase.from('master_bom_catalog').delete().neq('id', '');
+    if (error) {
+      console.warn('Failed to clear BOM catalog in Supabase:', error);
+    }
+  } catch (err) {
+    console.warn('Error in clearAllBomItemsFromCloud:', err);
+  }
+}
+
 // ==============================================================================
 // Synchronous Local Helpers
 // ==============================================================================
@@ -231,6 +324,14 @@ function saveLocalProjectsLibrary(items: PastProject[]): void {
     localStorage.setItem(PROJECTS_LIBRARY_KEY, JSON.stringify(items));
   } catch (e) {
     console.error('Failed to save projects library to localStorage:', e);
+  }
+}
+
+function saveLocalBomLibrary(items: MasterBomItem[]): void {
+  try {
+    localStorage.setItem(BOM_LIBRARY_KEY, JSON.stringify(items));
+  } catch (e) {
+    console.error('Failed to save BOM library to localStorage:', e);
   }
 }
 
@@ -555,6 +656,152 @@ export function saveMultipleProjectsToMasterLibrary(projects: PastProject[]): Pa
 }
 
 // ==============================================================================
+// Public API: BOM & Cost Catalog Library
+// ==============================================================================
+
+/**
+ * Gets master BOM items from localStorage cache or falls back to default samples.
+ * Always synchronous for instant zero-latency UI rendering.
+ */
+export function getMasterBomLibrary(): MasterBomItem[] {
+  try {
+    const raw = localStorage.getItem(BOM_LIBRARY_KEY);
+    if (raw !== null) {
+      return JSON.parse(raw);
+    }
+  } catch (e) {
+    console.error('Failed to parse BOM library from localStorage:', e);
+  }
+  return [...MASTER_BOM_LIBRARY];
+}
+
+/**
+ * Fetches latest master BOM library from Supabase PostgreSQL database.
+ * If Supabase is offline/unconfigured, falls back cleanly to local cached list.
+ */
+export async function fetchMasterBomLibraryFromCloud(): Promise<MasterBomItem[]> {
+  if (!isSupabaseConfigured() || !supabase) {
+    return getMasterBomLibrary();
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('master_bom_catalog')
+      .select('*')
+      .order('category', { ascending: true })
+      .order('title', { ascending: true });
+
+    if (error) {
+      console.warn('Supabase fetchMasterBomLibrary error, fallback to local:', error);
+      return getMasterBomLibrary();
+    }
+
+    if (data && data.length > 0) {
+      const items = data.map(cloudRowToMasterBomItem);
+      saveLocalBomLibrary(items);
+      dispatchBomUpdatedEvent(items);
+      return items;
+    } else {
+      // Cloud is empty, seed defaults
+      const current = getMasterBomLibrary();
+      syncBomItemsToCloud(current);
+      return current;
+    }
+  } catch (err) {
+    console.warn('Network error in fetchMasterBomLibraryFromCloud, fallback to local:', err);
+    return getMasterBomLibrary();
+  }
+}
+
+/**
+ * Saves master BOM items list to localStorage and asynchronously syncs to Supabase Cloud.
+ */
+export function saveMasterBomLibrary(items: MasterBomItem[]): void {
+  saveLocalBomLibrary(items);
+  dispatchBomUpdatedEvent(items);
+  syncBomItemsToCloud(items);
+}
+
+export function deleteMasterBomItem(id: string): MasterBomItem[] {
+  const current = getMasterBomLibrary();
+  const updated = current.filter((m) => m.id !== id);
+  saveLocalBomLibrary(updated);
+  dispatchBomUpdatedEvent(updated);
+  deleteBomItemFromCloud(id);
+  return updated;
+}
+
+export function clearAllMasterBomItems(): MasterBomItem[] {
+  const empty: MasterBomItem[] = [];
+  saveLocalBomLibrary(empty);
+  dispatchBomUpdatedEvent(empty);
+  clearAllBomItemsFromCloud();
+  return empty;
+}
+
+export function resetMasterBomLibrary(): MasterBomItem[] {
+  localStorage.removeItem(BOM_LIBRARY_KEY);
+  const defaults = [...MASTER_BOM_LIBRARY];
+  saveLocalBomLibrary(defaults);
+  dispatchBomUpdatedEvent(defaults);
+  syncBomItemsToCloud(defaults);
+  return defaults;
+}
+
+export function saveItemToMasterBomLibrary(item: MasterBomItem): MasterBomItem[] {
+  const current = getMasterBomLibrary();
+  const existingIdx = current.findIndex((b) => b.id === item.id || (b.title.trim() === item.title.trim() && b.category === item.category));
+
+  let updatedItem: MasterBomItem;
+  if (existingIdx >= 0) {
+    updatedItem = { ...current[existingIdx], ...item };
+    current[existingIdx] = updatedItem;
+  } else {
+    updatedItem = {
+      ...item,
+      id: item.id && !item.id.startsWith('bom-') ? item.id : `lib-bom-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+    };
+    current.push(updatedItem);
+  }
+
+  saveLocalBomLibrary(current);
+  dispatchBomUpdatedEvent(current);
+  syncBomItemsToCloud([updatedItem]);
+  return current;
+}
+
+export function saveMultipleItemsToMasterBomLibrary(items: MasterBomItem[]): MasterBomItem[] {
+  const current = [...getMasterBomLibrary()];
+  const toSync: MasterBomItem[] = [];
+
+  for (const it of items) {
+    if (!it.title || it.title.trim() === '') continue;
+    const existingIdx = current.findIndex(
+      (b) => b.id === it.id || (b.title.trim() === it.title.trim() && b.category === it.category)
+    );
+    if (existingIdx >= 0) {
+      const merged = { ...current[existingIdx], ...it };
+      current[existingIdx] = merged;
+      toSync.push(merged);
+    } else {
+      const newItem = {
+        ...it,
+        id: it.id && !it.id.startsWith('bom-') ? it.id : `lib-bom-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      };
+      current.push(newItem);
+      toSync.push(newItem);
+    }
+  }
+
+  saveLocalBomLibrary(current);
+  dispatchBomUpdatedEvent(current);
+  if (toSync.length > 0) {
+    syncBomItemsToCloud(toSync);
+  }
+  return current;
+}
+
+// ==============================================================================
 // Real-time Supabase Subscription
 // ==============================================================================
 
@@ -564,7 +811,8 @@ export function saveMultipleProjectsToMasterLibrary(projects: PastProject[]): Pa
  */
 export function initMasterLibraryRealtime(
   onTeamChange?: (items: TeamMember[]) => void,
-  onProjectsChange?: (items: PastProject[]) => void
+  onProjectsChange?: (items: PastProject[]) => void,
+  onBomChange?: (items: MasterBomItem[]) => void
 ): () => void {
   if (!isSupabaseConfigured() || !supabase) {
     return () => {};
@@ -587,6 +835,14 @@ export function initMasterLibraryRealtime(
         async () => {
           const fresh = await fetchMasterProjectsLibraryFromCloud();
           if (onProjectsChange) onProjectsChange(fresh);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'master_bom_catalog' },
+        async () => {
+          const fresh = await fetchMasterBomLibraryFromCloud();
+          if (onBomChange) onBomChange(fresh);
         }
       )
       .subscribe();

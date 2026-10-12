@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { ProposalData } from '../types/proposal';
-import { BomItem } from '../types/bom';
+import { BomItem, MasterBomItem } from '../types/bom';
 import {
   BOM_CATEGORIES,
+  BOM_UNITS,
   generateInitialBomItems,
   autoAllocateBomBudget,
   calculateCategorySummaries,
   exportBomToExcel,
 } from '../services/bomExportService';
+import { saveItemToMasterBomLibrary } from '../services/masterLibraryService';
+import { MasterBomModal } from './MasterBomModal';
 import {
   FileSpreadsheet,
   X,
@@ -21,6 +24,8 @@ import {
   Info,
   DollarSign,
   Layers,
+  Database,
+  BookmarkPlus,
 } from 'lucide-react';
 
 interface BomExportModalProps {
@@ -39,6 +44,13 @@ export const BomExportModal: React.FC<BomExportModalProps> = ({
   const [vatPct, setVatPct] = useState<number>(7);
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
+  const [showMasterBomModal, setShowMasterBomModal] = useState<boolean>(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
 
   const budgetAmount =
     proposal.section1?.budgetAmount || 0;
@@ -99,6 +111,30 @@ export const BomExportModal: React.FC<BomExportModalProps> = ({
   // Remove item
   const handleDeleteItem = (id: string) => {
     setItems((prev) => prev.filter((it) => it.id !== id));
+  };
+
+  // Apply items from Master BOM Catalog
+  const handleApplyFromMaster = (newItems: BomItem[]) => {
+    setItems((prev) => [...prev, ...newItems]);
+    showToast(`นำเข้า ${newItems.length} รายการจากคลังข้อมูลกลางเรียบร้อยแล้ว`);
+  };
+
+  // Save an item to Master BOM Catalog
+  const handleSaveToMaster = (item: BomItem) => {
+    const masterItem: MasterBomItem = {
+      id: `mbom-custom-${Date.now()}`,
+      category: item.category,
+      title: item.title,
+      responsibleRole: item.responsibleRole,
+      unit: item.unit,
+      defaultRate: item.unitRate,
+      defaultQuantity: item.quantity,
+      description: item.notes || '',
+      deliverable: item.deliverable || '',
+      isStandard: false,
+    };
+    saveItemToMasterBomLibrary(masterItem);
+    showToast(`บันทึก "${item.title}" เข้าสู่คลังข้อมูลกลางแล้ว`);
   };
 
   // Reset to initial
@@ -346,6 +382,27 @@ export const BomExportModal: React.FC<BomExportModalProps> = ({
             </div>
           </div>
 
+          {/* Toast Message */}
+          {toastMessage && (
+            <div
+              style={{
+                backgroundColor: '#10B981',
+                color: '#FFFFFF',
+                padding: '8px 16px',
+                borderRadius: '6px',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+              }}
+            >
+              <CheckCircle2 size={16} />
+              <span>{toastMessage}</span>
+            </div>
+          )}
+
           {/* Controls & Category Filters */}
           <div
             style={{
@@ -361,6 +418,29 @@ export const BomExportModal: React.FC<BomExportModalProps> = ({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setShowMasterBomModal(true)}
+                className="btn"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backgroundColor: '#2563EB',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  fontWeight: 600,
+                  padding: '6px 14px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
+                }}
+                title="เลือกรายการค่าใช้จ่ายและอัตรามาตรฐานจากคลังข้อมูลกลาง พร้อมปรับแต่งยอดก่อนนำไปใช้"
+              >
+                <Database size={15} />
+                <span>เลือกจากคลังข้อมูลกลาง (Master Catalog)</span>
+              </button>
+
               <button
                 type="button"
                 onClick={handleAutoAllocate}
@@ -436,7 +516,7 @@ export const BomExportModal: React.FC<BomExportModalProps> = ({
                   style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
                 >
                   <option value="all">ทุกหมวดงาน ({items.length})</option>
-                  {BOM_CATEGORIES.map((cat) => (
+                  {Array.from(new Set([...BOM_CATEGORIES, ...items.map((it) => it.category)])).map((cat) => (
                     <option key={cat} value={cat}>
                       {cat}
                     </option>
@@ -469,7 +549,7 @@ export const BomExportModal: React.FC<BomExportModalProps> = ({
                     <th style={{ padding: '10px 8px', width: '11%' }}>หน่วยนับ</th>
                     <th style={{ padding: '10px 8px', width: '10%', textAlign: 'right' }}>ราคา/หน่วย (บ.)</th>
                     <th style={{ padding: '10px 8px', width: '12%', textAlign: 'right' }}>ราคารวม (บ.)</th>
-                    <th style={{ padding: '10px 8px', width: '4%', textAlign: 'center' }}>ลบ</th>
+                    <th style={{ padding: '10px 6px', width: '6%', textAlign: 'center' }}>จัดการ</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -521,7 +601,16 @@ export const BomExportModal: React.FC<BomExportModalProps> = ({
                       <td style={{ padding: '8px 6px' }}>
                         <select
                           value={item.category}
-                          onChange={(e) => handleUpdateItem(item.id, 'category', e.target.value)}
+                          onChange={(e) => {
+                            if (e.target.value === '__custom__') {
+                              const customName = prompt('ระบุชื่อหมวดงานใหม่ที่ต้องการ:');
+                              if (customName && customName.trim()) {
+                                handleUpdateItem(item.id, 'category', customName.trim());
+                              }
+                            } else {
+                              handleUpdateItem(item.id, 'category', e.target.value);
+                            }
+                          }}
                           style={{
                             width: '100%',
                             padding: '4px',
@@ -530,11 +619,15 @@ export const BomExportModal: React.FC<BomExportModalProps> = ({
                             fontSize: '0.75rem',
                           }}
                         >
+                          {!BOM_CATEGORIES.includes(item.category as any) && (
+                            <option value={item.category}>{item.category} (กำหนดเอง)</option>
+                          )}
                           {BOM_CATEGORIES.map((cat) => (
                             <option key={cat} value={cat}>
                               {cat}
                             </option>
                           ))}
+                          <option value="__custom__">+ กำหนดหมวดงานเอง...</option>
                         </select>
                       </td>
 
@@ -574,7 +667,16 @@ export const BomExportModal: React.FC<BomExportModalProps> = ({
                       <td style={{ padding: '8px 6px' }}>
                         <select
                           value={item.unit}
-                          onChange={(e) => handleUpdateItem(item.id, 'unit', e.target.value)}
+                          onChange={(e) => {
+                            if (e.target.value === '__custom__') {
+                              const customUnit = prompt('ระบุหน่วยนับใหม่ที่ต้องการ:');
+                              if (customUnit && customUnit.trim()) {
+                                handleUpdateItem(item.id, 'unit', customUnit.trim());
+                              }
+                            } else {
+                              handleUpdateItem(item.id, 'unit', e.target.value);
+                            }
+                          }}
                           style={{
                             width: '100%',
                             padding: '4px',
@@ -583,12 +685,15 @@ export const BomExportModal: React.FC<BomExportModalProps> = ({
                             fontSize: '0.75rem',
                           }}
                         >
-                          <option value="วัน-คน (Man-Day)">วัน-คน (Man-Day)</option>
-                          <option value="เดือน-คน (Man-Month)">เดือน-คน (Man-Month)</option>
-                          <option value="ชุด">ชุด</option>
-                          <option value="ระบบย่อย">ระบบย่อย</option>
-                          <option value="สิทธิ์ (License)">สิทธิ์ (License)</option>
-                          <option value="งวดงาน">งวดงาน</option>
+                          {!BOM_UNITS.includes(item.unit as any) && (
+                            <option value={item.unit}>{item.unit} (กำหนดเอง)</option>
+                          )}
+                          {BOM_UNITS.map((u) => (
+                            <option key={u} value={u}>
+                              {u}
+                            </option>
+                          ))}
+                          <option value="__custom__">+ กำหนดหน่วยเอง...</option>
                         </select>
                       </td>
 
@@ -614,15 +719,25 @@ export const BomExportModal: React.FC<BomExportModalProps> = ({
                         {item.totalPrice.toLocaleString()} บ.
                       </td>
 
-                      <td style={{ padding: '8px 6px', textAlign: 'center' }}>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteItem(item.id)}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444' }}
-                          title="ลบรายการนี้"
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                      <td style={{ padding: '8px 4px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveToMaster(item)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2563EB', padding: '2px' }}
+                            title="บันทึกรายการนี้เป็นรายการมาตรฐานในคลังข้อมูลกลาง (Master Catalog)"
+                          >
+                            <BookmarkPlus size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteItem(item.id)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: '2px' }}
+                            title="ลบรายการนี้"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -747,6 +862,13 @@ export const BomExportModal: React.FC<BomExportModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Master BOM Catalog Picker & Management Modal */}
+      <MasterBomModal
+        isOpen={showMasterBomModal}
+        onClose={() => setShowMasterBomModal(false)}
+        onApplyItems={handleApplyFromMaster}
+      />
     </div>
   );
 };

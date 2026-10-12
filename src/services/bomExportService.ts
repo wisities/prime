@@ -8,8 +8,28 @@ export const BOM_CATEGORIES = [
   'งานวิเคราะห์และออกแบบสถาปัตยกรรม',
   'งานโครงสร้างพื้นฐานและคลาวด์',
   'งานทดสอบและประเมินความมั่นคงปลอดภัย',
-  'งานบริหารโครงการ ฝึกอบรม และบำรุงรักษา',
+  'งานจัดกิจกรรม ประชุม สัมมนา และอีเวนต์',
+  'งานฝึกอบรม ถ่ายทอดความรู้ และจัดทำคู่มือ',
+  'งานประชาสัมพันธ์ สื่อ และมัลติมีเดีย',
+  'งานศึกษา สำรวจ วิจัย และรวบรวมข้อมูล',
+  'งานที่ปรึกษา วิเคราะห์ และกำหนดนโยบาย',
+  'งานบริหารโครงการ ติดตาม และตรวจรับงาน',
   'งานสิทธิ์การใช้งานซอฟต์แวร์และเครื่องมือ',
+  'ค่าใช้จ่ายดำเนินงานและค่าใช้จ่ายอื่นๆ',
+] as const;
+
+export const BOM_UNITS = [
+  'วัน-คน (Man-Day)',
+  'เดือน-คน (Man-Month)',
+  'ครั้ง / การจัดงาน (Session/Event)',
+  'รุ่น (Batch/Cohort)',
+  'คน / ผู้เข้าร่วม (Person)',
+  'ชุด (Set)',
+  'ระบบย่อย (Subsystem)',
+  'ชิ้น / สื่อ (Piece/Deliverable)',
+  'สิทธิ์ (License)',
+  'งวดงาน (Milestone)',
+  'เหมาจ่าย (Lump Sum)',
 ] as const;
 
 export const STANDARD_RATE_CARD: BomRateCardItem[] = [
@@ -26,6 +46,13 @@ export const STANDARD_RATE_CARD: BomRateCardItem[] = [
     standardRatePerDay: 6500,
     standardRatePerMonth: 130000,
     description: 'ออกแบบสถาปัตยกรรมระบบ คลาวด์ และโครงสร้างฐานข้อมูลตามมาตรฐานความมั่นคงปลอดภัย',
+  },
+  {
+    role: 'Strategic & Policy Consultant (ที่ปรึกษานโยบาย/ยุทธศาสตร์)',
+    level: 'ผู้เชี่ยวชาญระดับสูง (Lead Consultant)',
+    standardRatePerDay: 6000,
+    standardRatePerMonth: 120000,
+    description: 'ให้คำปรึกษาเชิงยุทธศาสตร์ ออกแบบกระบวนการทำงาน (BPR) และจัดทำข้อเสนอเชิงนโยบาย',
   },
   {
     role: 'Lead Software Engineer (วิศวกรซอฟต์แวร์อาวุโส)',
@@ -56,14 +83,35 @@ export const STANDARD_RATE_CARD: BomRateCardItem[] = [
     description: 'ทดสอบ Functional Test, Performance Stress Test และทดสอบเจาะระบบ (PenTest)',
   },
   {
-    role: 'UI/UX Designer (นักออกแบบประสบการณ์ผู้ใช้)',
+    role: 'Keynote Speaker / Trainer (วิทยากรผู้เชี่ยวชาญพิเศษ)',
+    level: 'วิทยากรชำนาญการ (Professional Trainer)',
+    standardRatePerDay: 4500,
+    standardRatePerMonth: 90000,
+    description: 'บรรยายถ่ายทอดองค์ความรู้ จัดการฝึกอบรมเชิงปฏิบัติการ และถ่ายทอดเทคโนโลยี',
+  },
+  {
+    role: 'Researcher & Data Analyst (นักวิจัย/วิเคราะห์ข้อมูลสำรวจ)',
+    level: 'นักวิจัยระดับอาวุโส (Senior Analyst)',
+    standardRatePerDay: 3800,
+    standardRatePerMonth: 76000,
+    description: 'ออกแบบเครื่องมือสำรวจ ดำเนินการวิจัย เก็บข้อมูลภาคสนาม และวิเคราะห์ผลทางสถิติ',
+  },
+  {
+    role: 'UI/UX & Creative Designer (นักออกแบบสื่อและประสบการณ์ผู้ใช้)',
     level: 'นักออกแบบระดับอาวุโส (Senior Designer)',
     standardRatePerDay: 3800,
     standardRatePerMonth: 76000,
-    description: 'ออกแบบ Wireframe, UI Design System และจัดทำ Prototype ตามเกณฑ์ Usability ภาครัฐ',
+    description: 'ออกแบบ Wireframe, สื่ออินโฟกราฟิก, ภาพกราฟิกประชาสัมพันธ์ และสื่อนำเสนอโครงการ',
   },
   {
-    role: 'Training & Support Specialist (วิทยากรฝึกอบรมและสนับสนุนงาน)',
+    role: 'Event Organizer & Coordinator (เจ้าหน้าที่จัดกิจกรรมและประสานงาน)',
+    level: 'เจ้าหน้าที่ผู้ประสานงาน (Event Coordinator)',
+    standardRatePerDay: 2800,
+    standardRatePerMonth: 56000,
+    description: 'ประสานงานสถานที่ เตรียมการประชุม/สัมมนา ดูแลการลงทะเบียน และอำนวยความสะดวกในงาน',
+  },
+  {
+    role: 'Training & Support Specialist (วิทยากรผู้ช่วยและสนับสนุนงาน)',
     level: 'เจ้าหน้าที่ผู้เชี่ยวชาญ (Specialist)',
     standardRatePerDay: 3200,
     standardRatePerMonth: 64000,
@@ -75,33 +123,154 @@ export const STANDARD_RATE_CARD: BomRateCardItem[] = [
 export function detectCategoryFromScope(item: TorScopeItem): string {
   const text = `${item.title} ${item.requirement} ${item.proposedMethodology || ''} ${item.toolsAndTechnology || ''}`.toLowerCase();
 
-  if (text.includes('คลาวด์') || text.includes('cloud') || text.includes('hosting') || text.includes('server') || text.includes('infra') || text.includes('kubernetes') || text.includes('docker')) {
+  // 1. จัดกิจกรรม / สัมมนา / ประชุม / อีเวนต์
+  if (
+    text.includes('จัดกิจกรรม') ||
+    text.includes('จัดงาน') ||
+    text.includes('สัมมนา') ||
+    text.includes('ประชุม') ||
+    text.includes('อีเวนต์') ||
+    text.includes('event') ||
+    text.includes('workshop') ||
+    text.includes('นิทรรศการ') ||
+    text.includes('แถลงข่าว')
+  ) {
+    return 'งานจัดกิจกรรม ประชุม สัมมนา และอีเวนต์';
+  }
+
+  // 2. ฝึกอบรม / ถ่ายทอดความรู้ / คู่มือ
+  if (
+    text.includes('อบรม') ||
+    text.includes('training') ||
+    text.includes('ถ่ายทอดความรู้') ||
+    text.includes('คู่มือ') ||
+    text.includes('วิทยากร') ||
+    text.includes('e-learning') ||
+    text.includes('หลักสูตร')
+  ) {
+    return 'งานฝึกอบรม ถ่ายทอดความรู้ และจัดทำคู่มือ';
+  }
+
+  // 3. ประชาสัมพันธ์ / สื่อ / วิดีโอ / PR
+  if (
+    text.includes('ประชาสัมพันธ์') ||
+    text.includes('สื่อ') ||
+    text.includes('วิดีโอ') ||
+    text.includes('video') ||
+    text.includes('infographic') ||
+    text.includes('pr') ||
+    text.includes('campaign') ||
+    text.includes('เผยแพร่') ||
+    text.includes('แคมเปญ')
+  ) {
+    return 'งานประชาสัมพันธ์ สื่อ และมัลติมีเดีย';
+  }
+
+  // 4. สำรวจ / วิจัย / แบบสอบถาม / รวบรวมข้อมูล
+  if (
+    text.includes('สำรวจ') ||
+    text.includes('แบบสอบถาม') ||
+    text.includes('วิจัย') ||
+    text.includes('survey') ||
+    text.includes('focus group') ||
+    text.includes('รวบรวมข้อมูล') ||
+    text.includes('เก็บข้อมูล') ||
+    text.includes('ประเมินผล')
+  ) {
+    return 'งานศึกษา สำรวจ วิจัย และรวบรวมข้อมูล';
+  }
+
+  // 5. ที่ปรึกษา / นโยบาย / แผนแม่บท
+  if (
+    text.includes('ที่ปรึกษา') ||
+    text.includes('แผนแม่บท') ||
+    text.includes('master plan') ||
+    text.includes('policy') ||
+    text.includes('นโยบาย') ||
+    text.includes('ยุทธศาสตร์') ||
+    text.includes('consult') ||
+    text.includes('bpr')
+  ) {
+    return 'งานที่ปรึกษา วิเคราะห์ และกำหนดนโยบาย';
+  }
+
+  // 6. โครงสร้างพื้นฐาน / คลาวด์ / เซิร์ฟเวอร์
+  if (
+    text.includes('คลาวด์') ||
+    text.includes('cloud') ||
+    text.includes('hosting') ||
+    text.includes('server') ||
+    text.includes('infra') ||
+    text.includes('kubernetes') ||
+    text.includes('docker') ||
+    text.includes('ฮาร์ดแวร์')
+  ) {
     return 'งานโครงสร้างพื้นฐานและคลาวด์';
   }
-  if (text.includes('สถาปัตยกรรม') || text.includes('architecture') || text.includes('ออกแบบ') || text.includes('ux') || text.includes('ui') || text.includes('design')) {
+
+  // 7. สถาปัตยกรรม / ออกแบบ UX/UI
+  if (
+    text.includes('สถาปัตยกรรม') ||
+    text.includes('architecture') ||
+    text.includes('ออกแบบ') ||
+    text.includes('ux') ||
+    text.includes('ui') ||
+    text.includes('design')
+  ) {
     return 'งานวิเคราะห์และออกแบบสถาปัตยกรรม';
   }
-  if (text.includes('ทดสอบ') || text.includes('test') || text.includes('qa') || text.includes('security') || text.includes('pentest') || text.includes('ปลอดภัย') || text.includes('ช่องโหว่')) {
+
+  // 8. ทดสอบ / ความมั่นคงปลอดภัย
+  if (
+    text.includes('ทดสอบ') ||
+    text.includes('test') ||
+    text.includes('qa') ||
+    text.includes('security') ||
+    text.includes('pentest') ||
+    text.includes('ปลอดภัย') ||
+    text.includes('ช่องโหว่')
+  ) {
     return 'งานทดสอบและประเมินความมั่นคงปลอดภัย';
   }
-  if (text.includes('อบรม') || text.includes('training') || text.includes('คู่มือ') || text.includes('warranty') || text.includes('บำรุงรักษา') || text.includes('helpdesk')) {
-    return 'งานบริหารโครงการ ฝึกอบรม และบำรุงรักษา';
-  }
-  if (text.includes('สิทธิ์') || text.includes('license') || text.includes('saas') || text.includes('subscription')) {
+
+  // 9. สิทธิ์การใช้งานซอฟต์แวร์
+  if (
+    text.includes('สิทธิ์') ||
+    text.includes('license') ||
+    text.includes('saas') ||
+    text.includes('subscription')
+  ) {
     return 'งานสิทธิ์การใช้งานซอฟต์แวร์และเครื่องมือ';
   }
+
+  // 10. บริหารโครงการ / ติดตาม / รับประกัน
+  if (
+    text.includes('บริหารโครงการ') ||
+    text.includes('pm') ||
+    text.includes('บำรุงรักษา') ||
+    text.includes('warranty') ||
+    text.includes('helpdesk')
+  ) {
+    return 'งานบริหารโครงการ ติดตาม และตรวจรับงาน';
+  }
+
+  // Default
   return 'งานพัฒนาซอฟต์แวร์และวิศวกรรมระบบ';
 }
 
 // Helper to get standard rate for a role
 export function getStandardRateForRole(roleName: string): number {
   const trimmed = (roleName || '').toLowerCase();
+  if (trimmed.includes('consult') || trimmed.includes('ที่ปรึกษา')) return 6000;
   if (trimmed.includes('architect') || trimmed.includes('สถาปนิก')) return 6500;
   if (trimmed.includes('project manager') || trimmed.includes('pm') || trimmed.includes('ผู้จัดการ')) return 5500;
   if (trimmed.includes('lead') || trimmed.includes('devops') || trimmed.includes('cloud')) return 5000;
   if (trimmed.includes('security') || trimmed.includes('qa') || trimmed.includes('developer') || trimmed.includes('วิศวกร')) return 4500;
-  if (trimmed.includes('design') || trimmed.includes('ui') || trimmed.includes('ux')) return 3800;
-  if (trimmed.includes('train') || trimmed.includes('support') || trimmed.includes('อบรม')) return 3200;
+  if (trimmed.includes('speaker') || trimmed.includes('วิทยากร')) return 4500;
+  if (trimmed.includes('research') || trimmed.includes('วิจัย') || trimmed.includes('สำรวจ')) return 3800;
+  if (trimmed.includes('design') || trimmed.includes('ui') || trimmed.includes('ux') || trimmed.includes('creative') || trimmed.includes('สื่อ')) return 3800;
+  if (trimmed.includes('train') || trimmed.includes('อบรม')) return 3200;
+  if (trimmed.includes('organizer') || trimmed.includes('จัดงาน') || trimmed.includes('ประสานงาน') || trimmed.includes('กิจกรรม')) return 2800;
   return 4500; // Default Standard Rate
 }
 
