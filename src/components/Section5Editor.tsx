@@ -17,7 +17,9 @@ import {
   MASTER_COMPANY_UPDATED_EVENT,
   initMasterLibraryRealtime,
 } from '../services/masterLibraryService';
+import { isSupabaseConfigured } from '../services/supabaseClient';
 import { Building2, Plus, Trash2, Library, Filter, Calendar, AlertTriangle, CheckCircle, Upload, Image, FileText, Paperclip, FileCheck, BookmarkCheck, RotateCcw, ArrowUp, ArrowDown, BookmarkPlus, Check, Database, Save, Download, List, Table as TableIcon } from 'lucide-react';
+
 
 interface Section5EditorProps {
   section5: Section5Company;
