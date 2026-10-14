@@ -17,8 +17,7 @@ import {
   MASTER_COMPANY_UPDATED_EVENT,
   initMasterLibraryRealtime,
 } from '../services/masterLibraryService';
-import { isSupabaseConfigured } from '../services/supabaseClient';
-import { Building2, Plus, Trash2, Library, Filter, Calendar, AlertTriangle, CheckCircle, Upload, Image, FileText, Paperclip, FileCheck, BookmarkCheck, RotateCcw, ArrowUp, ArrowDown, BookmarkPlus, Check, Database, Save, Download } from 'lucide-react';
+import { Building2, Plus, Trash2, Library, Filter, Calendar, AlertTriangle, CheckCircle, Upload, Image, FileText, Paperclip, FileCheck, BookmarkCheck, RotateCcw, ArrowUp, ArrowDown, BookmarkPlus, Check, Database, Save, Download, List, Table as TableIcon } from 'lucide-react';
 
 interface Section5EditorProps {
   section5: Section5Company;
@@ -961,14 +960,53 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                   </div>
                 </div>
 
-                <div style={{ marginBottom: '0.75rem' }}>
-                  <label className="form-label">รายละเอียดขอบเขตงานโดยย่อ</label>
+                <div style={{ marginBottom: '0.85rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', flexWrap: 'wrap', gap: '0.35rem' }}>
+                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: 0, fontWeight: 600, color: 'var(--primary-900)' }}>
+                      <FileText size={14} color="var(--primary-700)" />
+                      รายละเอียดโครงการและขอบเขตงาน (สามารถแทรก bullet หรือตารางได้) <span className="required">*</span>
+                    </label>
+                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                      <button
+                        type="button"
+                        className="btn btn-outline"
+                        style={{ padding: '0.2rem 0.55rem', fontSize: '0.725rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        onClick={() => {
+                          const bulletSnippet = (p.description && !p.description.endsWith('\n') ? '\n' : '') + '• [ระบุกิจกรรม/ขอบเขตงานสำคัญ]';
+                          handleProjectChange(p.id, 'description', (p.description || '') + bulletSnippet);
+                        }}
+                        title="แทรกบูลเล็ตพ้อยต์"
+                      >
+                        <List size={12} /> + บูลเล็ตพ้อยต์
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-outline"
+                        style={{ padding: '0.2rem 0.55rem', fontSize: '0.725rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        onClick={() => {
+                          const tableSnippet = (p.description && !p.description.endsWith('\n') ? '\n\n' : '') +
+                            '| ลำดับ | รายละเอียดงาน / ขั้นตอนการดำเนินงาน | ผลผลิต / ระบบงานที่ส่งมอบ |\n' +
+                            '| 1 | การวิเคราะห์และออกแบบระบบ | แผนผังสถาปัตยกรรมและข้อกำหนดความต้องการ |\n' +
+                            '| 2 | การพัฒนาและติดตั้งระบบ | ซอฟต์แวร์ระบบงานพร้อมฐานข้อมูล |\n' +
+                            '| 3 | การทดสอบและถ่ายทอดเทคโนโลยี | รายงานผลการทดสอบและหลักสูตรฝึกอบรม |';
+                          handleProjectChange(p.id, 'description', (p.description || '') + tableSnippet);
+                        }}
+                        title="แทรกตารางแสดงขั้นตอนหรือรายละเอียดงาน"
+                      >
+                        <TableIcon size={12} /> + ตารางรายละเอียดโครงการ
+                      </button>
+                    </div>
+                  </div>
                   <textarea
                     className="form-textarea"
-                    style={{ minHeight: '50px' }}
+                    style={{ minHeight: '110px' }}
+                    placeholder="เขียนพรรณารายละเอียดโครงการและขอบเขตงาน หรือใช้ปุ่มด้านบนเพื่อแทรกบูลเล็ตพ้อยต์ / ตารางขั้นตอน..."
                     value={p.description}
                     onChange={(e) => handleProjectChange(p.id, 'description', e.target.value)}
                   />
+                  <div className="form-hint" style={{ fontSize: '0.75rem', color: 'var(--slate-500)', marginTop: '4px' }}>
+                    💡 <strong>สามารถแทรก bullet ตาราง และรูปภาพได้เหมือนข้อ 3.2:</strong> เขียนพรรณา, สร้างหัวข้อบูลเล็ตด้วยเครื่องหมาย • หรือ - หรือแทรกตารางด้วยรูปแบบ Markdown (| ลำดับ | รายละเอียด |) พร้อมอัปโหลดภาพประกอบ 6 นิ้ว หรือ 3 นิ้วคู่ด้านล่างได้ไม่จำกัดจำนวน
+                  </div>
                 </div>
 
                 {/* Conditional Fields: TOR Reference vs Supplementary */}
@@ -1092,8 +1130,8 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
 
                 {/* Project Image Blocks (รองรับทั้งภาพคู่ 3 นิ้ว 2 คอลัมน์ และภาพเดี่ยว 6 นิ้ว ได้ไม่จำกัดจำนวน) */}
                 <ReportImageManager
-                  title="ภาพประกอบผลงานและระบบงานจริง (ไม่จำกัดจำนวน)"
-                  subtitle="สามารถแทรกรูป 3 นิ้วสองรูปคู่ หรือภาพเดี่ยวขนาด 6 นิ้ว ประกอบผลงานนี้ได้ไม่จำกัดจำนวน"
+                  title={`ภาพประกอบสำหรับโครงการ: ${p.projectName || 'ผลงานนี้'}`}
+                  subtitle="สามารถแทรกภาพเดี่ยว 6 นิ้ว กึ่งกลาง หรือภาพคู่ 3 นิ้ว 2 คอลัมน์ ได้ไม่จำกัดจำนวนเหมือนหัวข้อ 3.2"
                   imageBlocks={
                     p.imageBlocks !== undefined
                       ? p.imageBlocks

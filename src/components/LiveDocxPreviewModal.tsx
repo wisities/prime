@@ -120,7 +120,132 @@ const renderImageBlocksPreview = (blocks?: ReportImageBlock[], defaultPrefix: st
   );
 };
 
+const renderMarkdownContentPreview = (
+  text: string,
+  keyPrefix: string = 'md',
+  tableHeaderBg: string = 'var(--primary-800)'
+): React.ReactNode[] => {
+  const methLines = (text || '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  if (methLines.length === 0) return [];
+
+  const parsedElements: React.ReactNode[] = [];
+  let lineIdx = 0;
+  while (lineIdx < methLines.length) {
+    const line = methLines[lineIdx];
+    if (line.startsWith('|') && line.endsWith('|')) {
+      const tableLines: string[] = [];
+      while (lineIdx < methLines.length && methLines[lineIdx].startsWith('|') && methLines[lineIdx].endsWith('|')) {
+        tableLines.push(methLines[lineIdx]);
+        lineIdx++;
+      }
+      const contentRows = tableLines.filter((tl) => !/^\|[\s\-:|]+\|$/.test(tl));
+      if (contentRows.length > 0) {
+        const parsedRows = contentRows.map((r) =>
+          r.split('|').slice(1, -1).map((c) => c.trim())
+        );
+        const headerRow = parsedRows[0];
+        const dataRows = parsedRows.slice(1);
+        const firstColTitle = (headerRow[0] || '').trim();
+        const isSeqCol =
+          /^(ลำดับ|ขั้นตอน|ที่|ข้อ|ลำดับที่|no\.?|#)$/i.test(firstColTitle) ||
+          (headerRow.length > 2 && dataRows.every((r) => !r[0] || r[0].length <= 4));
+
+        parsedElements.push(
+          <table
+            key={`${keyPrefix}-tbl-${lineIdx}`}
+            style={{
+              width: '100%',
+              borderCollapse: 'collapse',
+              fontSize: '0.825rem',
+              margin: '0.5rem 0 0.75rem 0',
+              border: '1px solid var(--slate-300)',
+            }}
+          >
+            <thead>
+              <tr style={{ backgroundColor: tableHeaderBg, color: 'white' }}>
+                {headerRow.map((head, hColIdx) => {
+                  const isCol0Seq = isSeqCol && hColIdx === 0;
+                  return (
+                    <th
+                      key={hColIdx}
+                      style={{
+                        padding: '6px 8px',
+                        border: '1px solid var(--slate-300)',
+                        textAlign: isCol0Seq ? 'center' : 'left',
+                        width: isCol0Seq ? '10%' : undefined,
+                      }}
+                    >
+                      {head}
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {dataRows.map((row, rIdx) => (
+                <tr key={rIdx} style={{ backgroundColor: rIdx % 2 === 0 ? '#FFFFFF' : '#F8FAFC' }}>
+                  {row.map((cell, cIdx) => {
+                    const isCol0Seq = isSeqCol && cIdx === 0;
+                    return (
+                      <td
+                        key={cIdx}
+                        style={{
+                          padding: '6px 8px',
+                          border: '1px solid var(--slate-300)',
+                          textAlign: isCol0Seq ? 'center' : 'left',
+                          fontWeight: isCol0Seq ? 600 : 400,
+                        }}
+                      >
+                        {cell}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        );
+      }
+      continue;
+    }
+
+    const isBullet = line.startsWith('-') || line.startsWith('•') || line.startsWith('*');
+    if (isBullet) {
+      const cleanLine = line.replace(/^[-•*]\s*/, '');
+      parsedElements.push(
+        <div
+          key={`${keyPrefix}-bullet-${lineIdx}`}
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '6px',
+            marginLeft: '1rem',
+            marginBottom: '0.25rem',
+          }}
+        >
+          <span style={{ color: 'var(--primary-700)', fontWeight: 700 }}>•</span>
+          <span style={{ fontSize: '0.825rem', color: 'var(--slate-800)' }}>{cleanLine}</span>
+        </div>
+      );
+    } else {
+      parsedElements.push(
+        <p key={`${keyPrefix}-p-${lineIdx}`} style={{ margin: '0 0 0.5rem 0', textAlign: 'left', textIndent: '1.5rem', lineHeight: 1.6, fontSize: '0.825rem', color: 'var(--slate-800)' }}>
+          {line}
+        </p>
+      );
+    }
+    lineIdx++;
+  }
+
+  return parsedElements;
+};
+
 export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
+
   data,
   isOpen,
   onClose,
@@ -1354,10 +1479,6 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                                           <td style={{ padding: '6px 10px', border: '1px solid var(--slate-300)' }}>{p.periodDuration || '-'}</td>
                                         </tr>
                                         <tr>
-                                          <td style={{ padding: '6px 10px', backgroundColor: 'var(--slate-100)', fontWeight: 600, color: 'var(--primary-900)', border: '1px solid var(--slate-300)' }}>ขอบเขตงานและลักษณะงาน</td>
-                                          <td style={{ padding: '6px 10px', border: '1px solid var(--slate-300)', whiteSpace: 'pre-line', lineHeight: 1.6 }}>{p.description}</td>
-                                        </tr>
-                                        <tr>
                                           <td style={{ padding: '6px 10px', backgroundColor: 'var(--slate-100)', fontWeight: 600, color: 'var(--primary-900)', border: '1px solid var(--slate-300)' }}>หลักฐานสัญญา/รับรอง</td>
                                           <td style={{ padding: '6px 10px', border: '1px solid var(--slate-300)', color: p.certificateFileUrl ? 'var(--primary-700)' : 'var(--slate-600)', fontWeight: p.certificateFileUrl ? 600 : 400 }}>
                                             {p.certificateFileUrl ? '✓ มีแนบสำเนาสัญญาจ้าง/หนังสือรับรองผลงานในภาคผนวก ก' : (p.certificateFileName || 'หนังสือรับรองผลงาน / สำเนาสัญญาจ้าง')}
@@ -1365,6 +1486,19 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                                         </tr>
                                       </tbody>
                                     </table>
+
+                                    {/* รายละเอียดโครงการและขอบเขตการดำเนินงาน (รองรับตาราง Markdown, บูลเล็ตพ้อยต์, ข้อความพรรณา) */}
+                                    {p.description && (
+                                      <div style={{ marginTop: '0.85rem', marginBottom: '0.85rem' }}>
+                                        <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--primary-900)', marginBottom: '0.35rem' }}>
+                                          รายละเอียดโครงการและขอบเขตการดำเนินงาน:
+                                        </div>
+                                        <div style={{ fontSize: '0.825rem', color: 'var(--slate-800)' }}>
+                                          {renderMarkdownContentPreview(p.description, `tor-desc-${p.id}`, 'var(--primary-800)')}
+                                        </div>
+                                      </div>
+                                    )}
+
 
                                     {/* (ง) ภาพประกอบ */}
                                     {blocks.length > 0 && (
@@ -1505,10 +1639,6 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                                           <td style={{ padding: '6px 10px', border: '1px solid var(--slate-300)', color: 'var(--primary-900)', fontWeight: 500, lineHeight: 1.6 }}>{p.relevanceNote || p.description}</td>
                                         </tr>
                                         <tr>
-                                          <td style={{ padding: '6px 10px', backgroundColor: 'var(--slate-100)', fontWeight: 600, color: 'var(--primary-900)', border: '1px solid var(--slate-300)' }}>ขอบเขตงานโดยละเอียด</td>
-                                          <td style={{ padding: '6px 10px', border: '1px solid var(--slate-300)', whiteSpace: 'pre-line', lineHeight: 1.6 }}>{p.description}</td>
-                                        </tr>
-                                        <tr>
                                           <td style={{ padding: '6px 10px', backgroundColor: 'var(--slate-100)', fontWeight: 600, color: 'var(--primary-900)', border: '1px solid var(--slate-300)' }}>หลักฐานสัญญา/รับรอง</td>
                                           <td style={{ padding: '6px 10px', border: '1px solid var(--slate-300)', color: p.certificateFileUrl ? 'var(--primary-700)' : 'var(--slate-600)', fontWeight: p.certificateFileUrl ? 600 : 400 }}>
                                             {p.certificateFileUrl ? '✓ มีแนบสำเนาสัญญา/หนังสือรับรองผลงาน' : (p.certificateFileName || 'หนังสือรับรองผลงาน / สัญญาจ้าง')}
@@ -1516,6 +1646,19 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                                         </tr>
                                       </tbody>
                                     </table>
+
+                                    {/* รายละเอียดโครงการและขอบเขตการดำเนินงาน (รองรับตาราง Markdown, บูลเล็ตพ้อยต์, ข้อความพรรณา) */}
+                                    {p.description && (
+                                      <div style={{ marginTop: '0.85rem', marginBottom: '0.85rem' }}>
+                                        <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--primary-900)', marginBottom: '0.35rem' }}>
+                                          รายละเอียดโครงการและขอบเขตการดำเนินงาน:
+                                        </div>
+                                        <div style={{ fontSize: '0.825rem', color: 'var(--slate-800)' }}>
+                                          {renderMarkdownContentPreview(p.description, `supp-desc-${p.id}`, 'var(--slate-700)')}
+                                        </div>
+                                      </div>
+                                    )}
+
 
                                     {/* (ง) ภาพประกอบ */}
                                     {blocks.length > 0 && (

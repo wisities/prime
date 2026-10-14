@@ -2186,7 +2186,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
           // (ข) โลโกหน่วยงาน (ตรงกลางหน้า)
           part5BChildren.push(...createCenteredClientLogo(proj.clientLogoUrl, proj.clientName));
 
-          // (ค) รายละเอียดโครงการ (ตาราง 2 คอลัมน์)
+          // (ค) รายละเอียดโครงการ (ตารางคุณสมบัติ 2 คอลัมน์ และข้อความพรรณา/ตาราง/บูลเล็ต)
           part5BChildren.push(
             createProjectDetailTable([
               { label: 'ชื่อโครงการ', value: proj.projectName },
@@ -2194,15 +2194,28 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
               { label: 'ปีที่แล้วเสร็จ', value: `พ.ศ. ${proj.completionYearBE}` },
               { label: 'มูลค่าสัญญา', value: `${proj.contractValue.toLocaleString()} บาท` },
               { label: 'ระยะเวลาดำเนินงาน', value: proj.periodDuration || '-' },
-              { label: 'ขอบเขตงานและลักษณะงาน', value: proj.description },
               {
                 label: 'หลักฐานสัญญา/รับรอง',
                 value: proj.certificateFileUrl
                   ? 'มีแนบสำเนาสัญญาจ้าง/หนังสือรับรองผลงานในภาคผนวก ก ของเล่มข้อเสนอนี้'
                   : (proj.certificateFileName || 'หนังสือรับรองผลงาน / สำเนาสัญญาจ้าง'),
               },
-            ])
+            ]),
+            new Paragraph({
+              spacing: { before: 140, after: 60, line: 240, lineRule: LineRuleType.AUTO },
+              children: [
+                new TextRun({
+                  text: 'รายละเอียดโครงการและขอบเขตการดำเนินงาน:',
+                  font: FONT_FAMILY,
+                  size: 28, // 14pt
+                  bold: true,
+                  color: COLOR_PRIMARY,
+                }),
+              ],
+            }),
+            ...renderMethodologyParagraphsAndTables(proj.description)
           );
+
 
           // (ง) ภาพประกอบ
           const blocksToRender: ReportImageBlock[] = [];
@@ -2299,7 +2312,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
             // (ข) โลโกหน่วยงาน (ตรงกลางหน้า)
             part5BChildren.push(...createCenteredClientLogo(proj.clientLogoUrl, proj.clientName));
 
-            // (ค) รายละเอียดโครงการ (ตาราง 2 คอลัมน์)
+            // (ค) รายละเอียดโครงการ (ตารางคุณสมบัติ 2 คอลัมน์ และข้อความพรรณา/ตาราง/บูลเล็ต)
             part5BChildren.push(
               createProjectDetailTable([
                 { label: 'ชื่อโครงการ', value: proj.projectName },
@@ -2307,16 +2320,29 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
                 { label: 'ปีที่แล้วเสร็จ', value: `พ.ศ. ${proj.completionYearBE}` },
                 { label: 'มูลค่าสัญญา', value: `${proj.contractValue.toLocaleString()} บาท` },
                 { label: 'ระยะเวลาดำเนินงาน', value: proj.periodDuration || '-' },
-                { label: 'กิจกรรมและประเด็นที่สอดคล้องกับงานจ้าง', value: proj.relevanceNote || proj.description },
-                { label: 'ขอบเขตงานโดยละเอียด', value: proj.description },
+                { label: 'กิจกรรมและประเด็นที่สอดคล้องกับงานจ้าง', value: proj.relevanceNote || '-' },
                 {
                   label: 'หลักฐานสัญญา/รับรอง',
                   value: proj.certificateFileUrl
                     ? 'มีแนบสำเนาสัญญา/หนังสือรับรองผลงาน'
                     : (proj.certificateFileName || 'หนังสือรับรองผลงาน / สัญญาจ้าง'),
                 },
-              ])
+              ]),
+              new Paragraph({
+                spacing: { before: 140, after: 60, line: 240, lineRule: LineRuleType.AUTO },
+                children: [
+                  new TextRun({
+                    text: 'รายละเอียดโครงการและขอบเขตการดำเนินงาน:',
+                    font: FONT_FAMILY,
+                    size: 28, // 14pt
+                    bold: true,
+                    color: COLOR_PRIMARY,
+                  }),
+                ],
+              }),
+              ...renderMethodologyParagraphsAndTables(proj.description)
             );
+
 
             // (ง) ภาพประกอบ
             const blocksToRender: ReportImageBlock[] = [];
