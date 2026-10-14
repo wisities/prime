@@ -11,6 +11,7 @@ import {
   ChevronUp,
   Table,
   List,
+  Image as ImageIcon,
 } from 'lucide-react';
 
 interface TorMapperProps {
@@ -94,7 +95,7 @@ export const TorMapper: React.FC<TorMapperProps> = ({ scopeItems, onChange }) =>
 
           const badge = levelBadges[(item.level - 1) % levelBadges.length];
           const indentPixels = (item.level - 1) * 20;
-          const imageLayout: TorImageLayout = item.imageLayout || 'none';
+          const itemBlocks = normalizeTorItemImageBlocks(item);
 
           return (
             <div
@@ -131,7 +132,7 @@ export const TorMapper: React.FC<TorMapperProps> = ({ scopeItems, onChange }) =>
                     {item.title}
                   </span>
 
-                  {imageLayout !== 'none' && (
+                  {itemBlocks.length > 0 && (
                     <span
                       style={{
                         backgroundColor: '#FEF3C7',
@@ -146,11 +147,7 @@ export const TorMapper: React.FC<TorMapperProps> = ({ scopeItems, onChange }) =>
                       }}
                     >
                       <ImageIcon size={11} />
-                      {imageLayout === 'single_centered'
-                        ? 'ภาพ 6 นิ้ว'
-                        : imageLayout === 'two_columns'
-                        ? 'ภาพ 2 คอลัมน์'
-                        : 'ภาพ 6 นิ้ว + 2 คอลัมน์'}
+                      {itemBlocks.length} รูป
                     </span>
                   )}
 
