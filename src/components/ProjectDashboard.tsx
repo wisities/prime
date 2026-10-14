@@ -79,21 +79,18 @@ export const computeProjectCompletion = (project: BiddingProject): ProjectComple
   const scopeItems = pData?.section1?.scopeItems || [];
 
   const clausesList: ClauseCompletionInfo[] = scopeItems.map((item) => {
-    const hasReq = (item.requirement || '').trim().length > 5;
-    const hasMeth = (item.proposedMethodology || '').trim().length > 15;
-    const hasDeliv = (item.deliverable || '').trim().length > 0;
+    // เกณฑ์ความสมบูรณ์ของข้อ 3.2: ต้องมีอย่างน้อยเป็นข้อความในช่องรายละเอียดวิธีการดำเนินงาน (ส่วนรูปภาพจะมีหรือไม่ก็ได้)
+    const hasMeth = (item.proposedMethodology || '').trim().length > 0;
 
     const missing: string[] = [];
-    if (!hasReq) missing.push('ข้อกำหนด TOR');
-    if (!hasMeth) missing.push('วิธีการดำเนินงาน');
-    if (!hasDeliv) missing.push('สิ่งส่งมอบ');
+    if (!hasMeth) missing.push('รายละเอียดวิธีดำเนินงาน (ข้อ 3.2)');
 
     return {
       id: item.id,
       clauseNumber: item.clauseNumber,
       title: item.title,
       level: item.level,
-      isComplete: hasReq && hasMeth && hasDeliv,
+      isComplete: hasMeth,
       missingItems: missing,
     };
   });

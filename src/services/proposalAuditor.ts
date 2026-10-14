@@ -82,24 +82,15 @@ export function runRuleBasedAudit(data: ProposalData): AuditIssue[] {
     });
   } else {
     scopeItems.forEach((item) => {
-      if (!item.proposedMethodology || item.proposedMethodology.trim().length < 15) {
+      const hasMethodology = (item.proposedMethodology || '').trim().length > 0;
+      if (!hasMethodology) {
         issues.push({
           id: `comp-method-${item.id}`,
           category: 'completeness',
           severity: 'error',
-          section: 'ส่วนที่ 3: ตอบสนอง TOR',
-          message: `${item.clauseNumber} (${item.title}) ยังไม่ได้กรอกแนวคิดและวิธีการดำเนินงานที่บริษัทเสนอ`,
-          detail: 'กรุณากรอกรายละเอียดวิธีการดำเนินงานที่บริษัทจะเสนอเพื่อตอบสนองข้อกำหนดนี้ให้ชัดเจน',
-        });
-      }
-      if (!item.deliverable || item.deliverable.trim().length === 0) {
-        issues.push({
-          id: `comp-deliv-${item.id}`,
-          category: 'completeness',
-          severity: 'warning',
-          section: 'ส่วนที่ 3: ตอบสนอง TOR',
-          message: `${item.clauseNumber} ยังไม่ได้ระบุสิ่งส่งมอบ (Deliverable)`,
-          detail: 'ควรระบุเอกสารหรือผลงานที่จะส่งมอบตามข้อกำหนดให้ชัดเจน',
+          section: 'ส่วนที่ 3.2: วิธีการดำเนินงาน',
+          message: `${item.clauseNumber} (${item.title}) ยังไม่ได้กรอกรายละเอียดวิธีการดำเนินงาน`,
+          detail: 'หัวข้อ 3.2 ต้องมีอย่างน้อยเป็นข้อความในช่องรายละเอียดวิธีการดำเนินงาน (ส่วนรูปภาพจะมีหรือไม่ก็ได้)',
         });
       }
     });

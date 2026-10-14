@@ -65,7 +65,7 @@ export const TorMapper: React.FC<TorMapperProps> = ({ scopeItems, onChange }) =>
               รายการข้อกำหนดขอบเขตงาน TOR ทั้งหมดที่ต้องเสนอวิธีดำเนินงาน ({scopeItems.length} ข้อ)
             </span>
             <div style={{ fontSize: '0.75rem', color: 'var(--slate-500)' }}>
-              ดึงรายการข้อกำหนดจากส่วนที่ 1 และกำหนดการจากส่วนที่ 2 มาแสดงครบทุกข้อ (รองรับการแทรกภาพอธิบาย 6 นิ้ว หรือ 2 คอลัมน์ 3 นิ้ว)
+              เกณฑ์ความสมบูรณ์: ต้องมีข้อความในช่องรายละเอียดวิธีการดำเนินงานอย่างน้อย 1 ข้อความ (ส่วนภาพประกอบจะมีหรือไม่ก็ได้)
             </div>
           </div>
         </div>
@@ -88,10 +88,8 @@ export const TorMapper: React.FC<TorMapperProps> = ({ scopeItems, onChange }) =>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         {scopeItems.map((item) => {
           const isExpanded = expandedIds[item.id] !== false;
-          const isComplete =
-            (item.requirement || '').trim().length > 5 &&
-            (item.proposedMethodology || '').trim().length > 15 &&
-            (item.deliverable || '').trim().length > 0;
+          // ตรวจเช็คความสมบูรณ์ของหัวข้อ 3.2: ต้องมีอย่างน้อยเป็นข้อความในช่องรายละเอียดวิธีการดำเนินงาน (ส่วนรูปภาพจะมีหรือไม่ก็ได้)
+          const isComplete = (item.proposedMethodology || '').trim().length > 0;
 
           const badge = levelBadges[(item.level - 1) % levelBadges.length];
           const indentPixels = (item.level - 1) * 20;
@@ -233,7 +231,7 @@ export const TorMapper: React.FC<TorMapperProps> = ({ scopeItems, onChange }) =>
                       onChange={(e) => handleItemChange(item.id, 'proposedMethodology', e.target.value)}
                     />
                     <div className="form-hint">
-                      สามารถเขียนบรรยายเชิงพรรณา, สร้างหัวข้อบูลเล็ตด้วยเครื่องหมาย • หรือ - และสามารถแทรกตารางขั้นตอนการทำงานได้ตามต้องการ
+                      💡 <strong>เกณฑ์ความสมบูรณ์ของข้อ 3.2:</strong> ต้องมีอย่างน้อยเป็นข้อความในช่องรายละเอียดนี้ (ส่วนภาพประกอบด้านล่างจะมีหรือไม่ก็ได้) สามารถเขียนพรรณา, สร้างหัวข้อบูลเล็ตด้วยเครื่องหมาย • หรือ - หรือแทรกตารางขั้นตอนการทำงานได้
                     </div>
                   </div>
 
