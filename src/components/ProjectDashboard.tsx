@@ -45,6 +45,8 @@ import {
   Building2,
   ChevronDown,
   ChevronUp,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 
 export interface ClauseCompletionInfo {
@@ -231,6 +233,44 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       ...prev,
       [projectId]: !prev[projectId],
     }));
+  };
+
+  // Collapsed Project Card state for each project
+  const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem('prime_dashboard_collapsed');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const toggleProjectExpand = (projectId: string) => {
+    setCollapsedProjects((prev) => {
+      const next = {
+        ...prev,
+        [projectId]: !prev[projectId],
+      };
+      try {
+        localStorage.setItem('prime_dashboard_collapsed', JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
+
+  const handleToggleAllProjects = (collapse: boolean) => {
+    const next: Record<string, boolean> = {};
+    projects.forEach((p) => {
+      next[p.id] = collapse;
+    });
+    setCollapsedProjects(next);
+    try {
+      localStorage.setItem('prime_dashboard_collapsed', JSON.stringify(next));
+    } catch {
+      // ignore
+    }
   };
 
   // Stats calculation
@@ -1113,6 +1153,31 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             <option value="budget">เรียงตาม: วงเงินงบประมาณ</option>
           </select>
         </div>
+
+        {/* Global Collapse / Expand All Button */}
+        {filteredProjects.length > 0 && (
+          <button
+            type="button"
+            className="btn-toggle-all"
+            onClick={() => {
+              const allCollapsed = filteredProjects.every((p) => !!collapsedProjects[p.id]);
+              handleToggleAllProjects(!allCollapsed);
+            }}
+            title={filteredProjects.every((p) => !!collapsedProjects[p.id]) ? 'คลิกเพื่อขยายรายละเอียดทุกโครงการ' : 'คลิกเพื่อย่อทุกโครงการ แสดงเฉพาะข้อมูลสำคัญ'}
+          >
+            {filteredProjects.every((p) => !!collapsedProjects[p.id]) ? (
+              <>
+                <Maximize2 size={14} />
+                <span>ขยายทั้งหมด</span>
+              </>
+            ) : (
+              <>
+                <Minimize2 size={14} />
+                <span>ย่อทั้งหมด</span>
+              </>
+            )}
+          </button>
+        )}
       </div>
 
       {/* Project Cards List */}
@@ -1139,11 +1204,12 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             const announcementDocs = project.attachments.filter((a) => a.category === 'announcement');
             const torDocs = project.attachments.filter((a) => a.category === 'tor');
             const otherDocs = project.attachments.filter((a) => a.category === 'other');
+            const isCollapsed = !!collapsedProjects[project.id];
 
             return (
               <div
                 key={project.id}
-                className={`project-card status-card-${project.status}`}
+                className={`project-card status-card-${project.status} ${isCollapsed ? 'project-card-collapsed' : ''}`}
               >
                 {/* Card Top: Code, Quick Status Selector, Actions */}
                 <div className="project-card-header">
@@ -1166,6 +1232,17 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                   </div>
 
                   <div className="card-header-actions">
+                    {/* Toggle Collapse/Expand Button */}
+                    <button
+                      type="button"
+                      className={`btn-toggle-card ${isCollapsed ? 'is-collapsed' : 'is-expanded'}`}
+                      onClick={() => toggleProjectExpand(project.id)}
+                      title={isCollapsed ? 'คลิกเพื่อขยายรายละเอียดโครงการ' : 'คลิกเพื่อย่อการแสดงผลโครงการนี้'}
+                    >
+                      <span>{isCollapsed ? 'ขยาย' : 'ย่อ'}</span>
+                      {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                    </button>
+
                     <button
                       type="button"
                       className="icon-action-btn"
@@ -1185,8 +1262,97 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                   </div>
                 </div>
 
-                {/* Card Title & Agency */}
-                <div className="project-card-body">
+                {isCollapsed ? (
+                  /* Collapsed View: แสดงแค่ชื่อโครงการสั้นๆ / กำหนดเวลายื่น / งบประมาณ / สถานะการทำข้อเสนอโครงการ */
+                  <div className="project-card-collapsed-body">
+                    {/* 1. ชื่อโครงการสั้นๆ */}
+                    <div className="collapsed-title-row">
+                      <h3
+                        className="project-title-link collapsed-title"
+                        onClick={() => onSelectProject(project.id)}
+                        title={`คลิกเพื่อจัดทำข้อเสนอ: ${project.projectTitle}`}
+                      >
+                        {project.projectTitle}
+                      </h3>
+                    </div>
+
+                    {/* 2. กำหนดเวลายื่น / 3. งบประมาณ / 4. สถานะการทำข้อเสนอโครงการ */}
+                    <div className="collapsed-meta-grid">
+                      {/* งบประมาณ */}
+                      <div className="collapsed-meta-chip">
+                        <span className="chip-label">งบประมาณ:</span>
+                        <span className="chip-value-budget">
+                          {(project.budgetAmount || 0).toLocaleString()} บาท
+                        </span>
+                      </div>
+
+                      {/* กำหนดเวลายื่น */}
+                      <div className="collapsed-meta-chip">
+                        <Clock size={12} className="meta-icon" />
+                        <span className="chip-label">กำหนดเวลายื่น:</span>
+                        <span className="chip-value-date">
+                          {formatThaiDate(project.submissionDeadline, true)}
+                        </span>
+                        <div className="collapsed-deadline-badge">
+                          {getDeadlineBadge(project.submissionDeadline, project.status)}
+                        </div>
+                      </div>
+
+                      {/* สถานะการทำข้อเสนอโครงการ */}
+                      <div className="collapsed-meta-chip completion-chip">
+                        <FileText size={12} className="meta-icon" />
+                        <span className="chip-label">สถานะข้อเสนอ:</span>
+                        <span
+                          className="chip-completion-status"
+                          style={{
+                            fontWeight: 700,
+                            color: summary.torPercent === 100 ? '#15803D' : summary.torPercent >= 50 ? '#B45309' : '#334155',
+                          }}
+                        >
+                          {summary.completedTorClauses}/{summary.totalTorClauses} ข้อ ({summary.torPercent}%)
+                        </span>
+                        <span
+                          style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
+                            padding: '1px 6px',
+                            borderRadius: '9999px',
+                            backgroundColor: summary.torPercent === 100 ? '#DCFCE7' : summary.torPercent >= 50 ? '#FEF3C7' : '#F1F5F9',
+                            color: summary.torPercent === 100 ? '#166534' : summary.torPercent >= 50 ? '#92400E' : '#475569',
+                          }}
+                        >
+                          {summary.torPercent === 100 ? '✓ ข้อมูลครบถ้วน' : 'กำลังจัดทำ'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Collapsed Footer Actions */}
+                    <div className="collapsed-card-footer">
+                      <button
+                        type="button"
+                        className="btn-link-expand"
+                        onClick={() => toggleProjectExpand(project.id)}
+                        title="ขยายดูรายละเอียดทั้งหมด (TOR, ประกาศจัดจ้าง, งวดงาน)"
+                      >
+                        <ChevronDown size={14} />
+                        <span>ขยายรายละเอียด</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm footer-btn-edit-proposal collapsed-action-btn"
+                        onClick={() => onSelectProject(project.id)}
+                        title="เข้าสู่ระบบจัดทำข้อเสนอโครงการ"
+                      >
+                        <span>จัดทำข้อเสนอโครงการ</span>
+                        <ArrowRight size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {/* Card Title & Agency */}
+                    <div className="project-card-body">
                   <h3
                     className="project-title-link"
                     onClick={() => onSelectProject(project.id)}
@@ -1586,7 +1752,9 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                     <ArrowRight size={15} />
                   </button>
                 </div>
-              </div>
+              </>
+            )}
+          </div>
             );
           })
         )}

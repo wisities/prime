@@ -1298,6 +1298,182 @@ input, textarea, select, button {
   color: #DC2626;
 }
 
+/* Card Collapse / Expand Toggle Button in Header */
+.btn-toggle-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.775rem;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid var(--slate-300);
+  background: #FFFFFF;
+  color: var(--slate-700);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-toggle-card:hover {
+  background: var(--slate-100);
+  color: var(--slate-900);
+  border-color: var(--slate-400);
+}
+
+.btn-toggle-card.is-collapsed {
+  background: #EFF6FF;
+  border-color: #BFDBFE;
+  color: var(--primary-700);
+}
+
+.btn-toggle-card.is-collapsed:hover {
+  background: #DBEAFE;
+}
+
+/* Global Collapse / Expand All Button in Filter Bar */
+.btn-toggle-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.825rem;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid var(--slate-300);
+  background: #FFFFFF;
+  color: var(--slate-700);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.btn-toggle-all:hover {
+  background: var(--slate-100);
+  color: var(--slate-900);
+  border-color: var(--slate-400);
+}
+
+/* Collapsed Card Styling */
+.project-card.project-card-collapsed {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.project-card-collapsed-body {
+  padding: 1rem 1.35rem 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  background: #FFFFFF;
+}
+
+.collapsed-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.collapsed-title {
+  font-size: 1rem !important;
+  font-weight: 700 !important;
+  color: var(--slate-900) !important;
+  line-height: 1.4 !important;
+  margin: 0 !important;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.collapsed-title:hover {
+  color: var(--primary-700) !important;
+  text-decoration: underline;
+}
+
+.collapsed-meta-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: #F8FAFC;
+  border: 1px solid var(--slate-200);
+  border-radius: 8px;
+  padding: 0.65rem 0.85rem;
+}
+
+.collapsed-meta-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--slate-600);
+  flex-wrap: wrap;
+}
+
+.collapsed-meta-chip .meta-icon {
+  color: var(--slate-400);
+  flex-shrink: 0;
+}
+
+.collapsed-meta-chip.completion-chip .meta-icon {
+  color: var(--primary-700);
+}
+
+.collapsed-meta-chip .chip-label {
+  font-weight: 600;
+  color: var(--slate-500);
+  font-size: 0.775rem;
+}
+
+.collapsed-meta-chip .chip-value-budget {
+  font-weight: 700;
+  color: var(--primary-800);
+  font-size: 0.875rem;
+}
+
+.collapsed-meta-chip .chip-value-date {
+  font-weight: 600;
+  color: var(--slate-800);
+}
+
+.collapsed-deadline-badge {
+  display: inline-flex;
+}
+
+.collapsed-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-top: 0.4rem;
+  border-top: 1px dashed var(--slate-200);
+}
+
+.btn-link-expand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: none;
+  border: none;
+  color: var(--primary-700);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.3rem 0.5rem;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.btn-link-expand:hover {
+  background: #EFF6FF;
+  color: var(--primary-800);
+}
+
+.collapsed-action-btn {
+  font-size: 0.8rem !important;
+  padding: 0.45rem 0.95rem !important;
+}
+
 /* Card Body */
 .project-card-body {
   padding: 1.25rem 1.35rem;
