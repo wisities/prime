@@ -151,10 +151,6 @@ export const GanttChart: React.FC<GanttChartProps> = ({
         {/* Task Rows */}
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           {scopeItems.map((item, index) => {
-            const isPageBreak = index > 0 && index % 20 === 0;
-            const pageNum = Math.floor(index / 20) + 1;
-            const totalPages = Math.ceil(scopeItems.length / 20);
-
             const color = levelColors[(item.level - 1) % levelColors.length];
             const startWeekAbsolute = (item.startMonth - 1) * 4 + (item.startWeek - 1);
             const durationWeeks = Math.max(0.5, item.durationWeeks || Math.max(1, Math.round(item.durationDays / 7)));
@@ -166,215 +162,112 @@ export const GanttChart: React.FC<GanttChartProps> = ({
             const indent = (item.level - 1) * 16;
 
             return (
-              <React.Fragment key={item.id}>
-                {isPageBreak && (
-                  <div key={`page-divider-${index}`} style={{ display: 'flex', flexDirection: 'column' }}>
-                    {/* Page Break Banner */}
-                    <div
-                      style={{
-                        backgroundColor: '#0F2744',
-                        color: '#FFFFFF',
-                        padding: '0.65rem 1.25rem',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        borderTop: '3px dashed #F59E0B',
-                        borderBottom: '1px solid #1E3E62',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                        <span
-                          style={{
-                            backgroundColor: '#D97706',
-                            color: '#FFFFFF',
-                            padding: '0.2rem 0.6rem',
-                            borderRadius: '4px',
-                            fontSize: '0.725rem',
-                            fontWeight: 700,
-                          }}
-                        >
-                          ✂️ ขึ้นหน้าใหม่ในรายงาน Word (แผ่นที่ {pageNum}/{totalPages})
-                        </span>
-                        <span style={{ fontSize: '0.825rem', fontWeight: 600 }}>
-                          ยกไปหน้าถัดไปพร้อมหัวตาราง (ข้อกำหนดลำดับที่ {index + 1} เป็นต้นไป)
-                        </span>
-                      </div>
-                      <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
-                        * ตัดหน้าอัตโนมัติ ~20 บรรทัดต่อหน้า เพื่อความคมชัดในเอกสารแนวนอน
-                      </span>
-                    </div>
-
-                    {/* Repeated Timeline Header Row 1: Months */}
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: `420px repeat(${totalMonths}, 1fr)`,
-                        backgroundColor: 'var(--primary-800)',
-                        color: '#FFFFFF',
-                        fontSize: '0.825rem',
-                        fontWeight: 600,
-                        borderBottom: '1px solid var(--primary-700)',
-                      }}
-                    >
-                      <div style={{ padding: '0.45rem 1rem' }}>
-                        ข้อกำหนดขอบเขตงานตาม TOR (Levels 1 - 5) - ต่อแผ่นที่ {pageNum}
-                      </div>
-                      {Array.from({ length: totalMonths }, (_, m) => (
-                        <div
-                          key={m}
-                          style={{
-                            padding: '0.45rem 0.25rem',
-                            textAlign: 'center',
-                            borderLeft: '1px solid rgba(255,255,255,0.2)',
-                          }}
-                        >
-                          เดือนที่ {m + 1}
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Repeated Timeline Header Row 2: Weeks */}
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: `420px repeat(${totalWeeks}, 1fr)`,
-                        backgroundColor: 'var(--slate-100)',
-                        borderBottom: '2px solid var(--slate-300)',
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                      }}
-                    >
-                      <div style={{ padding: '0.35rem 1rem', color: 'var(--slate-600)' }}>
-                        กำหนดช่วงเวลา (เริ่มเดือน/วีค - จำนวนวันทำงาน)
-                      </div>
-                      {Array.from({ length: totalWeeks }, (_, w) => {
-                        const weekInMonth = (w % 4) + 1;
-                        const isMonthBoundary = w % 4 === 0;
-                        return (
-                          <div
-                            key={w}
-                            style={{
-                              padding: '0.35rem 0.15rem',
-                              textAlign: 'center',
-                              borderLeft: isMonthBoundary ? '2px solid var(--slate-400)' : '1px solid var(--slate-200)',
-                              color: isMonthBoundary ? 'var(--primary-800)' : 'var(--slate-600)',
-                              backgroundColor: isMonthBoundary ? 'var(--slate-200)' : 'transparent',
-                            }}
-                          >
-                            W{weekInMonth}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: `420px repeat(${totalWeeks}, 1fr)`,
-                    borderBottom: '1px solid var(--slate-200)',
-                    backgroundColor: isLevel1 ? '#F1F5F9' : index % 2 === 0 ? 'var(--slate-50)' : '#FFFFFF',
-                    minHeight: '52px',
-                    position: 'relative',
-                    alignItems: 'center',
-                  }}
-                >
-                  {/* Task Label Cell */}
-                  <div style={{ padding: '0.4rem 0.85rem', paddingLeft: `${14 + indent}px`, overflow: 'hidden' }}>
-                    <div
-                      style={{
-                        fontWeight: isLevel1 ? 700 : 500,
-                        fontSize: isLevel1 ? '0.875rem' : '0.825rem',
-                        color: isLevel1 ? 'var(--primary-900)' : 'var(--slate-900)',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}
-                      title={`${item.clauseNumber} ${item.title}`}
-                    >
-                      <span
-                        style={{
-                          backgroundColor: color.fill,
-                          color: 'white',
-                          padding: '1px 5px',
-                          borderRadius: '3px',
-                          fontSize: '0.7rem',
-                          fontWeight: 600,
-                          marginRight: '6px',
-                        }}
-                      >
-                        {item.clauseNumber}
-                      </span>
-                      {item.title}
-                    </div>
-
-                    <div
-                      style={{
-                        fontSize: '0.725rem',
-                        color: 'var(--slate-500)',
-                        display: 'flex',
-                        gap: '0.75rem',
-                        alignItems: 'center',
-                        marginTop: '2px',
-                      }}
-                    >
-                      <span>
-                        <Clock size={11} style={{ display: 'inline', marginRight: '2px' }} />
-                        {item.durationDays} วัน (เริ่ม ด.{item.startMonth} W{item.startWeek})
-                      </span>
-                      {item.responsibleRole && (
-                        <span>
-                          <User size={11} style={{ display: 'inline', marginRight: '2px' }} />
-                          {item.responsibleRole}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Timeline Grid Background Columns */}
-                  {Array.from({ length: totalWeeks }, (_, w) => {
-                    const isMonthBoundary = w % 4 === 0;
-                    return (
-                      <div
-                        key={w}
-                        style={{
-                          height: '100%',
-                          borderLeft: isMonthBoundary ? '2px solid var(--slate-300)' : '1px solid var(--slate-200)',
-                          backgroundColor: isMonthBoundary ? 'rgba(0,0,0,0.015)' : 'transparent',
-                        }}
-                      />
-                    );
-                  })}
-
-                  {/* The Gantt Bar */}
+              <div
+                key={item.id}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: `420px repeat(${totalWeeks}, 1fr)`,
+                  borderBottom: '1px solid var(--slate-200)',
+                  backgroundColor: isLevel1 ? '#F1F5F9' : index % 2 === 0 ? 'var(--slate-50)' : '#FFFFFF',
+                  minHeight: '52px',
+                  position: 'relative',
+                  alignItems: 'center',
+                }}
+              >
+                {/* Task Label Cell */}
+                <div style={{ padding: '0.4rem 0.85rem', paddingLeft: `${14 + indent}px`, overflow: 'hidden' }}>
                   <div
                     style={{
-                      position: 'absolute',
-                      left: `calc(420px + (100% - 420px) * ${leftPercent / 100})`,
-                      width: `calc(max(18px, (100% - 420px) * ${widthPercent / 100}))`,
-                      top: '12px',
-                      height: '26px',
-                      backgroundColor: color.fill,
-                      borderRadius: '5px',
-                      color: 'white',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: '0 6px',
-                      fontSize: '0.725rem',
-                      fontWeight: 600,
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
+                      fontWeight: isLevel1 ? 700 : 500,
+                      fontSize: isLevel1 ? '0.875rem' : '0.825rem',
+                      color: isLevel1 ? 'var(--primary-900)' : 'var(--slate-900)',
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                     }}
-                    title={`${item.clauseNumber}: เริ่มเดือน ${item.startMonth} สัปดาห์ W${item.startWeek} | ระยะเวลา ${item.durationDays} วัน`}
+                    title={`${item.clauseNumber} ${item.title}`}
                   >
-                    {item.durationDays} วัน
+                    <span
+                      style={{
+                        backgroundColor: color.fill,
+                        color: 'white',
+                        padding: '1px 5px',
+                        borderRadius: '3px',
+                        fontSize: '0.7rem',
+                        fontWeight: 600,
+                        marginRight: '6px',
+                      }}
+                    >
+                      {item.clauseNumber}
+                    </span>
+                    {item.title}
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: '0.725rem',
+                      color: 'var(--slate-500)',
+                      display: 'flex',
+                      gap: '0.75rem',
+                      alignItems: 'center',
+                      marginTop: '2px',
+                    }}
+                  >
+                    <span>
+                      <Clock size={11} style={{ display: 'inline', marginRight: '2px' }} />
+                      {item.durationDays} วัน (เริ่ม ด.{item.startMonth} W{item.startWeek})
+                    </span>
+                    {item.responsibleRole && (
+                      <span>
+                        <User size={11} style={{ display: 'inline', marginRight: '2px' }} />
+                        {item.responsibleRole}
+                      </span>
+                    )}
                   </div>
                 </div>
-              </React.Fragment>
+
+                {/* Timeline Grid Background Columns */}
+                {Array.from({ length: totalWeeks }, (_, w) => {
+                  const isMonthBoundary = w % 4 === 0;
+                  return (
+                    <div
+                      key={w}
+                      style={{
+                        height: '100%',
+                        borderLeft: isMonthBoundary ? '2px solid var(--slate-300)' : '1px solid var(--slate-200)',
+                        backgroundColor: isMonthBoundary ? 'rgba(0,0,0,0.015)' : 'transparent',
+                      }}
+                    />
+                  );
+                })}
+
+                {/* The Gantt Bar */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: `calc(420px + (100% - 420px) * ${leftPercent / 100})`,
+                    width: `calc(max(18px, (100% - 420px) * ${widthPercent / 100}))`,
+                    top: '12px',
+                    height: '26px',
+                    backgroundColor: color.fill,
+                    borderRadius: '5px',
+                    color: 'white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '0 6px',
+                    fontSize: '0.725rem',
+                    fontWeight: 600,
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                  title={`${item.clauseNumber}: เริ่มเดือน ${item.startMonth} สัปดาห์ W${item.startWeek} | ระยะเวลา ${item.durationDays} วัน`}
+                >
+                  {item.durationDays} วัน
+                </div>
+              </div>
             );
           })}
         </div>

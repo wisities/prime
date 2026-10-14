@@ -500,7 +500,7 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                                 📊 แผนภูมิ Gantt Chart รายสัปดาห์ (1 เดือน = 4 วีค) ตามขอบเขตงาน {section1.scopeItems.length} ข้อตลอด {section1.projectDurationMonths} เดือน
                               </div>
                               <div style={{ fontSize: '0.8rem', color: 'var(--slate-600)' }}>
-                                [ตาราง Word แท้ (Native Table) แบ่งหน้าอัตโนมัติหน้าละ ~20 บรรทัด รวม {Math.max(1, Math.ceil(section1.scopeItems.length / 20))} แผ่น พร้อมหัวตารางเดือน-สัปดาห์ครบทุกหน้า ไม่ใช่ภาพถ่าย สามารถแก้ไขข้อความได้และคมชัด 100%]
+                                [ตาราง Word แท้ (Native Table) แสดงต่อเนื่องเต็มหน้ากระดาษและขึ้นหน้าใหม่อัตโนมัติจนครบทุกข้อ พร้อมหัวตารางเดือน-สัปดาห์กำกับทุกหน้า โดยไม่มีหัวข้อย่อย 2/3 หรือ 3/3]
                               </div>
                             </div>
                           </div>

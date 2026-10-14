@@ -1220,60 +1220,38 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
       if (h.id === 's2_gantt') {
         const scopeItems = section1.scopeItems || [];
         const totalMonths = section1.projectDurationMonths || 6;
-        const pageSize = 20;
+
+        part2Children.push(
+          createH2(`${numPrefix} แผนภูมิแกนต์ (Gantt Chart) แสดงการปฏิบัติงานรายสัปดาห์ตลอดโครงการ`)
+        );
 
         if (scopeItems.length === 0) {
           part2Children.push(
-            createH2(`${numPrefix} แผนภูมิแกนต์ (Gantt Chart) แสดงการปฏิบัติงานรายสัปดาห์ตลอดโครงการ`),
             createP('ยังไม่ได้ระบุรายการขอบเขตงานสำหรับแผนภูมิแกนต์', { italic: true, color: COLOR_MUTED })
           );
         } else {
-          const totalPages = Math.ceil(scopeItems.length / pageSize);
+          // สร้างตาราง Word แท้ๆ (Native Word Table) ต่อเนื่องตลอดโครงการ
+          // หัวตารางเดือน (Header Row 1) และหัวตารางสัปดาห์ (Header Row 2) มี tableHeader: true ทำให้ Word ทำซ้ำหัวตารางอัตโนมัติทุกหน้าที่ขึ้นใหม่
+          // ทุกแถวมี cantSplit: true ป้องกันการแตกครึ่งบรรทัด และให้ตารางขึ้นเต็มหน้ากระดาษแล้วตัดขึ้นหน้าใหม่เรื่อยๆ จนครบทุกข้อ
+          const table = buildNativeWordGanttTable(scopeItems, totalMonths);
+          part2Children.push(table);
 
-          for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
-            const isFirst = pageIdx === 0;
-            const startIdx = pageIdx * pageSize;
-            const endIdx = Math.min(startIdx + pageSize, scopeItems.length);
-            const pageItems = scopeItems.slice(startIdx, endIdx);
-
-            if (!isFirst) {
-              // ขึ้นหน้าใหม่สำหรับตารางแกนต์แผ่นถัดไป
-              part2Children.push(
-                new Paragraph({
-                  children: [new PageBreak()],
-                })
-              );
-            }
-
-            const headingTitle = totalPages > 1
-              ? (isFirst
-                  ? `${numPrefix} แผนภูมิแกนต์ (Gantt Chart) แสดงการปฏิบัติงานรายสัปดาห์ตลอดโครงการ (แผ่นที่ 1/${totalPages})`
-                  : `${numPrefix} แผนภูมิแกนต์ (Gantt Chart) (ต่อ - แผ่นที่ ${pageIdx + 1}/${totalPages})`)
-              : `${numPrefix} แผนภูมิแกนต์ (Gantt Chart) แสดงการปฏิบัติงานรายสัปดาห์ตลอดโครงการ`;
-
-            part2Children.push(createH2(headingTitle));
-
-            // สร้างตาราง Word แท้ๆ (Native Word Table) พร้อมหัวตารางเดือนและสัปดาห์
-            const table = buildNativeWordGanttTable(pageItems, totalMonths, startIdx);
-            part2Children.push(table);
-
-            // หมายเหตุท้ายตาราง
-            part2Children.push(
-              new Paragraph({
-                alignment: AlignmentType.LEFT,
-                spacing: { before: 80, after: 120 },
-                children: [
-                  new TextRun({
-                    text: `* แผนภูมิแกนต์ตารางมาตรฐาน Word (Native Table) รายสัปดาห์ (1 เดือน = 4 วีค) | ขอบเขตงานลำดับที่ ${startIdx + 1} - ${endIdx} จากทั้งหมด ${scopeItems.length} รายการ (หัวตารางเดือนและสัปดาห์กำกับทุกหน้ากระดาษ)`,
-                    font: FONT_FAMILY,
-                    size: 18,
-                    italics: true,
-                    color: COLOR_MUTED,
-                  }),
-                ],
-              })
-            );
-          }
+          // หมายเหตุท้ายตาราง
+          part2Children.push(
+            new Paragraph({
+              alignment: AlignmentType.LEFT,
+              spacing: { before: 80, after: 120 },
+              children: [
+                new TextRun({
+                  text: `* หมายเหตุ: แผนภูมิแกนต์ตารางมาตรฐาน Word (Native Table) รายสัปดาห์ (1 เดือน = 4 วีค) | รวมทั้งสิ้น ${scopeItems.length} รายการ (ระบบแสดงหัวตารางเดือนและสัปดาห์ซ้ำที่ด้านบนสุดของทุกหน้ากระดาษโดยอัตโนมัติ)`,
+                  font: FONT_FAMILY,
+                  size: 18,
+                  italics: true,
+                  color: COLOR_MUTED,
+                }),
+              ],
+            })
+          );
         }
       } else if (h.id === 's2_timeline') {
         // ให้ตารางกำหนดช่วงเวลาการทำงานขึ้นหน้าใหม่ เพื่อไม่ให้ชนหรือติดใต้แผนภูมิแกนต์

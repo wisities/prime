@@ -60,10 +60,7 @@ function renderSingleGanttPage(
   // Page Title Bar
   ctx.fillStyle = '#0F2744';
   ctx.font = 'bold 15px "TH Sarabun New", "Sarabun", "Arial", sans-serif';
-  const pageLabel = totalPages > 1
-    ? (pageNumber === 1 ? ` (แผ่นที่ 1/${totalPages})` : ` (ต่อ - แผ่นที่ ${pageNumber}/${totalPages})`)
-    : '';
-  ctx.fillText(`แผนภูมิแกนต์การปฏิบัติงาน (Gantt Chart): ${projectTitle}${pageLabel}`, 20, 26);
+  ctx.fillText(`แผนภูมิแกนต์การปฏิบัติงาน (Gantt Chart): ${projectTitle}`, 20, 26);
 
   // Subtitle Bar
   ctx.fillStyle = '#556980';
@@ -254,9 +251,8 @@ function renderSingleGanttPage(
   // Footer Legend
   ctx.fillStyle = '#64748B';
   ctx.font = '9.5px "TH Sarabun New", "Sarabun", sans-serif';
-  const pageNote = totalPages > 1 ? ` (แผ่นที่ ${pageNumber}/${totalPages})` : '';
   ctx.fillText(
-    `* กำหนดการทำงานอิงตามระบบรายสัปดาห์ (1 เดือน = 4 สัปดาห์) คำนวณตามจำนวนวันทำงานจริงและแผนขอบเขตงานของหน่วยงานรัฐ${pageNote}`,
+    `* กำหนดการทำงานอิงตามระบบรายสัปดาห์ (1 เดือน = 4 สัปดาห์) คำนวณตามจำนวนวันทำงานจริงและแผนขอบเขตงานของหน่วยงานรัฐ`,
     20,
     legendY
   );
