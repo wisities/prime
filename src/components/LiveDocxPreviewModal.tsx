@@ -495,10 +495,13 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                             <p style={{ marginBottom: '1rem', textAlign: 'justify', textIndent: '2rem', lineHeight: 1.5 }}>
                               {section2.workPlanOverview}
                             </p>
-                            <div style={{ backgroundColor: 'var(--slate-50)', padding: '0.75rem', border: '1px solid var(--slate-300)', borderRadius: '6px', textAlign: 'center', marginBottom: '1.5rem' }}>
-                              <span style={{ fontSize: '0.85rem', color: 'var(--primary-800)', fontWeight: 600 }}>
-                                [แผนภูมิ Gantt Chart รายสัปดาห์ (1 เดือน = 4 วีค) ตามขอบเขตงาน {section1.scopeItems.length} ข้อตลอด {section1.projectDurationMonths} เดือน จะถูกเรนเดอร์ในหน้าแนวนอน (Landscape) กว้างคมชัดเต็มหน้ากระดาษ Word]
-                              </span>
+                            <div style={{ backgroundColor: 'var(--slate-50)', padding: '0.85rem', border: '1px solid var(--slate-300)', borderRadius: '6px', textAlign: 'center', marginBottom: '1.5rem' }}>
+                              <div style={{ fontSize: '0.85rem', color: 'var(--primary-900)', fontWeight: 600, marginBottom: '4px' }}>
+                                📊 แผนภูมิ Gantt Chart รายสัปดาห์ (1 เดือน = 4 วีค) ตามขอบเขตงาน {section1.scopeItems.length} ข้อตลอด {section1.projectDurationMonths} เดือน
+                              </div>
+                              <div style={{ fontSize: '0.8rem', color: 'var(--slate-600)' }}>
+                                [ตาราง Word แท้ (Native Table) แบ่งหน้าอัตโนมัติหน้าละ ~20 บรรทัด รวม {Math.max(1, Math.ceil(section1.scopeItems.length / 20))} แผ่น พร้อมหัวตารางเดือน-สัปดาห์ครบทุกหน้า ไม่ใช่ภาพถ่าย สามารถแก้ไขข้อความได้และคมชัด 100%]
+                              </div>
                             </div>
                           </div>
                         );

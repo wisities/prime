@@ -26,10 +26,10 @@ import {
   TextWrappingType,
 } from 'docx';
 import saveAs from 'file-saver';
-import { ProposalData, ReportImageBlock } from '../types/proposal';
+import { ProposalData, ReportImageBlock, TorScopeItem } from '../types/proposal';
 import { normalizeDocumentStructure } from '../data/defaultData';
 import { normalizeTorItemImageBlocks } from '../utils/imageBlockUtils';
-import { generateGanttChartImage, generateDefaultConceptualDiagram } from '../utils/ganttRenderer';
+import { generateDefaultConceptualDiagram } from '../utils/ganttRenderer';
 
 function base64ToUint8Array(base64: string): Uint8Array {
   const pureBase64 = base64.includes(',') ? base64.split(',')[1] : base64;
@@ -464,6 +464,266 @@ function createDataRow(cells: TableCell[]): TableRow {
   });
 }
 
+/**
+ * Builds a 100% native Word Table for Gantt Chart (ตาราง Word แท้ๆ)
+ * Features:
+ * - TableHeader repeated across every page in Word automatically
+ * - Shaded timeline week cells showing active project phases (Level 1-5 colors)
+ * - cantSplit preventing awkward mid-row breaks
+ * - No canvas screenshots/images needed
+ */
+function buildNativeWordGanttTable(
+  scopeItems: TorScopeItem[],
+  totalMonths: number = 6,
+  startGlobalIndex: number = 0
+): Table {
+  const safeMonths = Math.max(1, totalMonths || 6);
+  const totalWeeks = safeMonths * 4;
+  const isCompact = safeMonths > 6;
+
+  const col1Width = isCompact ? 28 : 34; // % for scope items label & metadata
+  const weekColWidth = (100 - col1Width) / totalWeeks; // percentage per week
+
+  const thinBorder = {
+    style: BorderStyle.SINGLE,
+    size: 1,
+    color: 'CBD5E1',
+  };
+
+  const cellBorders = {
+    top: thinBorder,
+    bottom: thinBorder,
+    left: thinBorder,
+    right: thinBorder,
+  };
+
+  // Header Row 1: Months
+  const header1Cells: TableCell[] = [
+    new TableCell({
+      width: { size: col1Width, type: WidthType.PERCENTAGE },
+      shading: { fill: '0F2744' },
+      margins: { top: 100, bottom: 100, left: 120, right: 120 },
+      borders: cellBorders,
+      children: [
+        new Paragraph({
+          alignment: AlignmentType.LEFT,
+          spacing: { line: 240, lineRule: LineRuleType.AUTO },
+          children: [
+            new TextRun({
+              text: 'ขอบเขตงานตาม TOR และผู้รับผิดชอบ',
+              bold: true,
+              color: 'FFFFFF',
+              font: FONT_FAMILY,
+              size: 24, // 12pt
+            }),
+          ],
+        }),
+      ],
+    }),
+  ];
+
+  for (let m = 1; m <= safeMonths; m++) {
+    header1Cells.push(
+      new TableCell({
+        width: { size: weekColWidth * 4, type: WidthType.PERCENTAGE },
+        columnSpan: 4,
+        shading: { fill: '0F2744' },
+        margins: { top: 100, bottom: 100, left: 40, right: 40 },
+        borders: cellBorders,
+        children: [
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { line: 240, lineRule: LineRuleType.AUTO },
+            children: [
+              new TextRun({
+                text: `เดือนที่ ${m}`,
+                bold: true,
+                color: 'FFFFFF',
+                font: FONT_FAMILY,
+                size: 22, // 11pt
+              }),
+            ],
+          }),
+        ],
+      })
+    );
+  }
+
+  // Header Row 2: Weeks
+  const header2Cells: TableCell[] = [
+    new TableCell({
+      width: { size: col1Width, type: WidthType.PERCENTAGE },
+      shading: { fill: '1E3E62' },
+      margins: { top: 70, bottom: 70, left: 120, right: 120 },
+      borders: cellBorders,
+      children: [
+        new Paragraph({
+          alignment: AlignmentType.LEFT,
+          spacing: { line: 240, lineRule: LineRuleType.AUTO },
+          children: [
+            new TextRun({
+              text: 'จำแนกข้อหลักและข้อย่อย (ระดับ 1 - 5)',
+              bold: false,
+              color: 'CBD5E1',
+              font: FONT_FAMILY,
+              size: 20, // 10pt
+            }),
+          ],
+        }),
+      ],
+    }),
+  ];
+
+  for (let w = 1; w <= totalWeeks; w++) {
+    const weekInMonth = ((w - 1) % 4) + 1;
+    const isMonthBoundary = (w - 1) % 4 === 0;
+    header2Cells.push(
+      new TableCell({
+        width: { size: weekColWidth, type: WidthType.PERCENTAGE },
+        shading: { fill: isMonthBoundary ? '254B75' : '1E3E62' },
+        margins: { top: 60, bottom: 60, left: 10, right: 10 },
+        borders: cellBorders,
+        children: [
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { line: 240, lineRule: LineRuleType.AUTO },
+            children: [
+              new TextRun({
+                text: isCompact ? `${weekInMonth}` : `W${weekInMonth}`,
+                bold: isMonthBoundary,
+                color: 'FFFFFF',
+                font: FONT_FAMILY,
+                size: 18, // 9pt
+              }),
+            ],
+          }),
+        ],
+      })
+    );
+  }
+
+  const tableRows: TableRow[] = [
+    new TableRow({
+      tableHeader: true,
+      cantSplit: true,
+      children: header1Cells,
+    }),
+    new TableRow({
+      tableHeader: true,
+      cantSplit: true,
+      children: header2Cells,
+    }),
+  ];
+
+  const levelColors = [
+    '0F2744', // Level 1 (Navy)
+    '1E40AF', // Level 2 (Blue)
+    '0D9488', // Level 3 (Teal)
+    '7C3AED', // Level 4 (Purple)
+    'D97706', // Level 5 (Amber)
+  ];
+
+  (scopeItems || []).forEach((item, index) => {
+    const isLevel1 = (item.level || 1) === 1;
+    const barFill = levelColors[((item.level || 1) - 1) % levelColors.length];
+
+    const startMonth = Math.max(1, item.startMonth || 1);
+    const startWeek = Math.max(1, Math.min(4, item.startWeek || 1));
+    const startWeekAbsolute = (startMonth - 1) * 4 + (startWeek - 1);
+    const durationWeeks = Math.max(1, item.durationWeeks || Math.round((item.durationDays || 7) / 7));
+    const endWeekAbsolute = startWeekAbsolute + durationWeeks;
+
+    const indentSpaces = '  '.repeat(Math.max(0, (item.level || 1) - 1));
+    const clauseStr = formatTorClauseNumber(item.clauseNumber);
+
+    const firstCellChildren = [
+      new Paragraph({
+        alignment: AlignmentType.LEFT,
+        spacing: { before: 20, after: 20, line: 240, lineRule: LineRuleType.AUTO },
+        children: [
+          new TextRun({
+            text: `${indentSpaces}${clauseStr} ${item.title}`,
+            bold: isLevel1,
+            color: isLevel1 ? '0F2744' : '1E293B',
+            font: FONT_FAMILY,
+            size: isLevel1 ? 22 : 20, // 11pt / 10pt
+          }),
+        ],
+      }),
+      new Paragraph({
+        alignment: AlignmentType.LEFT,
+        spacing: { before: 0, after: 20, line: 240, lineRule: LineRuleType.AUTO },
+        children: [
+          new TextRun({
+            text: `${indentSpaces}${item.durationDays || 1} วัน (~${durationWeeks} วีค) | ด.${startMonth} W${startWeek} | ${item.responsibleRole || '-'}`,
+            color: '64748B',
+            font: FONT_FAMILY,
+            size: 18, // 9pt
+          }),
+        ],
+      }),
+    ];
+
+    const isEven = (startGlobalIndex + index) % 2 === 0;
+
+    const rowCells: TableCell[] = [
+      new TableCell({
+        width: { size: col1Width, type: WidthType.PERCENTAGE },
+        shading: { fill: isEven ? 'F8FAFC' : 'FFFFFF' },
+        margins: { top: 60, bottom: 60, left: 100, right: 100 },
+        borders: cellBorders,
+        children: firstCellChildren,
+      }),
+    ];
+
+    for (let w = 1; w <= totalWeeks; w++) {
+      const weekIdx = w - 1;
+      const isActive = weekIdx >= startWeekAbsolute && weekIdx < endWeekAbsolute;
+      const isFirstActiveWeek = weekIdx === startWeekAbsolute;
+
+      rowCells.push(
+        new TableCell({
+          width: { size: weekColWidth, type: WidthType.PERCENTAGE },
+          shading: { fill: isActive ? barFill : (isEven ? 'F8FAFC' : 'FFFFFF') },
+          margins: { top: 40, bottom: 40, left: 5, right: 5 },
+          borders: cellBorders,
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { line: 240, lineRule: LineRuleType.AUTO },
+              children: [
+                new TextRun({
+                  text: isActive
+                    ? (isFirstActiveWeek && durationWeeks > 1
+                        ? `${item.durationDays}ว`
+                        : (durationWeeks === 1 ? `${item.durationDays}ว` : (isCompact ? '' : '▪')))
+                    : '',
+                  bold: true,
+                  color: 'FFFFFF',
+                  font: FONT_FAMILY,
+                  size: 16, // 8pt
+                }),
+              ],
+            }),
+          ],
+        })
+      );
+    }
+
+    tableRows.push(
+      new TableRow({
+        cantSplit: true,
+        children: rowCells,
+      })
+    );
+  });
+
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: tableRows,
+  });
+}
+
 function renderMethodologyParagraphsAndTables(text: string): (Paragraph | Table)[] {
   const result: (Paragraph | Table)[] = [];
   const lines = (text || 'บริษัทฯ มุ่งมั่นปฏิบัติงานตามมาตรฐานสากลและส่งมอบตามเกณฑ์ที่กำหนด')
@@ -609,13 +869,6 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
   const { cover, section1, section2, section3, section4, section5 } = data;
   const docStructure = normalizeDocumentStructure(data.documentStructure);
   const autoRenumber = docStructure.autoRenumber ?? true;
-
-  // Render weekly Gantt chart image as PNG (optimized for Landscape width)
-  const ganttImageBase64 = generateGanttChartImage(
-    section1.scopeItems || [],
-    section1.projectDurationMonths || 6,
-    cover.projectTitle
-  );
 
   const hasCustomImagesInS3 = !!section3.conceptualDiagramImage || (!!section3.imageBlocks && section3.imageBlocks.length > 0);
   const conceptualImageBase64 = section3.conceptualDiagramImage || (hasCustomImagesInS3 ? undefined : generateDefaultConceptualDiagram());
@@ -965,28 +1218,69 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
     activeS2Headings.forEach((h, hIdx) => {
       const numPrefix = autoRenumber ? `2.${hIdx + 1}` : h.originalCode;
       if (h.id === 's2_gantt') {
-        part2Children.push(
-          createH2(`${numPrefix} แผนภูมิแกนต์ (Gantt Chart) แสดงการปฏิบัติงานรายสัปดาห์ตลอดโครงการ`)
-        );
-        try {
-          const ganttBytes = base64ToUint8Array(ganttImageBase64);
+        const scopeItems = section1.scopeItems || [];
+        const totalMonths = section1.projectDurationMonths || 6;
+        const pageSize = 20;
+
+        if (scopeItems.length === 0) {
           part2Children.push(
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              spacing: { before: 140, after: 180 },
-              children: [
-                new ImageRun({
-                  data: ganttBytes,
-                  transformation: { width: 850, height: Math.min(460, 110 + (section1.scopeItems || []).length * 28) },
-                } as any),
-              ],
-            })
+            createH2(`${numPrefix} แผนภูมิแกนต์ (Gantt Chart) แสดงการปฏิบัติงานรายสัปดาห์ตลอดโครงการ`),
+            createP('ยังไม่ได้ระบุรายการขอบเขตงานสำหรับแผนภูมิแกนต์', { italic: true, color: COLOR_MUTED })
           );
-        } catch (e) {
-          console.error('Failed to embed Gantt chart in landscape', e);
+        } else {
+          const totalPages = Math.ceil(scopeItems.length / pageSize);
+
+          for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
+            const isFirst = pageIdx === 0;
+            const startIdx = pageIdx * pageSize;
+            const endIdx = Math.min(startIdx + pageSize, scopeItems.length);
+            const pageItems = scopeItems.slice(startIdx, endIdx);
+
+            if (!isFirst) {
+              // ขึ้นหน้าใหม่สำหรับตารางแกนต์แผ่นถัดไป
+              part2Children.push(
+                new Paragraph({
+                  children: [new PageBreak()],
+                })
+              );
+            }
+
+            const headingTitle = totalPages > 1
+              ? (isFirst
+                  ? `${numPrefix} แผนภูมิแกนต์ (Gantt Chart) แสดงการปฏิบัติงานรายสัปดาห์ตลอดโครงการ (แผ่นที่ 1/${totalPages})`
+                  : `${numPrefix} แผนภูมิแกนต์ (Gantt Chart) (ต่อ - แผ่นที่ ${pageIdx + 1}/${totalPages})`)
+              : `${numPrefix} แผนภูมิแกนต์ (Gantt Chart) แสดงการปฏิบัติงานรายสัปดาห์ตลอดโครงการ`;
+
+            part2Children.push(createH2(headingTitle));
+
+            // สร้างตาราง Word แท้ๆ (Native Word Table) พร้อมหัวตารางเดือนและสัปดาห์
+            const table = buildNativeWordGanttTable(pageItems, totalMonths, startIdx);
+            part2Children.push(table);
+
+            // หมายเหตุท้ายตาราง
+            part2Children.push(
+              new Paragraph({
+                alignment: AlignmentType.LEFT,
+                spacing: { before: 80, after: 120 },
+                children: [
+                  new TextRun({
+                    text: `* แผนภูมิแกนต์ตารางมาตรฐาน Word (Native Table) รายสัปดาห์ (1 เดือน = 4 วีค) | ขอบเขตงานลำดับที่ ${startIdx + 1} - ${endIdx} จากทั้งหมด ${scopeItems.length} รายการ (หัวตารางเดือนและสัปดาห์กำกับทุกหน้ากระดาษ)`,
+                    font: FONT_FAMILY,
+                    size: 18,
+                    italics: true,
+                    color: COLOR_MUTED,
+                  }),
+                ],
+              })
+            );
+          }
         }
       } else if (h.id === 's2_timeline') {
+        // ให้ตารางกำหนดช่วงเวลาการทำงานขึ้นหน้าใหม่ เพื่อไม่ให้ชนหรือติดใต้แผนภูมิแกนต์
         part2Children.push(
+          new Paragraph({
+            children: [new PageBreak()],
+          }),
           createH2(`${numPrefix} ตารางกำหนดช่วงเวลาการทำงานตามขอบเขตงาน TOR (รายสัปดาห์และจำนวนวัน)`)
         );
 
@@ -1018,6 +1312,9 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
         );
       } else if (h.id === 's2_milestones') {
         part2Children.push(
+          new Paragraph({
+            children: [new PageBreak()],
+          }),
           createH2(`${numPrefix} แผนการส่งมอบงานและการเบิกจ่ายเงิน (Milestones & Deliverables)`)
         );
 
@@ -2106,7 +2403,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
       properties: {
         page: {
           size: { orientation: PageOrientation.LANDSCAPE },
-          margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
+          margin: { top: 1000, bottom: 1000, left: 1080, right: 1080 },
         },
       },
       headers: { default: createCommonHeader(true) },
