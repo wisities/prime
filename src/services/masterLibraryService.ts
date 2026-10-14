@@ -100,6 +100,8 @@ function pastProjectToCloudRow(p: PastProject) {
     certificate_file_name: p.certificateFileName || null,
     project_image_url: p.projectImageUrl || null,
     project_image_caption: p.projectImageCaption || null,
+    client_logo_url: p.clientLogoUrl || null,
+    image_blocks: p.imageBlocks || null,
     data: p,
     updated_at: new Date().toISOString(),
   };
@@ -112,6 +114,7 @@ function cloudRowToPastProject(row: any): PastProject {
       id: row.id,
       projectName: row.project_name || row.data.projectName,
       clientName: row.client_name || row.data.clientName || '',
+      clientLogoUrl: row.client_logo_url || row.data.clientLogoUrl || undefined,
       contractValue: Number(row.contract_value) || Number(row.data.contractValue) || 0,
       completionYearBE: Number(row.completion_year_be) || Number(row.data.completionYearBE) || 2567,
       periodDuration: row.period_duration || row.data.periodDuration || '',
@@ -124,12 +127,14 @@ function cloudRowToPastProject(row: any): PastProject {
       certificateFileName: row.certificate_file_name || row.data.certificateFileName || undefined,
       projectImageUrl: row.project_image_url || row.data.projectImageUrl || undefined,
       projectImageCaption: row.project_image_caption || row.data.projectImageCaption || undefined,
+      imageBlocks: row.image_blocks || row.data.imageBlocks || undefined,
     };
   }
   return {
     id: row.id,
     projectName: row.project_name,
     clientName: row.client_name || '',
+    clientLogoUrl: row.client_logo_url || undefined,
     contractValue: Number(row.contract_value) || 0,
     completionYearBE: Number(row.completion_year_be) || 2567,
     periodDuration: row.period_duration || '',
@@ -142,6 +147,7 @@ function cloudRowToPastProject(row: any): PastProject {
     certificateFileName: row.certificate_file_name || undefined,
     projectImageUrl: row.project_image_url || undefined,
     projectImageCaption: row.project_image_caption || undefined,
+    imageBlocks: row.image_blocks || undefined,
   };
 }
 

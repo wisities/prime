@@ -148,6 +148,7 @@ export interface PastProject {
   id: string;
   projectName: string;
   clientName: string;
+  clientLogoUrl?: string; // ภาพโลโก้ของลูกค้า / หน่วยงานผู้ว่าจ้างที่เคยทำงานให้
   contractValue: number; // in Baht
   completionYearBE: number; // e.g. 2567
   periodDuration: string; // e.g. "12 เดือน"
@@ -158,8 +159,9 @@ export interface PastProject {
   relevanceNote?: string; // โน้ตกำกับกิจกรรมใดที่สอดคล้องกับงานจ้างโครงการนี้ (สำหรับผลงานเสริม)
   certificateFileUrl?: string; // ภาพสำเนาสัญญาจ้าง หรือใบรับรองผลงาน (สำหรับแทรกในภาคผนวก)
   certificateFileName?: string;
-  projectImageUrl?: string; // ภาพประกอบผลงาน / หน้าจอระบบ
+  projectImageUrl?: string; // ภาพประกอบผลงาน / หน้าจอระบบ (legacy)
   projectImageCaption?: string;
+  imageBlocks?: ReportImageBlock[]; // ภาพประกอบผลงาน/หน้าจอระบบ (ไม่จำกัดจำนวน: รองรับภาพคู่ 3 นิ้ว 2 คอลัมน์ และภาพเดี่ยว 6 นิ้ว)
 }
 
 export interface Section5Company {

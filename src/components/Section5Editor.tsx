@@ -114,6 +114,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
       isSelected: true,
       projectType: 'tor_reference',
       relevanceNote: '',
+      imageBlocks: [],
     };
     onChange({ ...section5, pastProjects: [...section5.pastProjects, newProj] });
   };
@@ -667,13 +668,101 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                 {/* Project Details Grid */}
                 <div className="grid-4" style={{ marginBottom: '0.75rem' }}>
                   <div>
-                    <label className="form-label">หน่วยงานผู้ว่าจ้าง</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={p.clientName}
-                      onChange={(e) => handleProjectChange(p.id, 'clientName', e.target.value)}
-                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2rem' }}>
+                      <label className="form-label" style={{ marginBottom: 0 }}>หน่วยงานผู้ว่าจ้าง</label>
+                      {p.clientLogoUrl && (
+                        <span style={{ fontSize: '0.7rem', color: '#16A34A', fontWeight: 600 }}>✓ มีโลโก้ลูกค้า</span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      {p.clientLogoUrl ? (
+                        <div style={{ position: 'relative', display: 'inline-block', flexShrink: 0 }}>
+                          <img
+                            src={p.clientLogoUrl}
+                            alt="Client Logo"
+                            style={{
+                              height: '36px',
+                              width: '44px',
+                              objectFit: 'contain',
+                              backgroundColor: '#FFFFFF',
+                              border: '1px solid var(--slate-300)',
+                              borderRadius: '4px',
+                              padding: '2px',
+                              display: 'block',
+                            }}
+                            title="โลโก้หน่วยงานผู้ว่าจ้าง"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleProjectChange(p.id, 'clientLogoUrl', undefined)}
+                            style={{
+                              position: 'absolute',
+                              top: '-5px',
+                              right: '-5px',
+                              background: '#EF4444',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '50%',
+                              width: '16px',
+                              height: '16px',
+                              fontSize: '10px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              lineHeight: 1,
+                            }}
+                            title="ลบโลโก้ลูกค้า"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <label
+                          style={{
+                            padding: '0.4rem 0.55rem',
+                            border: '1px dashed var(--slate-300)',
+                            borderRadius: '6px',
+                            backgroundColor: '#FFFFFF',
+                            cursor: 'pointer',
+                            fontSize: '0.75rem',
+                            color: 'var(--primary-700)',
+                            fontWeight: 600,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            whiteSpace: 'nowrap',
+                            height: '36px',
+                            flexShrink: 0,
+                          }}
+                          title="อัปโหลดภาพโลโก้ของลูกค้า / หน่วยงานผู้ว่าจ้าง"
+                        >
+                          <input
+                            type="file"
+                            accept="image/*"
+                            style={{ display: 'none' }}
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) {
+                                handleFileUpload(f, (b64) => {
+                                  handleProjectChange(p.id, 'clientLogoUrl', b64);
+                                });
+                              }
+                            }}
+                          />
+                          <Upload size={12} />
+                          <span>โลโก้</span>
+                        </label>
+                      )}
+                      <input
+                        type="text"
+                        className="form-input"
+                        style={{ flex: 1 }}
+                        placeholder="ระบุชื่อหน่วยงานผู้ว่าจ้าง..."
+                        value={p.clientName}
+                        onChange={(e) => handleProjectChange(p.id, 'clientName', e.target.value)}
+                      />
+                    </div>
                   </div>
 
                   <div>
@@ -834,75 +923,33 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                   </div>
                 )}
 
-                {/* Project Screenshot / Photo Upload (ทั้ง 2 แบบสามารถอัพโหลดรูปภาพผลงานได้) */}
-                <div style={{ backgroundColor: 'var(--slate-50)', padding: '0.65rem 0.85rem', borderRadius: '6px', border: '1px solid var(--slate-200)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
-                    <span style={{ fontSize: '0.775rem', fontWeight: 600, color: 'var(--slate-700)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Image size={14} color="var(--slate-600)" />
-                      ภาพประกอบผลงาน / หน้าจอระบบจริง (Project Screenshot)
-                    </span>
-                  </div>
-
-                  {p.projectImageUrl ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                      <img
-                        src={p.projectImageUrl}
-                        alt="Project screenshot"
-                        style={{ height: '55px', width: '90px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--slate-300)' }}
-                      />
-                      <input
-                        type="text"
-                        className="form-input"
-                        style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem', flex: 1 }}
-                        placeholder="คำบรรยายใต้ภาพผลงาน (เช่น ภาพหน้าจอระบบบริการประชาชน...)"
-                        value={p.projectImageCaption || ''}
-                        onChange={(e) => handleProjectChange(p.id, 'projectImageCaption', e.target.value)}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          handleProjectChange(p.id, 'projectImageUrl', undefined);
-                          handleProjectChange(p.id, 'projectImageCaption', undefined);
-                        }}
-                        className="btn btn-outline"
-                        style={{ color: 'var(--danger)', borderColor: 'var(--danger-bg)', padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
-                      >
-                        <Trash2 size={12} /> ลบภาพ
-                      </button>
-                    </div>
-                  ) : (
-                    <label
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.4rem',
-                        padding: '0.45rem',
-                        border: '1px dashed var(--slate-300)',
-                        borderRadius: '4px',
-                        backgroundColor: '#FFFFFF',
-                        cursor: 'pointer',
-                        fontSize: '0.75rem',
-                        color: 'var(--slate-600)',
-                      }}
-                    >
-                      <input
-                        type="file"
-                        accept="image/*"
-                        style={{ display: 'none' }}
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) {
-                            handleFileUpload(f, (b64) => {
-                              handleProjectChange(p.id, 'projectImageUrl', b64);
-                            });
-                          }
-                        }}
-                      />
-                      <Upload size={13} /> อัปโหลดภาพประกอบผลงาน / ระบบงานจริง
-                    </label>
-                  )}
-                </div>
+                {/* Project Image Blocks (รองรับทั้งภาพคู่ 3 นิ้ว 2 คอลัมน์ และภาพเดี่ยว 6 นิ้ว ได้ไม่จำกัดจำนวน) */}
+                <ReportImageManager
+                  title="ภาพประกอบผลงานและระบบงานจริง (ไม่จำกัดจำนวน)"
+                  subtitle="สามารถแทรกรูป 3 นิ้วสองรูปคู่ หรือภาพเดี่ยวขนาด 6 นิ้ว ประกอบผลงานนี้ได้ไม่จำกัดจำนวน"
+                  imageBlocks={
+                    p.imageBlocks && p.imageBlocks.length > 0
+                      ? p.imageBlocks
+                      : p.projectImageUrl
+                      ? [
+                          {
+                            id: `img-${p.id}`,
+                            type: 'single',
+                            url: p.projectImageUrl,
+                            caption: p.projectImageCaption || `ภาพหน้าจอระบบ/ผลงาน: ${p.projectName}`,
+                          },
+                        ]
+                      : []
+                  }
+                  onChange={(newBlocks) => {
+                    handleProjectChange(p.id, 'imageBlocks', newBlocks);
+                    if (p.projectImageUrl) {
+                      handleProjectChange(p.id, 'projectImageUrl', undefined);
+                      handleProjectChange(p.id, 'projectImageCaption', undefined);
+                    }
+                  }}
+                  defaultCaptionPrefix={`ภาพผลงาน ${idx + 1}`}
+                />
               </div>
             );
           })}
@@ -1048,13 +1095,40 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                       gap: '0.75rem',
                     }}
                   >
-                    <div style={{ flex: 1, minWidth: 0, paddingRight: '0.5rem' }}>
-                      <div style={{ fontWeight: 600, color: 'var(--slate-900)' }}>{item.projectName}</div>
-                      <div style={{ fontSize: '0.825rem', color: 'var(--primary-700)', marginTop: '2px' }}>
-                        {item.clientName} | แล้วเสร็จปี พ.ศ. <strong>{item.completionYearBE}</strong> | มูลค่า {item.contractValue.toLocaleString()} บาท
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--slate-500)', marginTop: '2px' }}>
-                        {item.description}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0, paddingRight: '0.5rem' }}>
+                      {item.clientLogoUrl && (
+                        <img
+                          src={item.clientLogoUrl}
+                          alt="Client Logo"
+                          style={{
+                            height: '42px',
+                            width: '48px',
+                            objectFit: 'contain',
+                            backgroundColor: '#FFFFFF',
+                            border: '1px solid var(--slate-300)',
+                            borderRadius: '4px',
+                            padding: '2px',
+                            flexShrink: 0,
+                          }}
+                        />
+                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, color: 'var(--slate-900)' }}>{item.projectName}</div>
+                        <div style={{ fontSize: '0.825rem', color: 'var(--primary-700)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span>{item.clientName}</span>
+                          <span>|</span>
+                          <span>แล้วเสร็จปี พ.ศ. <strong>{item.completionYearBE}</strong></span>
+                          <span>|</span>
+                          <span>มูลค่า {item.contractValue.toLocaleString()} บาท</span>
+                          {item.imageBlocks && item.imageBlocks.length > 0 && (
+                            <span style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '1px 6px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 600 }}>
+                              📷 {item.imageBlocks.length} บล็อกภาพ
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--slate-500)', marginTop: '2px' }}>
+                          {item.description}
+                        </div>
                       </div>
                     </div>
 

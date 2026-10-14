@@ -417,28 +417,58 @@ function createHeaderCell(text: string, widthPercent: number): TableCell {
 function createDataCell(
   text: string,
   widthPercent: number,
-  options?: { align?: (typeof AlignmentType)[keyof typeof AlignmentType]; bold?: boolean; bg?: string; color?: string }
+  options?: {
+    align?: (typeof AlignmentType)[keyof typeof AlignmentType];
+    bold?: boolean;
+    bg?: string;
+    color?: string;
+    logoBase64?: string;
+  }
 ): TableCell {
+  const paraChildren: Paragraph[] = [];
+
+  if (options?.logoBase64) {
+    try {
+      const logoBytes = base64ToUint8Array(options.logoBase64);
+      paraChildren.push(
+        new Paragraph({
+          alignment: options.align || AlignmentType.LEFT,
+          spacing: { before: 20, after: 40 },
+          children: [
+            new ImageRun({
+              data: logoBytes,
+              transformation: { width: 70, height: 35 },
+            } as any),
+          ],
+        })
+      );
+    } catch (e) {
+      console.warn('Failed to embed logo in table cell', e);
+    }
+  }
+
   const lines = (text || '').split(/\r?\n/);
-  const paraChildren = lines.map((l, idx) => {
-    return new Paragraph({
-      alignment: options?.align || AlignmentType.LEFT,
-      spacing: {
-        after: idx === lines.length - 1 ? 0 : 40,
-        before: 0,
-        line: 240,
-        lineRule: LineRuleType.AUTO,
-      },
-      children: [
-        new TextRun({
-          text: l,
-          font: FONT_FAMILY,
-          size: 28, // 14pt
-          bold: options?.bold ?? false,
-          color: options?.color || COLOR_TEXT,
-        }),
-      ],
-    });
+  lines.forEach((l, idx) => {
+    paraChildren.push(
+      new Paragraph({
+        alignment: options?.align || AlignmentType.LEFT,
+        spacing: {
+          after: idx === lines.length - 1 ? 0 : 40,
+          before: 0,
+          line: 240,
+          lineRule: LineRuleType.AUTO,
+        },
+        children: [
+          new TextRun({
+            text: l,
+            font: FONT_FAMILY,
+            size: 28, // 14pt
+            bold: options?.bold ?? false,
+            color: options?.color || COLOR_TEXT,
+          }),
+        ],
+      })
+    );
   });
 
   return new TableCell({
@@ -2005,7 +2035,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
             createDataRow([
               createDataCell(String(idx + 1), 5, { align: AlignmentType.CENTER, bold: true }),
               createDataCell(`${proj.projectName}\n• ${proj.description}`, 33, { bold: true }),
-              createDataCell(proj.clientName, 18),
+              createDataCell(proj.clientName, 18, { logoBase64: proj.clientLogoUrl }),
               createDataCell(String(proj.completionYearBE), 8, { align: AlignmentType.CENTER }),
               createDataCell(`${proj.contractValue.toLocaleString()} บาท`, 18, { align: AlignmentType.RIGHT, bold: true }),
               createDataCell(hasCert ? '✓ มีแนบในภาคผนวก ก' : 'หนังสือรับรองผลงาน', 18, { align: AlignmentType.CENTER, bold: hasCert }),
@@ -2021,37 +2051,22 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
         );
 
         torReferenceProjects.forEach((proj, idx) => {
-          if (proj.projectImageUrl) {
-            try {
-              const pImgBytes = base64ToUint8Array(proj.projectImageUrl);
-              part5BChildren.push(
-                new Paragraph({
-                  alignment: AlignmentType.CENTER,
-                  spacing: { before: 120, after: 40 },
-                  children: [
-                    new ImageRun({
-                      data: pImgBytes,
-                      transformation: { width: 560, height: 250 },
-                    } as any),
-                  ],
-                }),
-                new Paragraph({
-                  alignment: AlignmentType.CENTER,
-                  spacing: { after: 120 },
-                  children: [
-                    new TextRun({
-                      text: proj.projectImageCaption || `ภาพที่ 5-1.${idx + 1} ภาพหน้าจอระบบ/ผลงาน: ${proj.projectName}`,
-                      font: FONT_FAMILY,
-                      size: 24,
-                      italics: true,
-                      color: COLOR_MUTED,
-                    }),
-                  ],
-                })
-              );
-            } catch (e) {
-              console.warn('Failed to embed project image', e);
-            }
+          const blocksToRender: ReportImageBlock[] = [];
+          if (proj.imageBlocks && proj.imageBlocks.length > 0) {
+            blocksToRender.push(...proj.imageBlocks);
+          } else if (proj.projectImageUrl) {
+            blocksToRender.push({
+              id: `img-${proj.id}`,
+              type: 'single',
+              url: proj.projectImageUrl,
+              caption: proj.projectImageCaption || `ภาพที่ 5-1.${idx + 1} ภาพหน้าจอระบบ/ผลงาน: ${proj.projectName}`,
+            });
+          }
+
+          if (blocksToRender.length > 0) {
+            part5BChildren.push(
+              ...renderImageBlocksToDocx(blocksToRender, `ภาพที่ 5-1.${idx + 1}`)
+            );
           }
         });
       } else if (h.id === 's5_supplementary') {
@@ -2088,7 +2103,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
             suppRows.push(
               createDataRow([
                 createDataCell(String(idx + 1), 5, { align: AlignmentType.CENTER, bold: true }),
-                createDataCell(`${proj.projectName}\n• ผู้ว่าจ้าง: ${proj.clientName}`, 27, { bold: true }),
+                createDataCell(`${proj.projectName}\n• ผู้ว่าจ้าง: ${proj.clientName}`, 27, { bold: true, logoBase64: proj.clientLogoUrl }),
                 createDataCell(proj.relevanceNote || proj.description, 44),
                 createDataCell(String(proj.completionYearBE), 8, { align: AlignmentType.CENTER }),
                 createDataCell(`${proj.contractValue.toLocaleString()} บาท`, 16, { align: AlignmentType.RIGHT }),
@@ -2104,37 +2119,22 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
           );
 
           supplementaryProjects.forEach((proj, idx) => {
-            if (proj.projectImageUrl) {
-              try {
-                const pImgBytes = base64ToUint8Array(proj.projectImageUrl);
-                part5BChildren.push(
-                  new Paragraph({
-                    alignment: AlignmentType.CENTER,
-                    spacing: { before: 120, after: 40 },
-                    children: [
-                      new ImageRun({
-                        data: pImgBytes,
-                        transformation: { width: 560, height: 250 },
-                      } as any),
-                    ],
-                  }),
-                  new Paragraph({
-                    alignment: AlignmentType.CENTER,
-                    spacing: { after: 120 },
-                    children: [
-                      new TextRun({
-                        text: proj.projectImageCaption || `ภาพที่ 5-2.${idx + 1} ภาพผลงานเสริม: ${proj.projectName}`,
-                        font: FONT_FAMILY,
-                        size: 24,
-                        italics: true,
-                        color: COLOR_MUTED,
-                      }),
-                    ],
-                  })
-                );
-              } catch (e) {
-                console.warn('Failed to embed supplementary project image', e);
-              }
+            const blocksToRender: ReportImageBlock[] = [];
+            if (proj.imageBlocks && proj.imageBlocks.length > 0) {
+              blocksToRender.push(...proj.imageBlocks);
+            } else if (proj.projectImageUrl) {
+              blocksToRender.push({
+                id: `img-${proj.id}`,
+                type: 'single',
+                url: proj.projectImageUrl,
+                caption: proj.projectImageCaption || `ภาพที่ 5-2.${idx + 1} ภาพผลงานเสริม: ${proj.projectName}`,
+              });
+            }
+
+            if (blocksToRender.length > 0) {
+              part5BChildren.push(
+                ...renderImageBlocksToDocx(blocksToRender, `ภาพที่ 5-2.${idx + 1}`)
+              );
             }
           });
         }

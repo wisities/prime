@@ -1262,7 +1262,18 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                                   .map((p) => (
                                     <tr key={p.id}>
                                       <td style={{ padding: '6px', border: '1px solid var(--slate-300)', fontWeight: 600 }}>{p.projectName}</td>
-                                      <td style={{ padding: '6px', border: '1px solid var(--slate-300)' }}>{p.clientName}</td>
+                                      <td style={{ padding: '6px', border: '1px solid var(--slate-300)' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                          {p.clientLogoUrl && (
+                                            <img
+                                              src={p.clientLogoUrl}
+                                              alt="Client Logo"
+                                              style={{ height: '24px', width: '32px', objectFit: 'contain', flexShrink: 0 }}
+                                            />
+                                          )}
+                                          <span>{p.clientName}</span>
+                                        </div>
+                                      </td>
                                       <td style={{ padding: '6px', border: '1px solid var(--slate-300)', textAlign: 'center' }}>พ.ศ. {p.completionYearBE}</td>
                                       <td style={{ padding: '6px', border: '1px solid var(--slate-300)', textAlign: 'right' }}>{p.contractValue.toLocaleString()} บาท</td>
                                       <td style={{ padding: '6px', border: '1px solid var(--slate-300)', textAlign: 'center', color: p.certificateFileUrl ? 'var(--primary-700)' : 'var(--slate-500)', fontWeight: p.certificateFileUrl ? 600 : 400 }}>
@@ -1272,6 +1283,22 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                                   ))}
                               </tbody>
                             </table>
+
+                            {/* Past Projects Image Blocks Preview */}
+                            {section5.pastProjects
+                              .filter((p) => p.isSelected && (p.projectType || 'tor_reference') === 'tor_reference' && (2568 - p.completionYearBE <= section5.maxYearsFilter))
+                              .map((p, pIdx) => {
+                                const blocks = p.imageBlocks && p.imageBlocks.length > 0
+                                  ? p.imageBlocks
+                                  : p.projectImageUrl
+                                  ? [{ id: `img-${p.id}`, type: 'single' as const, url: p.projectImageUrl, caption: p.projectImageCaption || `ภาพที่ 5-1.${pIdx + 1} ภาพผลงาน: ${p.projectName}` }]
+                                  : [];
+                                return blocks.length > 0 ? (
+                                  <div key={`img-blocks-${p.id}`} style={{ marginTop: '0.75rem' }}>
+                                    {renderImageBlocksPreview(blocks, `ภาพที่ 5-1.${pIdx + 1}`)}
+                                  </div>
+                                ) : null;
+                              })}
                           </div>
                         );
                       }
@@ -1306,7 +1333,16 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                                     <tr key={p.id}>
                                       <td style={{ padding: '6px', border: '1px solid var(--slate-300)', fontWeight: 600 }}>
                                         {p.projectName}
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--slate-500)', fontWeight: 400 }}>{p.clientName}</div>
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--slate-500)', fontWeight: 400, display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                                          {p.clientLogoUrl && (
+                                            <img
+                                              src={p.clientLogoUrl}
+                                              alt="Client Logo"
+                                              style={{ height: '18px', width: '24px', objectFit: 'contain' }}
+                                            />
+                                          )}
+                                          <span>{p.clientName}</span>
+                                        </div>
                                       </td>
                                       <td style={{ padding: '6px', border: '1px solid var(--slate-300)', color: 'var(--primary-900)' }}>
                                         {p.relevanceNote || p.description}
@@ -1317,6 +1353,22 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                                   ))}
                               </tbody>
                             </table>
+
+                            {/* Supplementary Projects Image Blocks Preview */}
+                            {section5.pastProjects
+                              .filter((p) => p.isSelected && p.projectType === 'supplementary')
+                              .map((p, pIdx) => {
+                                const blocks = p.imageBlocks && p.imageBlocks.length > 0
+                                  ? p.imageBlocks
+                                  : p.projectImageUrl
+                                  ? [{ id: `img-${p.id}`, type: 'single' as const, url: p.projectImageUrl, caption: p.projectImageCaption || `ภาพที่ 5-2.${pIdx + 1} ภาพผลงานเสริม: ${p.projectName}` }]
+                                  : [];
+                                return blocks.length > 0 ? (
+                                  <div key={`supp-img-blocks-${p.id}`} style={{ marginTop: '0.75rem' }}>
+                                    {renderImageBlocksPreview(blocks, `ภาพที่ 5-2.${pIdx + 1}`)}
+                                  </div>
+                                ) : null;
+                              })}
                           </div>
                         );
                       }
