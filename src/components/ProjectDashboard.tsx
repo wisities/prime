@@ -43,7 +43,109 @@ import {
   Users,
   X,
   Building2,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
+
+export interface ClauseCompletionInfo {
+  id: string;
+  clauseNumber: string;
+  title: string;
+  level: number;
+  isComplete: boolean;
+  missingItems: string[];
+}
+
+export interface ProjectCompletionSummary {
+  totalTorClauses: number;
+  completedTorClauses: number;
+  torPercent: number;
+  clausesList: ClauseCompletionInfo[];
+  milestonesTotal: number;
+  milestonesComplete: number;
+  teamTotal: number;
+  teamComplete: number;
+  riskTotal: number;
+  riskComplete: number;
+  pastProjectsSelected: number;
+  totalAllTopics: number;
+  completedAllTopics: number;
+  overallPercent: number;
+  isAllComplete: boolean;
+}
+
+export const computeProjectCompletion = (project: BiddingProject): ProjectCompletionSummary => {
+  const pData = project.proposalData;
+  const scopeItems = pData?.section1?.scopeItems || [];
+
+  const clausesList: ClauseCompletionInfo[] = scopeItems.map((item) => {
+    const hasReq = (item.requirement || '').trim().length > 5;
+    const hasMeth = (item.proposedMethodology || '').trim().length > 15;
+    const hasDeliv = (item.deliverable || '').trim().length > 0;
+
+    const missing: string[] = [];
+    if (!hasReq) missing.push('ข้อกำหนด TOR');
+    if (!hasMeth) missing.push('วิธีการดำเนินงาน');
+    if (!hasDeliv) missing.push('สิ่งส่งมอบ');
+
+    return {
+      id: item.id,
+      clauseNumber: item.clauseNumber,
+      title: item.title,
+      level: item.level,
+      isComplete: hasReq && hasMeth && hasDeliv,
+      missingItems: missing,
+    };
+  });
+
+  const totalTorClauses = clausesList.length;
+  const completedTorClauses = clausesList.filter((c) => c.isComplete).length;
+  const torPercent = totalTorClauses > 0 ? Math.round((completedTorClauses / totalTorClauses) * 100) : 0;
+
+  const milestones = pData?.section2?.milestones || [];
+  const milestonesTotal = milestones.length;
+  const milestonesComplete = milestones.filter(
+    (m) => (m.title || '').trim().length > 0 && m.percentage > 0 && (m.deliverables || []).length > 0
+  ).length;
+
+  const teamMembers = pData?.section4?.teamMembers || [];
+  const teamTotal = teamMembers.length;
+  const teamComplete = teamMembers.filter(
+    (m) => (m.name || '').trim().length > 0 && (m.proposedRole || '').trim().length > 0
+  ).length;
+
+  const riskItems = pData?.section4?.riskItems || [];
+  const riskTotal = riskItems.length;
+  const riskComplete = riskItems.filter(
+    (r) => (r.riskTitle || '').trim().length > 0 && (r.mitigationPlan || '').trim().length > 0
+  ).length;
+
+  const pastProjects = pData?.section5?.pastProjects || [];
+  const pastProjectsSelected = pastProjects.filter((p) => p.isSelected).length;
+
+  const totalAllTopics = totalTorClauses + milestonesTotal + teamTotal + riskTotal;
+  const completedAllTopics = completedTorClauses + milestonesComplete + teamComplete + riskComplete;
+  const overallPercent = totalAllTopics > 0 ? Math.round((completedAllTopics / totalAllTopics) * 100) : 0;
+  const isAllComplete = totalAllTopics > 0 && completedAllTopics === totalAllTopics;
+
+  return {
+    totalTorClauses,
+    completedTorClauses,
+    torPercent,
+    clausesList,
+    milestonesTotal,
+    milestonesComplete,
+    teamTotal,
+    teamComplete,
+    riskTotal,
+    riskComplete,
+    pastProjectsSelected,
+    totalAllTopics,
+    completedAllTopics,
+    overallPercent,
+    isAllComplete,
+  };
+};
 
 interface ProjectDashboardProps {
   projects: BiddingProject[];
@@ -124,12 +226,29 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     }
   };
 
+  // Expandable Checklist state for each project
+  const [expandedChecklists, setExpandedChecklists] = useState<Record<string, boolean>>({});
+
+  const toggleChecklist = (projectId: string) => {
+    setExpandedChecklists((prev) => ({
+      ...prev,
+      [projectId]: !prev[projectId],
+    }));
+  };
+
   // Stats calculation
   const totalProjects = projects.length;
   const draftCount = projects.filter((p) => p.status === 'draft').length;
   const submittedCount = projects.filter((p) => p.status === 'submitted').length;
   const cancelledCount = projects.filter((p) => p.status === 'cancelled').length;
   const totalBudget = projects.reduce((sum, p) => sum + (p.budgetAmount || 0), 0);
+
+  // Global Report Completion metrics
+  const allProjectsMetrics = projects.map(computeProjectCompletion);
+  const globalTotalClauses = allProjectsMetrics.reduce((sum, m) => sum + m.totalTorClauses, 0);
+  const globalCompletedClauses = allProjectsMetrics.reduce((sum, m) => sum + m.completedTorClauses, 0);
+  const globalClausesPercent = globalTotalClauses > 0 ? Math.round((globalCompletedClauses / globalTotalClauses) * 100) : 0;
+  const fullyCompleteProjectsCount = allProjectsMetrics.filter((m) => m.isAllComplete).length;
 
   // Filtered & Sorted Projects
   const filteredProjects = projects
@@ -914,6 +1033,26 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             </div>
           </div>
         </div>
+
+        <div className="stat-card" style={{ borderColor: '#BBF7D0', background: 'linear-gradient(135deg, #FFFFFF 0%, #F0FDF4 100%)' }}>
+          <div className="stat-icon-wrapper" style={{ backgroundColor: '#DCFCE7', color: '#16A34A' }}>
+            <FileText size={24} />
+          </div>
+          <div className="stat-info">
+            <span className="stat-label">ความสมบูรณ์ข้อกำหนดรวม</span>
+            <div className="stat-value-group">
+              <span className="stat-number font-mono" style={{ color: '#15803D' }}>
+                {globalCompletedClauses} / {globalTotalClauses}
+              </span>
+              <span className="stat-unit" style={{ color: '#16A34A', fontWeight: 600 }}>
+                ข้อ ({globalClausesPercent}%)
+              </span>
+            </div>
+            <div style={{ fontSize: '0.72rem', color: '#15803D', marginTop: '2px' }}>
+              สมบูรณ์ 100% แล้ว {fullyCompleteProjectsCount} โครงการ
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Controls & Filter Bar */}
@@ -999,6 +1138,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
           </div>
         ) : (
           filteredProjects.map((project) => {
+            const summary = computeProjectCompletion(project);
             const announcementDocs = project.attachments.filter((a) => a.category === 'announcement');
             const torDocs = project.attachments.filter((a) => a.category === 'tor');
             const otherDocs = project.attachments.filter((a) => a.category === 'other');
@@ -1135,6 +1275,190 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                       <span className="note-label">หมายเหตุ:</span> {project.statusNote}
                     </div>
                   )}
+
+                  {/* Proposal Report Clauses & Topics Completion Summary */}
+                  <div
+                    style={{
+                      backgroundColor: summary.torPercent === 100 ? '#F0FDF4' : summary.torPercent >= 50 ? '#FFFBEB' : '#F8FAFC',
+                      border: `1px solid ${summary.torPercent === 100 ? '#BBF7D0' : summary.torPercent >= 50 ? '#FDE68A' : '#E2E8F0'}`,
+                      borderRadius: '8px',
+                      padding: '0.85rem 1rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.55rem',
+                    }}
+                  >
+                    {/* Header Row */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <FileText size={16} style={{ color: summary.torPercent === 100 ? '#16A34A' : '#D97706' }} />
+                        <span style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--slate-800)' }}>
+                          ความสมบูรณ์รายงาน:
+                        </span>
+                        <span style={{ fontWeight: 700, fontSize: '0.95rem', color: summary.torPercent === 100 ? '#15803D' : summary.torPercent >= 50 ? '#B45309' : '#334155' }}>
+                          {summary.completedTorClauses} / {summary.totalTorClauses} ข้อ
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span
+                          style={{
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: '9999px',
+                            backgroundColor: summary.torPercent === 100 ? '#DCFCE7' : summary.torPercent >= 50 ? '#FEF3C7' : '#E2E8F0',
+                            color: summary.torPercent === 100 ? '#166534' : summary.torPercent >= 50 ? '#92400E' : '#475569',
+                          }}
+                        >
+                          {summary.torPercent}% {summary.torPercent === 100 ? '✓ ข้อมูลครบถ้วน' : 'กำลังจัดทำ'}
+                        </span>
+
+                        {summary.totalTorClauses > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => toggleChecklist(project.id)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '2px',
+                              fontSize: '0.75rem',
+                              color: 'var(--primary-700)',
+                              fontWeight: 600,
+                              padding: '2px 4px',
+                            }}
+                            title="คลิกเพื่อเปิด/ปิดดูรายละเอียดสถานะของแต่ละข้อ"
+                          >
+                            <span>{expandedChecklists[project.id] ? 'ซ่อนรายข้อ' : 'ดูรายข้อ'}</span>
+                            {expandedChecklists[project.id] ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div
+                      style={{
+                        width: '100%',
+                        height: '7px',
+                        backgroundColor: '#E2E8F0',
+                        borderRadius: '9999px',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <div
+                        style={{
+                          height: '100%',
+                          width: `${summary.torPercent}%`,
+                          background: summary.torPercent === 100
+                            ? 'linear-gradient(90deg, #10B981 0%, #059669 100%)'
+                            : summary.torPercent >= 50
+                            ? 'linear-gradient(90deg, #F59E0B 0%, #D97706 100%)'
+                            : 'linear-gradient(90deg, #3B82F6 0%, #2563EB 100%)',
+                          borderRadius: '9999px',
+                          transition: 'width 0.4s ease',
+                        }}
+                      />
+                    </div>
+
+                    {/* Breakdown by Report Section */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', fontSize: '0.75rem' }}>
+                      <span style={{ backgroundColor: '#FFFFFF', border: '1px solid #CBD5E1', padding: '2px 8px', borderRadius: '4px', color: '#334155' }}>
+                        📋 ข้อกำหนด TOR: <strong>{summary.completedTorClauses}/{summary.totalTorClauses} ข้อ</strong>
+                      </span>
+                      <span style={{ backgroundColor: '#FFFFFF', border: '1px solid #CBD5E1', padding: '2px 8px', borderRadius: '4px', color: '#334155' }}>
+                        📅 งวดงาน: <strong>{summary.milestonesComplete}/{summary.milestonesTotal} งวด</strong>
+                      </span>
+                      <span style={{ backgroundColor: '#FFFFFF', border: '1px solid #CBD5E1', padding: '2px 8px', borderRadius: '4px', color: '#334155' }}>
+                        👥 บุคลากร: <strong>{summary.teamComplete}/{summary.teamTotal} ท่าน</strong>
+                      </span>
+                      <span style={{ backgroundColor: '#FFFFFF', border: '1px solid #CBD5E1', padding: '2px 8px', borderRadius: '4px', color: '#334155' }}>
+                        🛡️ ความเสี่ยง: <strong>{summary.riskComplete}/{summary.riskTotal} ประเด็น</strong>
+                      </span>
+                      <span style={{ backgroundColor: '#FFFFFF', border: '1px solid #CBD5E1', padding: '2px 8px', borderRadius: '4px', color: '#334155' }}>
+                        🏆 ผลงาน: <strong>{summary.pastProjectsSelected} โครงการ</strong>
+                      </span>
+                    </div>
+
+                    {/* Expandable Checklist Details */}
+                    {expandedChecklists[project.id] && summary.clausesList.length > 0 && (
+                      <div
+                        style={{
+                          marginTop: '0.4rem',
+                          paddingTop: '0.65rem',
+                          borderTop: '1px dashed #CBD5E1',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.35rem',
+                          maxHeight: '260px',
+                          overflowY: 'auto',
+                        }}
+                      >
+                        <div style={{ fontSize: '0.775rem', fontWeight: 700, color: 'var(--slate-700)', marginBottom: '2px' }}>
+                          สถานะความสมบูรณ์รายข้อ ({summary.clausesList.length} ข้อ):
+                        </div>
+                        {summary.clausesList.map((clause, cIdx) => (
+                          <div
+                            key={clause.id || cIdx}
+                            style={{
+                              backgroundColor: '#FFFFFF',
+                              border: `1px solid ${clause.isComplete ? '#BBF7D0' : '#FED7AA'}`,
+                              borderRadius: '6px',
+                              padding: '6px 10px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: '8px',
+                              fontSize: '0.8rem',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1 }}>
+                              <span
+                                style={{
+                                  backgroundColor: clause.isComplete ? '#DCFCE7' : '#FEF3C7',
+                                  color: clause.isComplete ? '#166534' : '#B45309',
+                                  padding: '1px 5px',
+                                  borderRadius: '3px',
+                                  fontWeight: 700,
+                                  fontSize: '0.7rem',
+                                  flexShrink: 0,
+                                }}
+                              >
+                                {clause.clauseNumber ? `ข้อ ${clause.clauseNumber}` : `ลำดับ ${cIdx + 1}`}
+                              </span>
+                              <span
+                                style={{
+                                  color: 'var(--slate-800)',
+                                  fontWeight: 500,
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                }}
+                                title={clause.title}
+                              >
+                                {clause.title}
+                              </span>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                              {clause.isComplete ? (
+                                <span style={{ color: '#16A34A', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px', fontSize: '0.75rem' }}>
+                                  <CheckCircle2 size={13} /> ครบถ้วน
+                                </span>
+                              ) : (
+                                <span style={{ color: '#C2410C', fontSize: '0.725rem', backgroundColor: '#FFF7ED', padding: '1px 6px', borderRadius: '4px', border: '1px solid #FFEDD5', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                  <AlertCircle size={12} /> ยังขาด: {clause.missingItems.join(', ')}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
 
                   {/* Attachments Section (ประกาศจัดจ้าง & TOR) */}
                   <div className="attachments-section">
