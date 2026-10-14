@@ -494,6 +494,118 @@ function createDataRow(cells: TableCell[]): TableRow {
   });
 }
 
+function createCenteredClientLogo(logoBase64?: string, clientName?: string): Paragraph[] {
+  const elements: Paragraph[] = [];
+  if (logoBase64) {
+    try {
+      const logoBytes = base64ToUint8Array(logoBase64);
+      elements.push(
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 120, after: 40, line: 240, lineRule: LineRuleType.AUTO },
+          children: [
+            new ImageRun({
+              data: logoBytes,
+              transformation: { width: 140, height: 65 },
+            } as any),
+          ],
+        })
+      );
+    } catch (e) {
+      console.warn('Failed to embed client logo', e);
+    }
+  }
+
+  if (clientName) {
+    elements.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 20, after: 100, line: 240, lineRule: LineRuleType.AUTO },
+        children: [
+          new TextRun({
+            text: `ตราสัญลักษณ์ / หน่วยงานผู้ว่าจ้าง: ${clientName}`,
+            font: FONT_FAMILY,
+            size: 24, // 12pt
+            italics: true,
+            color: COLOR_MUTED,
+          }),
+        ],
+      })
+    );
+  }
+
+  return elements;
+}
+
+function createProjectDetailTable(fields: { label: string; value: string }[]): Table {
+  const thinBorder = {
+    style: BorderStyle.SINGLE,
+    size: 1,
+    color: 'CBD5E1',
+  };
+  const tableBorders = {
+    top: thinBorder,
+    bottom: thinBorder,
+    left: thinBorder,
+    right: thinBorder,
+    insideHorizontal: thinBorder,
+    insideVertical: thinBorder,
+  };
+
+  const rows = fields.map((f) => {
+    return new TableRow({
+      cantSplit: true,
+      children: [
+        new TableCell({
+          width: { size: 26, type: WidthType.PERCENTAGE },
+          shading: { fill: 'F1F5F9' },
+          margins: { top: 80, bottom: 80, left: 140, right: 140 },
+          children: [
+            new Paragraph({
+              spacing: { line: 240, lineRule: LineRuleType.AUTO },
+              children: [
+                new TextRun({
+                  text: f.label,
+                  font: FONT_FAMILY,
+                  size: 28, // 14pt
+                  bold: true,
+                  color: COLOR_PRIMARY,
+                }),
+              ],
+            }),
+          ],
+        }),
+        new TableCell({
+          width: { size: 74, type: WidthType.PERCENTAGE },
+          margins: { top: 80, bottom: 80, left: 140, right: 140 },
+          children: (f.value || '-')
+            .split(/\r?\n/)
+            .map((valLine) =>
+              new Paragraph({
+                spacing: { before: 20, after: 20, line: 240, lineRule: LineRuleType.AUTO },
+                children: [
+                  new TextRun({
+                    text: valLine,
+                    font: FONT_FAMILY,
+                    size: 28, // 14pt
+                    color: COLOR_TEXT,
+                  }),
+                ],
+              })
+            ),
+        }),
+      ],
+    });
+  });
+
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: tableBorders,
+    rows,
+  });
+}
+
+
 /**
  * Builds a 100% native Word Table for Gantt Chart (ตาราง Word แท้ๆ)
  * Features:
@@ -2018,14 +2130,15 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
           ...createBodyParagraphs(`บริษัทฯ ขอเสนอผลงานที่มีขอบเขตงานและลักษณะงานสอดคล้องกับข้อกำหนดของ TOR โดยเป็นผลงานที่แล้วเสร็จย้อนหลังไม่เกิน ${section5.maxYearsFilter} ปี พร้อมทั้งได้แนบสำเนาสัญญาจ้างและหนังสือรับรองผลงานไว้ในภาคผนวก ก ของข้อเสนอนี้อย่างครบถ้วน`)
         );
 
+        // 1) ตารางสรุปโครงการที่ใช้อ้างอิง (ลำดับ, ชื่อโครงการ, หน่วยงาน, ปี, มูลค่าสัญญา, หลักฐาน)
         const torRefRows = [
           createHeaderRow([
-            createHeaderCell('ลำดับ', 5),
-            createHeaderCell('ชื่อโครงการและลักษณะงาน', 33),
-            createHeaderCell('หน่วยงานผู้ว่าจ้าง', 18),
-            createHeaderCell('ปี พ.ศ.', 8),
-            createHeaderCell('มูลค่าสัญญา (บาท)', 18),
-            createHeaderCell('หลักฐานสัญญา/รับรอง', 18),
+            createHeaderCell('ลำดับ', 6),
+            createHeaderCell('ชื่อโครงการ', 34),
+            createHeaderCell('หน่วยงาน', 22),
+            createHeaderCell('ปี', 8),
+            createHeaderCell('มูลค่าสัญญา', 15),
+            createHeaderCell('หลักฐาน', 15),
           ]),
         ];
 
@@ -2033,12 +2146,12 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
           const hasCert = !!proj.certificateFileUrl;
           torRefRows.push(
             createDataRow([
-              createDataCell(String(idx + 1), 5, { align: AlignmentType.CENTER, bold: true }),
-              createDataCell(`${proj.projectName}\n• ${proj.description}`, 33, { bold: true }),
-              createDataCell(proj.clientName, 18, { logoBase64: proj.clientLogoUrl }),
-              createDataCell(String(proj.completionYearBE), 8, { align: AlignmentType.CENTER }),
-              createDataCell(`${proj.contractValue.toLocaleString()} บาท`, 18, { align: AlignmentType.RIGHT, bold: true }),
-              createDataCell(hasCert ? '✓ มีแนบในภาคผนวก ก' : 'หนังสือรับรองผลงาน', 18, { align: AlignmentType.CENTER, bold: hasCert }),
+              createDataCell(String(idx + 1), 6, { align: AlignmentType.CENTER, bold: true }),
+              createDataCell(proj.projectName, 34, { bold: true }),
+              createDataCell(proj.clientName, 22),
+              createDataCell(`พ.ศ. ${proj.completionYearBE}`, 8, { align: AlignmentType.CENTER }),
+              createDataCell(`${proj.contractValue.toLocaleString()} บาท`, 15, { align: AlignmentType.RIGHT, bold: true }),
+              createDataCell(hasCert ? '✓ มีแนบในภาคผนวก ก' : (proj.certificateFileName || 'หนังสือรับรองผลงาน'), 15, { align: AlignmentType.CENTER, bold: hasCert }),
             ])
           );
         });
@@ -2050,7 +2163,48 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
           })
         );
 
+        // 2) รายละเอียดโครงการแต่ละโครงการตามตารางข้างต้น
+        //    (ชื่อโครงการ -> โลโกหน่วยงาน ตรงกลางหน้า -> รายละเอียดโครงการ -> ภาพประกอบ)
         torReferenceProjects.forEach((proj, idx) => {
+          // (ก) ชื่อโครงการ
+          part5BChildren.push(
+            new Paragraph({
+              heading: HeadingLevel.HEADING_3,
+              spacing: { before: 240, after: 80, line: 240, lineRule: LineRuleType.AUTO },
+              children: [
+                new TextRun({
+                  text: `5.3.1.${idx + 1} โครงการที่ ${idx + 1}: ${proj.projectName}`,
+                  font: FONT_FAMILY,
+                  size: 30,
+                  bold: true,
+                  color: COLOR_PRIMARY,
+                }),
+              ],
+            })
+          );
+
+          // (ข) โลโกหน่วยงาน (ตรงกลางหน้า)
+          part5BChildren.push(...createCenteredClientLogo(proj.clientLogoUrl, proj.clientName));
+
+          // (ค) รายละเอียดโครงการ (ตาราง 2 คอลัมน์)
+          part5BChildren.push(
+            createProjectDetailTable([
+              { label: 'ชื่อโครงการ', value: proj.projectName },
+              { label: 'หน่วยงานผู้ว่าจ้าง', value: proj.clientName },
+              { label: 'ปีที่แล้วเสร็จ', value: `พ.ศ. ${proj.completionYearBE}` },
+              { label: 'มูลค่าสัญญา', value: `${proj.contractValue.toLocaleString()} บาท` },
+              { label: 'ระยะเวลาดำเนินงาน', value: proj.periodDuration || '-' },
+              { label: 'ขอบเขตงานและลักษณะงาน', value: proj.description },
+              {
+                label: 'หลักฐานสัญญา/รับรอง',
+                value: proj.certificateFileUrl
+                  ? 'มีแนบสำเนาสัญญาจ้าง/หนังสือรับรองผลงานในภาคผนวก ก ของเล่มข้อเสนอนี้'
+                  : (proj.certificateFileName || 'หนังสือรับรองผลงาน / สำเนาสัญญาจ้าง'),
+              },
+            ])
+          );
+
+          // (ง) ภาพประกอบ
           const blocksToRender: ReportImageBlock[] = [];
           if (proj.imageBlocks !== undefined) {
             blocksToRender.push(...proj.imageBlocks);
@@ -2089,24 +2243,28 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
             ...createBodyParagraphs('ผลงานเพิ่มเติมที่มีกิจกรรม เทคโนโลยี หรือแนวทางการดำเนินงานที่สอดคล้องและเป็นประโยชน์ต่อโครงการจ้างนี้เพื่อประกอบการพิจารณาความพร้อมและความเชี่ยวชาญ')
           );
 
+          // 1) ตารางสรุปโครงการผลงานเสริม (ลำดับ, ชื่อโครงการ, หน่วยงาน, ปี, มูลค่าสัญญา, หลักฐาน / กิจกรรมที่สอดคล้อง)
           const suppRows = [
             createHeaderRow([
-              createHeaderCell('ลำดับ', 5),
-              createHeaderCell('ชื่อโครงการและผู้ว่าจ้าง', 27),
-              createHeaderCell('กิจกรรมและประเด็นที่สอดคล้องกับงานจ้างโครงการนี้', 44),
-              createHeaderCell('ปี พ.ศ.', 8),
+              createHeaderCell('ลำดับ', 6),
+              createHeaderCell('ชื่อโครงการ', 32),
+              createHeaderCell('หน่วยงาน', 20),
+              createHeaderCell('ปี', 8),
               createHeaderCell('มูลค่าสัญญา', 16),
+              createHeaderCell('หลักฐาน / กิจกรรมที่สอดคล้อง', 18),
             ]),
           ];
 
           supplementaryProjects.forEach((proj, idx) => {
+            const hasCert = !!proj.certificateFileUrl;
             suppRows.push(
               createDataRow([
-                createDataCell(String(idx + 1), 5, { align: AlignmentType.CENTER, bold: true }),
-                createDataCell(`${proj.projectName}\n• ผู้ว่าจ้าง: ${proj.clientName}`, 27, { bold: true, logoBase64: proj.clientLogoUrl }),
-                createDataCell(proj.relevanceNote || proj.description, 44),
-                createDataCell(String(proj.completionYearBE), 8, { align: AlignmentType.CENTER }),
+                createDataCell(String(idx + 1), 6, { align: AlignmentType.CENTER, bold: true }),
+                createDataCell(proj.projectName, 32, { bold: true }),
+                createDataCell(proj.clientName, 20),
+                createDataCell(`พ.ศ. ${proj.completionYearBE}`, 8, { align: AlignmentType.CENTER }),
                 createDataCell(`${proj.contractValue.toLocaleString()} บาท`, 16, { align: AlignmentType.RIGHT }),
+                createDataCell(proj.relevanceNote || (hasCert ? '✓ มีแนบในภาคผนวก ก' : 'หนังสือรับรองผลงาน'), 18),
               ])
             );
           });
@@ -2118,7 +2276,49 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
             })
           );
 
+          // 2) รายละเอียดโครงการแต่ละโครงการผลงานเสริม (นำเสนอเหมือนกัน)
+          //    (ชื่อโครงการ -> โลโกหน่วยงาน ตรงกลางหน้า -> รายละเอียดโครงการ -> ภาพประกอบ)
           supplementaryProjects.forEach((proj, idx) => {
+            // (ก) ชื่อโครงการ
+            part5BChildren.push(
+              new Paragraph({
+                heading: HeadingLevel.HEADING_3,
+                spacing: { before: 240, after: 80, line: 240, lineRule: LineRuleType.AUTO },
+                children: [
+                  new TextRun({
+                    text: `5.3.2.${idx + 1} โครงการเสริมที่ ${idx + 1}: ${proj.projectName}`,
+                    font: FONT_FAMILY,
+                    size: 30,
+                    bold: true,
+                    color: COLOR_PRIMARY,
+                  }),
+                ],
+              })
+            );
+
+            // (ข) โลโกหน่วยงาน (ตรงกลางหน้า)
+            part5BChildren.push(...createCenteredClientLogo(proj.clientLogoUrl, proj.clientName));
+
+            // (ค) รายละเอียดโครงการ (ตาราง 2 คอลัมน์)
+            part5BChildren.push(
+              createProjectDetailTable([
+                { label: 'ชื่อโครงการ', value: proj.projectName },
+                { label: 'หน่วยงานผู้ว่าจ้าง', value: proj.clientName },
+                { label: 'ปีที่แล้วเสร็จ', value: `พ.ศ. ${proj.completionYearBE}` },
+                { label: 'มูลค่าสัญญา', value: `${proj.contractValue.toLocaleString()} บาท` },
+                { label: 'ระยะเวลาดำเนินงาน', value: proj.periodDuration || '-' },
+                { label: 'กิจกรรมและประเด็นที่สอดคล้องกับงานจ้าง', value: proj.relevanceNote || proj.description },
+                { label: 'ขอบเขตงานโดยละเอียด', value: proj.description },
+                {
+                  label: 'หลักฐานสัญญา/รับรอง',
+                  value: proj.certificateFileUrl
+                    ? 'มีแนบสำเนาสัญญา/หนังสือรับรองผลงาน'
+                    : (proj.certificateFileName || 'หนังสือรับรองผลงาน / สัญญาจ้าง'),
+                },
+              ])
+            );
+
+            // (ง) ภาพประกอบ
             const blocksToRender: ReportImageBlock[] = [];
             if (proj.imageBlocks !== undefined) {
               blocksToRender.push(...proj.imageBlocks);

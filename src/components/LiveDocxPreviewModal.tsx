@@ -1246,58 +1246,134 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                             <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginTop: '0.5rem', marginBottom: '0.5rem', color: 'var(--primary-900)' }}>
                               {numPrefix} ผลงานอ้างอิงหลักตามเกณฑ์ TOR (ย้อนหลังไม่เกิน {section5.maxYearsFilter} ปี พ.ศ. {2568 - section5.maxYearsFilter} - 2568)
                             </h3>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem', marginBottom: '1rem' }}>
+                            <p style={{ fontSize: '0.825rem', color: 'var(--slate-600)', marginBottom: '0.75rem', lineHeight: 1.6 }}>
+                              บริษัทฯ ขอเสนอผลงานที่มีขอบเขตงานและลักษณะงานสอดคล้องกับข้อกำหนดของ TOR โดยเป็นผลงานที่แล้วเสร็จย้อนหลังไม่เกิน {section5.maxYearsFilter} ปี พร้อมทั้งได้แนบสำเนาสัญญาจ้างและหนังสือรับรองผลงานไว้ในภาคผนวก ก ของข้อเสนอนี้อย่างครบถ้วน
+                            </p>
+
+                            {/* 1) ตารางสรุปโครงการที่ใช้อ้างอิง */}
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem', marginBottom: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                               <thead>
                                 <tr style={{ backgroundColor: 'var(--primary-800)', color: 'white' }}>
-                                  <th style={{ padding: '6px', border: '1px solid var(--slate-300)' }}>ชื่อโครงการ</th>
-                                  <th style={{ padding: '6px', border: '1px solid var(--slate-300)' }}>หน่วยงาน</th>
-                                  <th style={{ padding: '6px', border: '1px solid var(--slate-300)' }}>ปีที่แล้วเสร็จ</th>
-                                  <th style={{ padding: '6px', border: '1px solid var(--slate-300)' }}>มูลค่าสัญญา</th>
-                                  <th style={{ padding: '6px', border: '1px solid var(--slate-300)' }}>หลักฐานสัญญา/รับรอง</th>
+                                  <th style={{ padding: '8px 6px', border: '1px solid var(--slate-300)', width: '6%', textAlign: 'center' }}>ลำดับ</th>
+                                  <th style={{ padding: '8px 6px', border: '1px solid var(--slate-300)', width: '34%' }}>ชื่อโครงการ</th>
+                                  <th style={{ padding: '8px 6px', border: '1px solid var(--slate-300)', width: '22%' }}>หน่วยงาน</th>
+                                  <th style={{ padding: '8px 6px', border: '1px solid var(--slate-300)', width: '8%', textAlign: 'center' }}>ปี</th>
+                                  <th style={{ padding: '8px 6px', border: '1px solid var(--slate-300)', width: '15%', textAlign: 'right' }}>มูลค่าสัญญา</th>
+                                  <th style={{ padding: '8px 6px', border: '1px solid var(--slate-300)', width: '15%', textAlign: 'center' }}>หลักฐาน</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {section5.pastProjects
                                   .filter((p) => p.isSelected && (p.projectType || 'tor_reference') === 'tor_reference' && (2568 - p.completionYearBE <= section5.maxYearsFilter))
-                                  .map((p) => (
-                                    <tr key={p.id}>
-                                      <td style={{ padding: '6px', border: '1px solid var(--slate-300)', fontWeight: 600 }}>{p.projectName}</td>
-                                      <td style={{ padding: '6px', border: '1px solid var(--slate-300)' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                          {p.clientLogoUrl && (
-                                            <img
-                                              src={p.clientLogoUrl}
-                                              alt="Client Logo"
-                                              style={{ height: '24px', width: '32px', objectFit: 'contain', flexShrink: 0 }}
-                                            />
-                                          )}
-                                          <span>{p.clientName}</span>
-                                        </div>
-                                      </td>
+                                  .map((p, idx) => (
+                                    <tr key={p.id} style={{ backgroundColor: idx % 2 === 0 ? '#FFFFFF' : 'var(--slate-50)' }}>
+                                      <td style={{ padding: '6px', border: '1px solid var(--slate-300)', textAlign: 'center', fontWeight: 600 }}>{idx + 1}</td>
+                                      <td style={{ padding: '6px', border: '1px solid var(--slate-300)', fontWeight: 600, color: 'var(--primary-900)' }}>{p.projectName}</td>
+                                      <td style={{ padding: '6px', border: '1px solid var(--slate-300)' }}>{p.clientName}</td>
                                       <td style={{ padding: '6px', border: '1px solid var(--slate-300)', textAlign: 'center' }}>พ.ศ. {p.completionYearBE}</td>
-                                      <td style={{ padding: '6px', border: '1px solid var(--slate-300)', textAlign: 'right' }}>{p.contractValue.toLocaleString()} บาท</td>
+                                      <td style={{ padding: '6px', border: '1px solid var(--slate-300)', textAlign: 'right', fontWeight: 600 }}>{p.contractValue.toLocaleString()} บาท</td>
                                       <td style={{ padding: '6px', border: '1px solid var(--slate-300)', textAlign: 'center', color: p.certificateFileUrl ? 'var(--primary-700)' : 'var(--slate-500)', fontWeight: p.certificateFileUrl ? 600 : 400 }}>
-                                        {p.certificateFileUrl ? '✓ มีแนบในภาคผนวก ก' : 'หนังสือรับรองผลงาน'}
+                                        {p.certificateFileUrl ? '✓ มีแนบในภาคผนวก ก' : (p.certificateFileName || 'หนังสือรับรองผลงาน')}
                                       </td>
                                     </tr>
                                   ))}
                               </tbody>
                             </table>
 
-                            {/* Past Projects Image Blocks Preview */}
+                            {/* 2) รายละเอียดโครงการแต่ละโครงการตามตารางข้างต้น */}
                             {section5.pastProjects
                               .filter((p) => p.isSelected && (p.projectType || 'tor_reference') === 'tor_reference' && (2568 - p.completionYearBE <= section5.maxYearsFilter))
                               .map((p, pIdx) => {
                                 const blocks = p.imageBlocks !== undefined
                                   ? p.imageBlocks
                                   : p.projectImageUrl
-                                  ? [{ id: `img-${p.id}`, type: 'single' as const, url: p.projectImageUrl, caption: p.projectImageCaption || `ภาพที่ 5-1.${pIdx + 1} ภาพผลงาน: ${p.projectName}` }]
+                                  ? [{ id: `img-${p.id}`, type: 'single' as const, url: p.projectImageUrl, caption: p.projectImageCaption || `ภาพที่ 5-1.${pIdx + 1} ภาพหน้าจอระบบ/ผลงาน: ${p.projectName}` }]
                                   : [];
-                                return blocks.length > 0 ? (
-                                  <div key={`img-blocks-${p.id}`} style={{ marginTop: '0.75rem' }}>
-                                    {renderImageBlocksPreview(blocks, `ภาพที่ 5-1.${pIdx + 1}`)}
+
+                                return (
+                                  <div
+                                    key={`detail-tor-${p.id}`}
+                                    style={{
+                                      marginTop: '1.5rem',
+                                      border: '1px solid var(--slate-200)',
+                                      borderRadius: '8px',
+                                      padding: '1.25rem',
+                                      backgroundColor: '#FFFFFF',
+                                      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                                    }}
+                                  >
+                                    {/* (ก) ชื่อโครงการ */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '2px solid var(--primary-700)', paddingBottom: '0.5rem', marginBottom: '0.75rem' }}>
+                                      <span style={{ backgroundColor: 'var(--primary-800)', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 700 }}>
+                                        5.3.1.{pIdx + 1} โครงการที่ {pIdx + 1}
+                                      </span>
+                                      <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: 'var(--primary-900)' }}>
+                                        {p.projectName}
+                                      </h4>
+                                    </div>
+
+                                    {/* (ข) โลโกหน่วยงาน (ตรงกลางหน้า) */}
+                                    <div style={{ textAlign: 'center', margin: '0.75rem 0 1rem 0', padding: '0.75rem', backgroundColor: 'var(--slate-50)', borderRadius: '6px', border: '1px dashed var(--slate-200)' }}>
+                                      {p.clientLogoUrl ? (
+                                        <img
+                                          src={p.clientLogoUrl}
+                                          alt={p.clientName}
+                                          style={{ maxHeight: '65px', maxWidth: '160px', objectFit: 'contain', margin: '0 auto', display: 'block' }}
+                                        />
+                                      ) : (
+                                        <div style={{ display: 'inline-block', padding: '4px 12px', backgroundColor: '#FFFFFF', border: '1px solid var(--slate-300)', borderRadius: '4px', fontSize: '0.8rem', color: 'var(--slate-600)' }}>
+                                          ตราสัญลักษณ์ / หน่วยงานผู้ว่าจ้าง: {p.clientName}
+                                        </div>
+                                      )}
+                                      <div style={{ fontSize: '0.75rem', color: 'var(--slate-500)', marginTop: '6px', fontStyle: 'italic' }}>
+                                        หน่วยงานผู้ว่าจ้าง: {p.clientName}
+                                      </div>
+                                    </div>
+
+                                    {/* (ค) รายละเอียดโครงการ (ตารางคุณสมบัติ 2 คอลัมน์) */}
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem', marginBottom: '0.75rem', border: '1px solid var(--slate-300)' }}>
+                                      <tbody>
+                                        <tr>
+                                          <td style={{ width: '25%', padding: '6px 10px', backgroundColor: 'var(--slate-100)', fontWeight: 600, color: 'var(--primary-900)', border: '1px solid var(--slate-300)' }}>ชื่อโครงการ</td>
+                                          <td style={{ width: '75%', padding: '6px 10px', border: '1px solid var(--slate-300)', fontWeight: 600 }}>{p.projectName}</td>
+                                        </tr>
+                                        <tr>
+                                          <td style={{ padding: '6px 10px', backgroundColor: 'var(--slate-100)', fontWeight: 600, color: 'var(--primary-900)', border: '1px solid var(--slate-300)' }}>หน่วยงานผู้ว่าจ้าง</td>
+                                          <td style={{ padding: '6px 10px', border: '1px solid var(--slate-300)' }}>{p.clientName}</td>
+                                        </tr>
+                                        <tr>
+                                          <td style={{ padding: '6px 10px', backgroundColor: 'var(--slate-100)', fontWeight: 600, color: 'var(--primary-900)', border: '1px solid var(--slate-300)' }}>ปีที่แล้วเสร็จ</td>
+                                          <td style={{ padding: '6px 10px', border: '1px solid var(--slate-300)' }}>พ.ศ. {p.completionYearBE}</td>
+                                        </tr>
+                                        <tr>
+                                          <td style={{ padding: '6px 10px', backgroundColor: 'var(--slate-100)', fontWeight: 600, color: 'var(--primary-900)', border: '1px solid var(--slate-300)' }}>มูลค่าสัญญา</td>
+                                          <td style={{ padding: '6px 10px', border: '1px solid var(--slate-300)', fontWeight: 600, color: 'var(--primary-800)' }}>{p.contractValue.toLocaleString()} บาท</td>
+                                        </tr>
+                                        <tr>
+                                          <td style={{ padding: '6px 10px', backgroundColor: 'var(--slate-100)', fontWeight: 600, color: 'var(--primary-900)', border: '1px solid var(--slate-300)' }}>ระยะเวลาดำเนินงาน</td>
+                                          <td style={{ padding: '6px 10px', border: '1px solid var(--slate-300)' }}>{p.periodDuration || '-'}</td>
+                                        </tr>
+                                        <tr>
+                                          <td style={{ padding: '6px 10px', backgroundColor: 'var(--slate-100)', fontWeight: 600, color: 'var(--primary-900)', border: '1px solid var(--slate-300)' }}>ขอบเขตงานและลักษณะงาน</td>
+                                          <td style={{ padding: '6px 10px', border: '1px solid var(--slate-300)', whiteSpace: 'pre-line', lineHeight: 1.6 }}>{p.description}</td>
+                                        </tr>
+                                        <tr>
+                                          <td style={{ padding: '6px 10px', backgroundColor: 'var(--slate-100)', fontWeight: 600, color: 'var(--primary-900)', border: '1px solid var(--slate-300)' }}>หลักฐานสัญญา/รับรอง</td>
+                                          <td style={{ padding: '6px 10px', border: '1px solid var(--slate-300)', color: p.certificateFileUrl ? 'var(--primary-700)' : 'var(--slate-600)', fontWeight: p.certificateFileUrl ? 600 : 400 }}>
+                                            {p.certificateFileUrl ? '✓ มีแนบสำเนาสัญญาจ้าง/หนังสือรับรองผลงานในภาคผนวก ก' : (p.certificateFileName || 'หนังสือรับรองผลงาน / สำเนาสัญญาจ้าง')}
+                                          </td>
+                                        </tr>
+                                      </tbody>
+                                    </table>
+
+                                    {/* (ง) ภาพประกอบ */}
+                                    {blocks.length > 0 && (
+                                      <div style={{ marginTop: '0.75rem' }}>
+                                        {renderImageBlocksPreview(blocks, `ภาพที่ 5-1.${pIdx + 1}`)}
+                                      </div>
+                                    )}
                                   </div>
-                                ) : null;
+                                );
                               })}
                           </div>
                         );
@@ -1317,44 +1393,41 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                             <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginTop: '0.5rem', marginBottom: '0.5rem', color: 'var(--primary-900)' }}>
                               {numPrefix} ผลงานและประสบการณ์เสริมที่สอดคล้องกับงานจ้างโครงการนี้ (Supplementary Experience)
                             </h3>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem', marginBottom: '1.5rem' }}>
+                            <p style={{ fontSize: '0.825rem', color: 'var(--slate-600)', marginBottom: '0.75rem', lineHeight: 1.6 }}>
+                              ผลงานเพิ่มเติมที่มีกิจกรรม เทคโนโลยี หรือแนวทางการดำเนินงานที่สอดคล้องและเป็นประโยชน์ต่อโครงการจ้างนี้เพื่อประกอบการพิจารณาความพร้อมและความเชี่ยวชาญ
+                            </p>
+
+                            {/* 1) ตารางสรุปโครงการผลงานเสริม */}
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem', marginBottom: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                               <thead>
                                 <tr style={{ backgroundColor: 'var(--slate-700)', color: 'white' }}>
-                                  <th style={{ padding: '6px', border: '1px solid var(--slate-300)' }}>ชื่อโครงการ & ผู้ว่าจ้าง</th>
-                                  <th style={{ padding: '6px', border: '1px solid var(--slate-300)' }}>กิจกรรมและประเด็นที่สอดคล้องกับงานจ้างโครงการนี้</th>
-                                  <th style={{ padding: '6px', border: '1px solid var(--slate-300)' }}>ปี พ.ศ.</th>
-                                  <th style={{ padding: '6px', border: '1px solid var(--slate-300)' }}>มูลค่าสัญญา</th>
+                                  <th style={{ padding: '8px 6px', border: '1px solid var(--slate-300)', width: '6%', textAlign: 'center' }}>ลำดับ</th>
+                                  <th style={{ padding: '8px 6px', border: '1px solid var(--slate-300)', width: '32%' }}>ชื่อโครงการ</th>
+                                  <th style={{ padding: '8px 6px', border: '1px solid var(--slate-300)', width: '20%' }}>หน่วยงาน</th>
+                                  <th style={{ padding: '8px 6px', border: '1px solid var(--slate-300)', width: '8%', textAlign: 'center' }}>ปี</th>
+                                  <th style={{ padding: '8px 6px', border: '1px solid var(--slate-300)', width: '16%', textAlign: 'right' }}>มูลค่าสัญญา</th>
+                                  <th style={{ padding: '8px 6px', border: '1px solid var(--slate-300)', width: '18%' }}>หลักฐาน / กิจกรรมที่สอดคล้อง</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {section5.pastProjects
                                   .filter((p) => p.isSelected && p.projectType === 'supplementary')
-                                  .map((p) => (
-                                    <tr key={p.id}>
-                                      <td style={{ padding: '6px', border: '1px solid var(--slate-300)', fontWeight: 600 }}>
-                                        {p.projectName}
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--slate-500)', fontWeight: 400, display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
-                                          {p.clientLogoUrl && (
-                                            <img
-                                              src={p.clientLogoUrl}
-                                              alt="Client Logo"
-                                              style={{ height: '18px', width: '24px', objectFit: 'contain' }}
-                                            />
-                                          )}
-                                          <span>{p.clientName}</span>
-                                        </div>
-                                      </td>
-                                      <td style={{ padding: '6px', border: '1px solid var(--slate-300)', color: 'var(--primary-900)' }}>
-                                        {p.relevanceNote || p.description}
-                                      </td>
+                                  .map((p, idx) => (
+                                    <tr key={p.id} style={{ backgroundColor: idx % 2 === 0 ? '#FFFFFF' : 'var(--slate-50)' }}>
+                                      <td style={{ padding: '6px', border: '1px solid var(--slate-300)', textAlign: 'center', fontWeight: 600 }}>{idx + 1}</td>
+                                      <td style={{ padding: '6px', border: '1px solid var(--slate-300)', fontWeight: 600, color: 'var(--primary-900)' }}>{p.projectName}</td>
+                                      <td style={{ padding: '6px', border: '1px solid var(--slate-300)' }}>{p.clientName}</td>
                                       <td style={{ padding: '6px', border: '1px solid var(--slate-300)', textAlign: 'center' }}>พ.ศ. {p.completionYearBE}</td>
-                                      <td style={{ padding: '6px', border: '1px solid var(--slate-300)', textAlign: 'right' }}>{p.contractValue.toLocaleString()} บาท</td>
+                                      <td style={{ padding: '6px', border: '1px solid var(--slate-300)', textAlign: 'right', fontWeight: 600 }}>{p.contractValue.toLocaleString()} บาท</td>
+                                      <td style={{ padding: '6px', border: '1px solid var(--slate-300)', color: 'var(--primary-900)' }}>
+                                        {p.relevanceNote || (p.certificateFileUrl ? '✓ มีแนบในภาคผนวก ก' : 'หนังสือรับรองผลงาน')}
+                                      </td>
                                     </tr>
                                   ))}
                               </tbody>
                             </table>
 
-                            {/* Supplementary Projects Image Blocks Preview */}
+                            {/* 2) รายละเอียดโครงการแต่ละโครงการผลงานเสริม */}
                             {section5.pastProjects
                               .filter((p) => p.isSelected && p.projectType === 'supplementary')
                               .map((p, pIdx) => {
@@ -1363,11 +1436,95 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                                   : p.projectImageUrl
                                   ? [{ id: `img-${p.id}`, type: 'single' as const, url: p.projectImageUrl, caption: p.projectImageCaption || `ภาพที่ 5-2.${pIdx + 1} ภาพผลงานเสริม: ${p.projectName}` }]
                                   : [];
-                                return blocks.length > 0 ? (
-                                  <div key={`supp-img-blocks-${p.id}`} style={{ marginTop: '0.75rem' }}>
-                                    {renderImageBlocksPreview(blocks, `ภาพที่ 5-2.${pIdx + 1}`)}
+
+                                return (
+                                  <div
+                                    key={`detail-supp-${p.id}`}
+                                    style={{
+                                      marginTop: '1.5rem',
+                                      border: '1px solid var(--slate-200)',
+                                      borderRadius: '8px',
+                                      padding: '1.25rem',
+                                      backgroundColor: '#FFFFFF',
+                                      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                                    }}
+                                  >
+                                    {/* (ก) ชื่อโครงการ */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '2px solid var(--slate-600)', paddingBottom: '0.5rem', marginBottom: '0.75rem' }}>
+                                      <span style={{ backgroundColor: 'var(--slate-700)', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 700 }}>
+                                        5.3.2.{pIdx + 1} โครงการเสริมที่ {pIdx + 1}
+                                      </span>
+                                      <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: 'var(--primary-900)' }}>
+                                        {p.projectName}
+                                      </h4>
+                                    </div>
+
+                                    {/* (ข) โลโกหน่วยงาน (ตรงกลางหน้า) */}
+                                    <div style={{ textAlign: 'center', margin: '0.75rem 0 1rem 0', padding: '0.75rem', backgroundColor: 'var(--slate-50)', borderRadius: '6px', border: '1px dashed var(--slate-200)' }}>
+                                      {p.clientLogoUrl ? (
+                                        <img
+                                          src={p.clientLogoUrl}
+                                          alt={p.clientName}
+                                          style={{ maxHeight: '65px', maxWidth: '160px', objectFit: 'contain', margin: '0 auto', display: 'block' }}
+                                        />
+                                      ) : (
+                                        <div style={{ display: 'inline-block', padding: '4px 12px', backgroundColor: '#FFFFFF', border: '1px solid var(--slate-300)', borderRadius: '4px', fontSize: '0.8rem', color: 'var(--slate-600)' }}>
+                                          ตราสัญลักษณ์ / หน่วยงานผู้ว่าจ้าง: {p.clientName}
+                                        </div>
+                                      )}
+                                      <div style={{ fontSize: '0.75rem', color: 'var(--slate-500)', marginTop: '6px', fontStyle: 'italic' }}>
+                                        หน่วยงานผู้ว่าจ้าง: {p.clientName}
+                                      </div>
+                                    </div>
+
+                                    {/* (ค) รายละเอียดโครงการ (ตารางคุณสมบัติ 2 คอลัมน์) */}
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem', marginBottom: '0.75rem', border: '1px solid var(--slate-300)' }}>
+                                      <tbody>
+                                        <tr>
+                                          <td style={{ width: '25%', padding: '6px 10px', backgroundColor: 'var(--slate-100)', fontWeight: 600, color: 'var(--primary-900)', border: '1px solid var(--slate-300)' }}>ชื่อโครงการ</td>
+                                          <td style={{ width: '75%', padding: '6px 10px', border: '1px solid var(--slate-300)', fontWeight: 600 }}>{p.projectName}</td>
+                                        </tr>
+                                        <tr>
+                                          <td style={{ padding: '6px 10px', backgroundColor: 'var(--slate-100)', fontWeight: 600, color: 'var(--primary-900)', border: '1px solid var(--slate-300)' }}>หน่วยงานผู้ว่าจ้าง</td>
+                                          <td style={{ padding: '6px 10px', border: '1px solid var(--slate-300)' }}>{p.clientName}</td>
+                                        </tr>
+                                        <tr>
+                                          <td style={{ padding: '6px 10px', backgroundColor: 'var(--slate-100)', fontWeight: 600, color: 'var(--primary-900)', border: '1px solid var(--slate-300)' }}>ปีที่แล้วเสร็จ</td>
+                                          <td style={{ padding: '6px 10px', border: '1px solid var(--slate-300)' }}>พ.ศ. {p.completionYearBE}</td>
+                                        </tr>
+                                        <tr>
+                                          <td style={{ padding: '6px 10px', backgroundColor: 'var(--slate-100)', fontWeight: 600, color: 'var(--primary-900)', border: '1px solid var(--slate-300)' }}>มูลค่าสัญญา</td>
+                                          <td style={{ padding: '6px 10px', border: '1px solid var(--slate-300)', fontWeight: 600, color: 'var(--primary-800)' }}>{p.contractValue.toLocaleString()} บาท</td>
+                                        </tr>
+                                        <tr>
+                                          <td style={{ padding: '6px 10px', backgroundColor: 'var(--slate-100)', fontWeight: 600, color: 'var(--primary-900)', border: '1px solid var(--slate-300)' }}>ระยะเวลาดำเนินงาน</td>
+                                          <td style={{ padding: '6px 10px', border: '1px solid var(--slate-300)' }}>{p.periodDuration || '-'}</td>
+                                        </tr>
+                                        <tr>
+                                          <td style={{ padding: '6px 10px', backgroundColor: 'var(--slate-100)', fontWeight: 600, color: 'var(--primary-900)', border: '1px solid var(--slate-300)' }}>กิจกรรมที่สอดคล้องกับงานจ้าง</td>
+                                          <td style={{ padding: '6px 10px', border: '1px solid var(--slate-300)', color: 'var(--primary-900)', fontWeight: 500, lineHeight: 1.6 }}>{p.relevanceNote || p.description}</td>
+                                        </tr>
+                                        <tr>
+                                          <td style={{ padding: '6px 10px', backgroundColor: 'var(--slate-100)', fontWeight: 600, color: 'var(--primary-900)', border: '1px solid var(--slate-300)' }}>ขอบเขตงานโดยละเอียด</td>
+                                          <td style={{ padding: '6px 10px', border: '1px solid var(--slate-300)', whiteSpace: 'pre-line', lineHeight: 1.6 }}>{p.description}</td>
+                                        </tr>
+                                        <tr>
+                                          <td style={{ padding: '6px 10px', backgroundColor: 'var(--slate-100)', fontWeight: 600, color: 'var(--primary-900)', border: '1px solid var(--slate-300)' }}>หลักฐานสัญญา/รับรอง</td>
+                                          <td style={{ padding: '6px 10px', border: '1px solid var(--slate-300)', color: p.certificateFileUrl ? 'var(--primary-700)' : 'var(--slate-600)', fontWeight: p.certificateFileUrl ? 600 : 400 }}>
+                                            {p.certificateFileUrl ? '✓ มีแนบสำเนาสัญญา/หนังสือรับรองผลงาน' : (p.certificateFileName || 'หนังสือรับรองผลงาน / สัญญาจ้าง')}
+                                          </td>
+                                        </tr>
+                                      </tbody>
+                                    </table>
+
+                                    {/* (ง) ภาพประกอบ */}
+                                    {blocks.length > 0 && (
+                                      <div style={{ marginTop: '0.75rem' }}>
+                                        {renderImageBlocksPreview(blocks, `ภาพที่ 5-2.${pIdx + 1}`)}
+                                      </div>
+                                    )}
                                   </div>
-                                ) : null;
+                                );
                               })}
                           </div>
                         );
