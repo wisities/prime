@@ -1,15 +1,17 @@
-import { TeamMember, PastProject } from '../types/proposal';
+import { TeamMember, PastProject, MasterCompanyProfile } from '../types/proposal';
 import { MasterBomItem } from '../types/bom';
-import { MASTER_TEAM_LIBRARY, MASTER_PROJECTS_LIBRARY, MASTER_BOM_LIBRARY } from '../data/defaultData';
+import { MASTER_TEAM_LIBRARY, MASTER_PROJECTS_LIBRARY, MASTER_BOM_LIBRARY, DEFAULT_MASTER_COMPANY_PROFILE } from '../data/defaultData';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 
 const TEAM_LIBRARY_KEY = 'prime_master_team_library';
 const PROJECTS_LIBRARY_KEY = 'prime_master_projects_library';
 const BOM_LIBRARY_KEY = 'prime_master_bom_catalog';
+const COMPANY_PROFILE_KEY = 'prime_master_company_profile';
 
 export const MASTER_TEAM_UPDATED_EVENT = 'prime_master_team_updated';
 export const MASTER_PROJECTS_UPDATED_EVENT = 'prime_master_projects_updated';
 export const MASTER_BOM_UPDATED_EVENT = 'prime_master_bom_updated';
+export const MASTER_COMPANY_UPDATED_EVENT = 'prime_master_company_updated';
 
 // Helper to broadcast custom events to window
 function dispatchTeamUpdatedEvent(items: TeamMember[]) {
@@ -27,6 +29,12 @@ function dispatchProjectsUpdatedEvent(items: PastProject[]) {
 function dispatchBomUpdatedEvent(items: MasterBomItem[]) {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(MASTER_BOM_UPDATED_EVENT, { detail: items }));
+  }
+}
+
+function dispatchCompanyUpdatedEvent(profile: MasterCompanyProfile) {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(MASTER_COMPANY_UPDATED_EVENT, { detail: profile }));
   }
 }
 
@@ -198,6 +206,60 @@ function cloudRowToMasterBomItem(row: any): MasterBomItem {
   };
 }
 
+function companyProfileToCloudRow(c: MasterCompanyProfile) {
+  return {
+    id: 'default_company',
+    company_name: c.companyName || '',
+    established_year_be: Number(c.establishedYearBE) || 2558,
+    registered_capital: c.registeredCapital || '',
+    company_profile: c.companyProfile || '',
+    vision_mission: c.visionMission || '',
+    specializations: c.specializations || [],
+    certifications: c.certifications || [],
+    max_years_filter: Number(c.maxYearsFilter) || 5,
+    company_logo_url: c.companyLogoUrl || null,
+    company_office_image_url: c.companyOfficeImageUrl || null,
+    company_office_image_caption: c.companyOfficeImageCaption || null,
+    image_blocks: c.imageBlocks || [],
+    data: c,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function cloudRowToCompanyProfile(row: any): MasterCompanyProfile {
+  if (row.data && typeof row.data === 'object' && row.data.companyName) {
+    return {
+      ...row.data,
+      companyName: row.company_name || row.data.companyName,
+      establishedYearBE: Number(row.established_year_be) || row.data.establishedYearBE || 2558,
+      registeredCapital: row.registered_capital || row.data.registeredCapital || '',
+      companyProfile: row.company_profile || row.data.companyProfile || '',
+      visionMission: row.vision_mission || row.data.visionMission || '',
+      specializations: Array.isArray(row.specializations) ? row.specializations : (row.data.specializations || []),
+      certifications: Array.isArray(row.certifications) ? row.certifications : (row.data.certifications || []),
+      maxYearsFilter: Number(row.max_years_filter) || row.data.maxYearsFilter || 5,
+      companyLogoUrl: row.company_logo_url || row.data.companyLogoUrl || undefined,
+      companyOfficeImageUrl: row.company_office_image_url || row.data.companyOfficeImageUrl || undefined,
+      companyOfficeImageCaption: row.company_office_image_caption || row.data.companyOfficeImageCaption || undefined,
+      imageBlocks: row.image_blocks || row.data.imageBlocks || undefined,
+    };
+  }
+  return {
+    companyName: row.company_name || DEFAULT_MASTER_COMPANY_PROFILE.companyName,
+    establishedYearBE: Number(row.established_year_be) || DEFAULT_MASTER_COMPANY_PROFILE.establishedYearBE,
+    registeredCapital: row.registered_capital || DEFAULT_MASTER_COMPANY_PROFILE.registeredCapital,
+    companyProfile: row.company_profile || DEFAULT_MASTER_COMPANY_PROFILE.companyProfile,
+    visionMission: row.vision_mission || DEFAULT_MASTER_COMPANY_PROFILE.visionMission,
+    specializations: Array.isArray(row.specializations) ? row.specializations : DEFAULT_MASTER_COMPANY_PROFILE.specializations,
+    certifications: Array.isArray(row.certifications) ? row.certifications : DEFAULT_MASTER_COMPANY_PROFILE.certifications,
+    maxYearsFilter: Number(row.max_years_filter) || DEFAULT_MASTER_COMPANY_PROFILE.maxYearsFilter,
+    companyLogoUrl: row.company_logo_url || undefined,
+    companyOfficeImageUrl: row.company_office_image_url || undefined,
+    companyOfficeImageCaption: row.company_office_image_caption || undefined,
+    imageBlocks: row.image_blocks || undefined,
+  };
+}
+
 // ==============================================================================
 // Asynchronous Cloud Sync Helpers
 // ==============================================================================
@@ -301,6 +363,19 @@ async function deleteBomItemFromCloud(id: string): Promise<void> {
   }
 }
 
+async function syncCompanyProfileToCloud(profile: MasterCompanyProfile): Promise<void> {
+  if (!isSupabaseConfigured() || !supabase) return;
+  try {
+    const row = companyProfileToCloudRow(profile);
+    const { error } = await supabase.from('master_company_profile').upsert(row, { onConflict: 'id' });
+    if (error) {
+      console.warn('Failed to upsert company profile to Supabase:', error);
+    }
+  } catch (err) {
+    console.warn('Error in syncCompanyProfileToCloud:', err);
+  }
+}
+
 async function clearAllBomItemsFromCloud(): Promise<void> {
   if (!isSupabaseConfigured() || !supabase) return;
   try {
@@ -338,6 +413,14 @@ function saveLocalBomLibrary(items: MasterBomItem[]): void {
     localStorage.setItem(BOM_LIBRARY_KEY, JSON.stringify(items));
   } catch (e) {
     console.error('Failed to save BOM library to localStorage:', e);
+  }
+}
+
+function saveLocalCompanyProfile(profile: MasterCompanyProfile): void {
+  try {
+    localStorage.setItem(COMPANY_PROFILE_KEY, JSON.stringify(profile));
+  } catch (e) {
+    console.error('Failed to save company profile to localStorage:', e);
   }
 }
 
@@ -808,6 +891,89 @@ export function saveMultipleItemsToMasterBomLibrary(items: MasterBomItem[]): Mas
 }
 
 // ==============================================================================
+// Public API: Company Profile Library (Section 5)
+// ==============================================================================
+
+/**
+ * Gets master company profile from localStorage cache or falls back to default settings.
+ * Always synchronous for instant zero-latency UI rendering.
+ */
+export function getMasterCompanyProfile(): MasterCompanyProfile {
+  try {
+    const raw = localStorage.getItem(COMPANY_PROFILE_KEY);
+    if (raw !== null) {
+      return JSON.parse(raw);
+    }
+  } catch (e) {
+    console.error('Failed to load company profile from localStorage:', e);
+  }
+  return { ...DEFAULT_MASTER_COMPANY_PROFILE };
+}
+
+/**
+ * Fetches latest master company profile from Supabase PostgreSQL database.
+ * If Supabase is offline/unconfigured, falls back cleanly to local cached profile.
+ */
+export async function fetchMasterCompanyProfileFromCloud(): Promise<MasterCompanyProfile> {
+  if (!isSupabaseConfigured() || !supabase) {
+    return getMasterCompanyProfile();
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('master_company_profile')
+      .select('*')
+      .eq('id', 'default_company')
+      .maybeSingle();
+
+    if (error) {
+      console.warn('Supabase fetchMasterCompanyProfile error, fallback to local:', error);
+      return getMasterCompanyProfile();
+    }
+
+    if (data) {
+      const profile = cloudRowToCompanyProfile(data);
+      saveLocalCompanyProfile(profile);
+      dispatchCompanyUpdatedEvent(profile);
+      return profile;
+    } else {
+      // Cloud is empty, seed defaults
+      const current = getMasterCompanyProfile();
+      await syncCompanyProfileToCloud(current);
+      return current;
+    }
+  } catch (err) {
+    console.warn('Network error in fetchMasterCompanyProfileFromCloud, fallback to local:', err);
+    return getMasterCompanyProfile();
+  }
+}
+
+/**
+ * Saves master company profile to localStorage and asynchronously syncs to Supabase Cloud.
+ */
+export function saveMasterCompanyProfile(profile: MasterCompanyProfile): void {
+  saveLocalCompanyProfile(profile);
+  dispatchCompanyUpdatedEvent(profile);
+  syncCompanyProfileToCloud(profile);
+}
+
+/**
+ * Resets master company profile back to default template.
+ */
+export function resetMasterCompanyProfile(): MasterCompanyProfile {
+  try {
+    localStorage.removeItem(COMPANY_PROFILE_KEY);
+  } catch (e) {
+    console.error('Failed to reset company profile:', e);
+  }
+  const defaults = { ...DEFAULT_MASTER_COMPANY_PROFILE };
+  saveLocalCompanyProfile(defaults);
+  dispatchCompanyUpdatedEvent(defaults);
+  syncCompanyProfileToCloud(defaults);
+  return defaults;
+}
+
+// ==============================================================================
 // Real-time Supabase Subscription
 // ==============================================================================
 
@@ -818,7 +984,8 @@ export function saveMultipleItemsToMasterBomLibrary(items: MasterBomItem[]): Mas
 export function initMasterLibraryRealtime(
   onTeamChange?: (items: TeamMember[]) => void,
   onProjectsChange?: (items: PastProject[]) => void,
-  onBomChange?: (items: MasterBomItem[]) => void
+  onBomChange?: (items: MasterBomItem[]) => void,
+  onCompanyChange?: (profile: MasterCompanyProfile) => void
 ): () => void {
   if (!isSupabaseConfigured() || !supabase) {
     return () => {};
@@ -849,6 +1016,14 @@ export function initMasterLibraryRealtime(
         async () => {
           const fresh = await fetchMasterBomLibraryFromCloud();
           if (onBomChange) onBomChange(fresh);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'master_company_profile' },
+        async () => {
+          const fresh = await fetchMasterCompanyProfileFromCloud();
+          if (onCompanyChange) onCompanyChange(fresh);
         }
       )
       .subscribe();

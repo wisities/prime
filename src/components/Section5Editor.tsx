@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Section5Company, PastProject } from '../types/proposal';
+import { Section5Company, PastProject, MasterCompanyProfile } from '../types/proposal';
 import { ReportImageManager } from './ReportImageManager';
 import {
   getMasterProjectsLibrary,
@@ -10,10 +10,15 @@ import {
   saveProjectToMasterLibrary,
   saveMultipleProjectsToMasterLibrary,
   MASTER_PROJECTS_UPDATED_EVENT,
+  getMasterCompanyProfile,
+  fetchMasterCompanyProfileFromCloud,
+  saveMasterCompanyProfile,
+  resetMasterCompanyProfile,
+  MASTER_COMPANY_UPDATED_EVENT,
   initMasterLibraryRealtime,
 } from '../services/masterLibraryService';
 import { isSupabaseConfigured } from '../services/supabaseClient';
-import { Building2, Plus, Trash2, Library, Filter, Calendar, AlertTriangle, CheckCircle, Upload, Image, FileText, Paperclip, FileCheck, BookmarkCheck, RotateCcw, ArrowUp, ArrowDown, BookmarkPlus, Check, Database } from 'lucide-react';
+import { Building2, Plus, Trash2, Library, Filter, Calendar, AlertTriangle, CheckCircle, Upload, Image, FileText, Paperclip, FileCheck, BookmarkCheck, RotateCcw, ArrowUp, ArrowDown, BookmarkPlus, Check, Database, Save, Download } from 'lucide-react';
 
 interface Section5EditorProps {
   section5: Section5Company;
@@ -22,7 +27,10 @@ interface Section5EditorProps {
 
 export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChange }) => {
   const [showLibraryModal, setShowLibraryModal] = useState(false);
+  const [libraryTab, setLibraryTab] = useState<'projects' | 'company'>('projects');
   const [projectsLibrary, setProjectsLibrary] = useState<PastProject[]>(getMasterProjectsLibrary());
+  const [masterCompany, setMasterCompany] = useState<MasterCompanyProfile>(getMasterCompanyProfile());
+  const [companyToast, setCompanyToast] = useState<string | null>(null);
   const [isLoadingCloud, setIsLoadingCloud] = useState(false);
   const currentYearBE = 2568;
 
@@ -30,18 +38,30 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
     fetchMasterProjectsLibraryFromCloud().then((items) => {
       setProjectsLibrary(items);
     });
+    fetchMasterCompanyProfileFromCloud().then((profile) => {
+      setMasterCompany(profile);
+    });
 
     const handleLocalUpdate = (e: any) => {
       if (e.detail) setProjectsLibrary(e.detail);
     };
-    window.addEventListener(MASTER_PROJECTS_UPDATED_EVENT, handleLocalUpdate);
+    const handleCompanyUpdate = (e: any) => {
+      if (e.detail) setMasterCompany(e.detail);
+    };
 
-    const unsubscribe = initMasterLibraryRealtime(undefined, (fresh) => {
-      setProjectsLibrary(fresh);
-    });
+    window.addEventListener(MASTER_PROJECTS_UPDATED_EVENT, handleLocalUpdate);
+    window.addEventListener(MASTER_COMPANY_UPDATED_EVENT, handleCompanyUpdate);
+
+    const unsubscribe = initMasterLibraryRealtime(
+      undefined,
+      (fresh) => setProjectsLibrary(fresh),
+      undefined,
+      (freshCompany) => setMasterCompany(freshCompany)
+    );
 
     return () => {
       window.removeEventListener(MASTER_PROJECTS_UPDATED_EVENT, handleLocalUpdate);
+      window.removeEventListener(MASTER_COMPANY_UPDATED_EVENT, handleCompanyUpdate);
       unsubscribe();
     };
   }, []);
@@ -171,6 +191,76 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
     alert(`บันทึกผลงานโครงการทั้งหมด ${validProjects.length} รายการ เข้าสู่คลังข้อมูลกลางเรียบร้อยแล้ว`);
   };
 
+  const handleSaveCurrentToMasterCompany = () => {
+    if (!section5.companyName || section5.companyName.trim() === '') {
+      alert('กรุณาระบุชื่อบริษัทก่อนบันทึกลงคลังกลาง');
+      return;
+    }
+    const profileToSave: MasterCompanyProfile = {
+      companyName: section5.companyName,
+      establishedYearBE: section5.establishedYearBE,
+      registeredCapital: section5.registeredCapital,
+      companyProfile: section5.companyProfile,
+      visionMission: section5.visionMission,
+      specializations: section5.specializations || [],
+      certifications: section5.certifications || [],
+      maxYearsFilter: section5.maxYearsFilter || 5,
+      companyLogoUrl: section5.companyLogoUrl,
+      companyOfficeImageUrl: section5.companyOfficeImageUrl,
+      companyOfficeImageCaption: section5.companyOfficeImageCaption,
+      imageBlocks: section5.imageBlocks || [],
+    };
+    saveMasterCompanyProfile(profileToSave);
+    setMasterCompany(profileToSave);
+    setCompanyToast('บันทึกข้อมูลบริษัทเข้าสู่คลังกลางและซิงก์ Cloud สำเร็จ! โครงการอื่นๆ สามารถดึงไปใช้ได้ทันที');
+    setTimeout(() => setCompanyToast(null), 3500);
+  };
+
+  const handleLoadFromMasterCompany = async () => {
+    if (confirm('ต้องการดึงข้อมูลบริษัทจากคลังกลางมาแทนที่ข้อมูลปัจจุบันของโครงการนี้หรือไม่? (ผลงานโครงการเดิมในเล่มจะไม่ได้รับผลกระทบ)')) {
+      setIsLoadingCloud(true);
+      try {
+        const fresh = await fetchMasterCompanyProfileFromCloud();
+        setMasterCompany(fresh);
+        onChange({
+          ...section5,
+          ...fresh,
+          pastProjects: section5.pastProjects,
+        });
+        setCompanyToast('ดึงข้อมูลบริษัทจากคลังกลางและนำมาปรับใช้ในโครงการนี้เรียบร้อยแล้ว');
+        setTimeout(() => setCompanyToast(null), 3500);
+      } finally {
+        setIsLoadingCloud(false);
+      }
+    }
+  };
+
+  const handleSaveMasterCompanyInModal = () => {
+    saveMasterCompanyProfile(masterCompany);
+    setCompanyToast('บันทึกการเปลี่ยนแปลงข้อมูลบริษัทกลางขึ้น Cloud เรียบร้อยแล้ว');
+    setTimeout(() => setCompanyToast(null), 3500);
+  };
+
+  const handleApplyMasterCompanyToCurrent = () => {
+    onChange({
+      ...section5,
+      ...masterCompany,
+      pastProjects: section5.pastProjects,
+    });
+    setCompanyToast('นำข้อมูลบริษัทกลางมาปรับใช้ในโครงการปัจจุบันสำเร็จ');
+    setTimeout(() => setCompanyToast(null), 3500);
+    setShowLibraryModal(false);
+  };
+
+  const handleResetMasterCompany = () => {
+    if (confirm('ต้องการคืนค่าข้อมูลบริษัทกลางกลับเป็นค่าเริ่มต้นตามเทมเพลตมาตรฐานหรือไม่?')) {
+      const reset = resetMasterCompanyProfile();
+      setMasterCompany(reset);
+      setCompanyToast('คืนค่าข้อมูลบริษัทกลางเป็นค่าเริ่มต้นเรียบร้อยแล้ว');
+      setTimeout(() => setCompanyToast(null), 3500);
+    }
+  };
+
   // Filter calculation
   const minAllowedYear = currentYearBE - section5.maxYearsFilter;
 
@@ -196,7 +286,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       {/* 5.1 Company Profile Card */}
       <div className="card">
-        <div className="card-header">
+        <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div className="card-title-group">
             <h2>
               <Building2 size={20} color="var(--primary-700)" />
@@ -204,7 +294,66 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
             </h2>
             <p>ข้อมูลนิติบุคคล รูปภาพสำนักงาน/โลโก้ ความเชี่ยวชาญ ใบรับรองมาตรฐาน และคลังผลงานย้อนหลังตามเงื่อนไขปีที่กำหนด</p>
           </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={handleSaveCurrentToMasterCompany}
+              className="btn btn-outline"
+              style={{
+                fontSize: '0.8rem',
+                padding: '0.35rem 0.75rem',
+                color: '#0284C7',
+                borderColor: '#BAE6FD',
+                backgroundColor: '#F0F9FF',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+              }}
+              title="บันทึกข้อมูลบริษัทของโครงการนี้ลงในคลังข้อมูลกลางและซิงก์ Cloud"
+            >
+              <BookmarkPlus size={14} /> บันทึกข้อมูลบริษัทนี้ลงคลังกลาง
+            </button>
+            <button
+              type="button"
+              onClick={handleLoadFromMasterCompany}
+              className="btn btn-outline"
+              style={{
+                fontSize: '0.8rem',
+                padding: '0.35rem 0.75rem',
+                color: '#047857',
+                borderColor: '#A7F3D0',
+                backgroundColor: '#ECFDF5',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+              }}
+              title="ดึงข้อมูลบริษัทล่าสุดจากคลังกลางมาใส่ในโครงการนี้"
+            >
+              <RotateCcw size={14} /> ดึงข้อมูลบริษัทจากคลังกลาง
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setLibraryTab('company');
+                handleOpenLibrary();
+              }}
+              className="btn btn-secondary"
+              style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem', display: 'flex', alignItems: 'center', gap: '5px' }}
+              title="เปิดดูและจัดการข้อมูลบริษัทและผลงานในคลังกลาง"
+            >
+              <Library size={14} /> คลังข้อมูลกลาง
+            </button>
+          </div>
         </div>
+
+        {/* Company Toast Notification */}
+        {companyToast && (
+          <div style={{ margin: '0.5rem 1.25rem', padding: '0.5rem 0.85rem', backgroundColor: '#ECFDF5', border: '1px solid #6EE7B7', borderRadius: '6px', color: '#065F46', fontSize: '0.825rem', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 500 }}>
+            <CheckCircle size={15} color="#059669" /> {companyToast}
+          </div>
+        )}
 
         <div className="grid-2">
           <div className="form-group">
@@ -964,7 +1113,9 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--primary-900)', margin: 0 }}>
-                    คลังข้อมูลผลงานโครงการกลาง (Prime Digital Past Track Records)
+                    {libraryTab === 'projects'
+                      ? 'คลังข้อมูลผลงานโครงการกลาง (Prime Digital Past Track Records)'
+                      : 'คลังข้อมูลและประวัติบริษัทกลาง (Master Company Profile)'}
                   </h3>
                   {isSupabaseConfigured() ? (
                     <span style={{ fontSize: '0.72rem', backgroundColor: '#ECFDF5', color: '#047857', padding: '2px 8px', borderRadius: '12px', border: '1px solid #A7F3D0', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
@@ -982,30 +1133,44 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                   )}
                 </div>
                 <div style={{ fontSize: '0.8rem', color: 'var(--slate-500)', marginTop: '2px' }}>
-                  มีทั้งหมด {projectsLibrary.length} โครงการ (เชื่อมต่อฐานข้อมูลกลาง ใช้ร่วมกันได้ทุกโครงการและทุกคน)
+                  {libraryTab === 'projects'
+                    ? `มีทั้งหมด ${projectsLibrary.length} โครงการ (เชื่อมต่อฐานข้อมูลกลาง ใช้ร่วมกันได้ทุกโครงการและทุกคน)`
+                    : 'ข้อมูลนิติบุคคลและประวัติองค์กรระดับคลังกลาง (เชื่อมต่อตาราง master_company_profile บน Cloud)'}
                 </div>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {projectsLibrary.length > 0 ? (
-                  <button
-                    type="button"
-                    onClick={handleClearAllLibrary}
-                    className="btn btn-outline"
-                    style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem', color: '#DC2626', borderColor: '#FCA5A5' }}
-                    title="ล้างข้อมูลผลงานทั้งหมดในคลังกลาง"
-                  >
-                    <Trash2 size={13} /> ล้างคลังทั้งหมด
-                  </button>
+                {libraryTab === 'projects' ? (
+                  projectsLibrary.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={handleClearAllLibrary}
+                      className="btn btn-outline"
+                      style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem', color: '#DC2626', borderColor: '#FCA5A5' }}
+                      title="ล้างข้อมูลผลงานทั้งหมดในคลังกลาง"
+                    >
+                      <Trash2 size={13} /> ล้างคลังทั้งหมด
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleResetLibrary}
+                      className="btn btn-outline"
+                      style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem', color: '#2563EB', borderColor: '#93C5FD' }}
+                      title="คืนค่าผลงานตัวอย่างเดิม"
+                    >
+                      <RotateCcw size={13} /> คืนค่าตัวอย่างเดิม
+                    </button>
+                  )
                 ) : (
                   <button
                     type="button"
-                    onClick={handleResetLibrary}
+                    onClick={handleResetMasterCompany}
                     className="btn btn-outline"
-                    style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem', color: '#2563EB', borderColor: '#93C5FD' }}
-                    title="คืนค่าผลงานตัวอย่างเดิม"
+                    style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem', color: '#DC2626', borderColor: '#FCA5A5' }}
+                    title="คืนค่าข้อมูลบริษัทกลางเป็นค่าเริ่มต้น"
                   >
-                    <RotateCcw size={13} /> คืนค่าตัวอย่างเดิม
+                    <RotateCcw size={13} /> คืนค่าเริ่มต้น
                   </button>
                 )}
                 <button
@@ -1018,152 +1183,408 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
               </div>
             </div>
 
-            {/* Quick Bulk Save Action */}
-            {section5.pastProjects.length > 0 && (
-              <div
+            {/* Modal Tab Switcher */}
+            <div style={{ display: 'flex', borderBottom: '1px solid var(--slate-200)', backgroundColor: '#F8FAFC' }}>
+              <button
+                type="button"
+                onClick={() => setLibraryTab('projects')}
                 style={{
+                  flex: 1,
                   padding: '0.65rem 1rem',
-                  backgroundColor: '#F0F9FF',
-                  borderBottom: '1px solid #BAE6FD',
+                  fontWeight: libraryTab === 'projects' ? 600 : 400,
+                  color: libraryTab === 'projects' ? 'var(--primary-700)' : 'var(--slate-600)',
+                  borderBottom: libraryTab === 'projects' ? '2px solid var(--primary-600)' : 'none',
+                  backgroundColor: libraryTab === 'projects' ? '#FFFFFF' : 'transparent',
+                  borderTop: 'none',
+                  borderLeft: 'none',
+                  borderRight: 'none',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
                   display: 'flex',
-                  justifyContent: 'space-between',
                   alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: '0.5rem',
+                  justifyContent: 'center',
+                  gap: '6px',
                 }}
               >
-                <div style={{ fontSize: '0.8rem', color: '#0369A1' }}>
-                  💡 มีผลงานโครงการในเล่มนี้ {section5.pastProjects.length} รายการ ต้องการบันทึก/อัปเดตเข้าคลังกลางทั้งหมดพร้อมกันหรือไม่?
-                </div>
-                <button
-                  type="button"
-                  onClick={handleSaveAllProjectsToLibrary}
-                  className="btn btn-outline"
-                  style={{
-                    fontSize: '0.78rem',
-                    padding: '0.3rem 0.65rem',
-                    backgroundColor: '#FFFFFF',
-                    color: '#0284C7',
-                    borderColor: '#7DD3FC',
-                    fontWeight: 600,
-                  }}
-                >
-                  <BookmarkPlus size={13} /> + บันทึกทุกผลงานในเล่มนี้เข้าคลังกลาง
-                </button>
-              </div>
-            )}
+                <FileText size={15} /> คลังผลงานโครงการย้อนหลัง ({projectsLibrary.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setLibraryTab('company')}
+                style={{
+                  flex: 1,
+                  padding: '0.65rem 1rem',
+                  fontWeight: libraryTab === 'company' ? 600 : 400,
+                  color: libraryTab === 'company' ? 'var(--primary-700)' : 'var(--slate-600)',
+                  borderBottom: libraryTab === 'company' ? '2px solid var(--primary-600)' : 'none',
+                  backgroundColor: libraryTab === 'company' ? '#FFFFFF' : 'transparent',
+                  borderTop: 'none',
+                  borderLeft: 'none',
+                  borderRight: 'none',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                }}
+              >
+                <Building2 size={15} /> ข้อมูลบริษัทกลาง (Master Company Profile)
+              </button>
+            </div>
 
-            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', maxHeight: '65vh', overflowY: 'auto' }}>
-              {projectsLibrary.length === 0 ? (
-                <div
-                  style={{
-                    textAlign: 'center',
-                    padding: '2.5rem 1rem',
-                    backgroundColor: '#F8FAFC',
-                    borderRadius: '8px',
-                    border: '1px dashed #CBD5E1',
-                  }}
-                >
-                  <Building2 size={36} color="#94A3B8" style={{ margin: '0 auto 0.5rem' }} />
-                  <div style={{ fontWeight: 600, color: '#475569', fontSize: '0.95rem' }}>
-                    ไม่มีข้อมูลผลงานโครงการในคลังกลางแล้ว
-                  </div>
-                  <div style={{ fontSize: '0.8rem', color: '#64748B', marginTop: '0.25rem' }}>
-                    คุณได้ล้างข้อมูลโครงการจำลองออกเรียบร้อยแล้ว หรือสามารถกดปุ่มเพื่อคืนค่าตัวอย่างกลับมาได้
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleResetLibrary}
-                    className="btn btn-primary"
-                    style={{ marginTop: '0.85rem', fontSize: '0.825rem', padding: '0.45rem 1rem' }}
-                  >
-                    <RotateCcw size={14} /> คืนค่าตัวอย่างผลงานเดิม
-                  </button>
-                </div>
-              ) : (
-                projectsLibrary.map((item) => (
+            {libraryTab === 'projects' ? (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {/* Quick Bulk Save Action */}
+                {section5.pastProjects.length > 0 && (
                   <div
-                    key={item.id}
                     style={{
-                      border: '1px solid var(--slate-200)',
-                      borderRadius: '8px',
-                      padding: '0.85rem 1rem',
+                      padding: '0.65rem 1rem',
+                      backgroundColor: '#F0F9FF',
+                      borderBottom: '1px solid #BAE6FD',
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
-                      backgroundColor: '#FFFFFF',
-                      gap: '0.75rem',
+                      flexWrap: 'wrap',
+                      gap: '0.5rem',
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0, paddingRight: '0.5rem' }}>
-                      {item.clientLogoUrl && (
-                        <img
-                          src={item.clientLogoUrl}
-                          alt="Client Logo"
-                          style={{
-                            height: '42px',
-                            width: '48px',
-                            objectFit: 'contain',
-                            backgroundColor: '#FFFFFF',
-                            border: '1px solid var(--slate-300)',
-                            borderRadius: '4px',
-                            padding: '2px',
-                            flexShrink: 0,
-                          }}
-                        />
-                      )}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, color: 'var(--slate-900)' }}>{item.projectName}</div>
-                        <div style={{ fontSize: '0.825rem', color: 'var(--primary-700)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                          <span>{item.clientName}</span>
-                          <span>|</span>
-                          <span>แล้วเสร็จปี พ.ศ. <strong>{item.completionYearBE}</strong></span>
-                          <span>|</span>
-                          <span>มูลค่า {item.contractValue.toLocaleString()} บาท</span>
-                          {item.imageBlocks && item.imageBlocks.length > 0 && (
-                            <span style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '1px 6px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 600 }}>
-                              📷 {item.imageBlocks.length} บล็อกภาพ
-                            </span>
+                    <div style={{ fontSize: '0.8rem', color: '#0369A1' }}>
+                      💡 มีผลงานโครงการในเล่มนี้ {section5.pastProjects.length} รายการ ต้องการบันทึก/อัปเดตเข้าคลังกลางทั้งหมดพร้อมกันหรือไม่?
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSaveAllProjectsToLibrary}
+                      className="btn btn-outline"
+                      style={{
+                        fontSize: '0.78rem',
+                        padding: '0.3rem 0.65rem',
+                        backgroundColor: '#FFFFFF',
+                        color: '#0284C7',
+                        borderColor: '#7DD3FC',
+                        fontWeight: 600,
+                      }}
+                    >
+                      <BookmarkPlus size={13} /> + บันทึกทุกผลงานในเล่มนี้เข้าคลังกลาง
+                    </button>
+                  </div>
+                )}
+
+                <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', maxHeight: '65vh', overflowY: 'auto' }}>
+                  {projectsLibrary.length === 0 ? (
+                    <div
+                      style={{
+                        textAlign: 'center',
+                        padding: '2.5rem 1rem',
+                        backgroundColor: '#F8FAFC',
+                        borderRadius: '8px',
+                        border: '1px dashed #CBD5E1',
+                      }}
+                    >
+                      <Building2 size={36} color="#94A3B8" style={{ margin: '0 auto 0.5rem' }} />
+                      <div style={{ fontWeight: 600, color: '#475569', fontSize: '0.95rem' }}>
+                        ไม่มีข้อมูลผลงานโครงการในคลังกลางแล้ว
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: '#64748B', marginTop: '0.25rem' }}>
+                        คุณได้ล้างข้อมูลโครงการจำลองออกเรียบร้อยแล้ว หรือสามารถกดปุ่มเพื่อคืนค่าตัวอย่างกลับมาได้
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleResetLibrary}
+                        className="btn btn-primary"
+                        style={{ marginTop: '0.85rem', fontSize: '0.825rem', padding: '0.45rem 1rem' }}
+                      >
+                        <RotateCcw size={14} /> คืนค่าตัวอย่างผลงานเดิม
+                      </button>
+                    </div>
+                  ) : (
+                    projectsLibrary.map((item) => (
+                      <div
+                        key={item.id}
+                        style={{
+                          border: '1px solid var(--slate-200)',
+                          borderRadius: '8px',
+                          padding: '0.85rem 1rem',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          backgroundColor: '#FFFFFF',
+                          gap: '0.75rem',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0, paddingRight: '0.5rem' }}>
+                          {item.clientLogoUrl && (
+                            <img
+                              src={item.clientLogoUrl}
+                              alt="Client Logo"
+                              style={{
+                                height: '42px',
+                                width: '48px',
+                                objectFit: 'contain',
+                                backgroundColor: '#FFFFFF',
+                                border: '1px solid var(--slate-300)',
+                                borderRadius: '4px',
+                                padding: '2px',
+                                flexShrink: 0,
+                              }}
+                            />
                           )}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, color: 'var(--slate-900)' }}>{item.projectName}</div>
+                            <div style={{ fontSize: '0.825rem', color: 'var(--primary-700)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span>{item.clientName}</span>
+                              <span>|</span>
+                              <span>แล้วเสร็จปี พ.ศ. <strong>{item.completionYearBE}</strong></span>
+                              <span>|</span>
+                              <span>มูลค่า {item.contractValue.toLocaleString()} บาท</span>
+                              {item.imageBlocks && item.imageBlocks.length > 0 && (
+                                <span style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '1px 6px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 600 }}>
+                                  📷 {item.imageBlocks.length} บล็อกภาพ
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--slate-500)', marginTop: '2px' }}>
+                              {item.description}
+                            </div>
+                          </div>
                         </div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--slate-500)', marginTop: '2px' }}>
-                          {item.description}
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                          <button
+                            type="button"
+                            onClick={() => handleAddFromLibrary(item)}
+                            className="btn btn-outline"
+                            style={{ borderColor: 'var(--primary-600)', color: 'var(--primary-700)', whiteSpace: 'nowrap', fontSize: '0.825rem', padding: '0.4rem 0.8rem' }}
+                          >
+                            + เลือกเข้าเล่มนี้
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteFromLibrary(item.id, item.projectName)}
+                            className="btn btn-outline"
+                            style={{
+                              borderColor: '#FECACA',
+                              color: '#DC2626',
+                              backgroundColor: '#FEF2F2',
+                              padding: '0.4rem 0.55rem',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                            title="ลบออกจากคลังข้อมูลกลาง"
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                       </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* Master Company Profile Tab */
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '68vh', overflowY: 'auto', padding: '1.25rem' }}>
+                <div style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '8px', padding: '0.85rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+                  <div>
+                    <div style={{ fontWeight: 600, color: '#166534', fontSize: '0.9rem' }}>
+                      🏢 ข้อมูลบริษัทกลาง (Master Company Profile)
                     </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-                      <button
-                        type="button"
-                        onClick={() => handleAddFromLibrary(item)}
-                        className="btn btn-outline"
-                        style={{ borderColor: 'var(--primary-600)', color: 'var(--primary-700)', whiteSpace: 'nowrap', fontSize: '0.825rem', padding: '0.4rem 0.8rem' }}
-                      >
-                        + เลือกเข้าเล่มนี้
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteFromLibrary(item.id, item.projectName)}
-                        className="btn btn-outline"
-                        style={{
-                          borderColor: '#FECACA',
-                          color: '#DC2626',
-                          backgroundColor: '#FEF2F2',
-                          padding: '0.4rem 0.55rem',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                        title="ลบออกจากคลังข้อมูลกลาง"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                    <div style={{ fontSize: '0.78rem', color: '#15803D', marginTop: '2px' }}>
+                      เชื่อมต่อตาราง <code>master_company_profile</code> บน Cloud เพื่อให้ทุกโครงการและทุกคนในทีมใช้ข้อมูลเดียวกัน
                     </div>
                   </div>
-                ))
-              )}
-            </div>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={handleApplyMasterCompanyToCurrent}
+                      className="btn btn-primary"
+                      style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem', display: 'flex', alignItems: 'center', gap: '5px' }}
+                    >
+                      <Download size={13} /> นำข้อมูลนี้ใส่ในเล่มนี้
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveMasterCompanyInModal}
+                      className="btn btn-outline"
+                      style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem', color: '#0369A1', borderColor: '#7DD3FC', backgroundColor: '#FFFFFF', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px' }}
+                    >
+                      <Save size={13} /> บันทึกขึ้น Cloud
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="form-label">ชื่อบริษัทกลาง <span className="required">*</span></label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={masterCompany.companyName}
+                      onChange={(e) => setMasterCompany({ ...masterCompany, companyName: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">ทุนจดทะเบียน</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={masterCompany.registeredCapital}
+                      onChange={(e) => setMasterCompany({ ...masterCompany, registeredCapital: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="form-label">ปีที่จดทะเบียนจัดตั้ง (พ.ศ.)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={masterCompany.establishedYearBE}
+                      onChange={(e) => setMasterCompany({ ...masterCompany, establishedYearBE: parseInt(e.target.value) || 2558 })}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">เงื่อนไขผลงานย้อนหลัง (ปี)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={masterCompany.maxYearsFilter}
+                      onChange={(e) => setMasterCompany({ ...masterCompany, maxYearsFilter: parseInt(e.target.value) || 5 })}
+                    />
+                  </div>
+                </div>
+
+                {/* Photos */}
+                <div className="grid-2" style={{ backgroundColor: 'var(--slate-50)', padding: '0.85rem', borderRadius: '8px', border: '1px solid var(--slate-200)' }}>
+                  {/* Logo */}
+                  <div>
+                    <label className="form-label" style={{ fontSize: '0.825rem' }}>โลโก้บริษัทกลาง</label>
+                    {masterCompany.companyLogoUrl ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <img
+                          src={masterCompany.companyLogoUrl}
+                          alt="Master Logo"
+                          style={{ height: '60px', maxWidth: '120px', objectFit: 'contain', border: '1px solid var(--slate-300)', borderRadius: '4px', backgroundColor: '#FFF', padding: '2px' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setMasterCompany({ ...masterCompany, companyLogoUrl: undefined })}
+                          className="btn btn-outline"
+                          style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', color: '#DC2626', borderColor: '#FCA5A5' }}
+                        >
+                          <Trash2 size={12} /> ลบ
+                        </button>
+                      </div>
+                    ) : (
+                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.45rem', border: '1px dashed var(--slate-300)', borderRadius: '6px', backgroundColor: '#FFF', cursor: 'pointer', fontSize: '0.78rem', color: 'var(--slate-600)' }}>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          style={{ display: 'none' }}
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) handleFileUpload(f, (b64) => setMasterCompany({ ...masterCompany, companyLogoUrl: b64 }));
+                          }}
+                        />
+                        <Upload size={14} /> อัปโหลดโลโก้บริษัทกลาง
+                      </label>
+                    )}
+                  </div>
+
+                  {/* Office Photo */}
+                  <div>
+                    <label className="form-label" style={{ fontSize: '0.825rem' }}>ภาพสำนักงาน/อาคารบริษัทกลาง</label>
+                    {masterCompany.companyOfficeImageUrl ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <img
+                          src={masterCompany.companyOfficeImageUrl}
+                          alt="Master Office"
+                          style={{ height: '60px', width: '90px', objectFit: 'cover', border: '1px solid var(--slate-300)', borderRadius: '4px' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setMasterCompany({ ...masterCompany, companyOfficeImageUrl: undefined })}
+                          className="btn btn-outline"
+                          style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', color: '#DC2626', borderColor: '#FCA5A5' }}
+                        >
+                          <Trash2 size={12} /> ลบ
+                        </button>
+                      </div>
+                    ) : (
+                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '0.45rem', border: '1px dashed var(--slate-300)', borderRadius: '6px', backgroundColor: '#FFF', cursor: 'pointer', fontSize: '0.78rem', color: 'var(--slate-600)' }}>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          style={{ display: 'none' }}
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) handleFileUpload(f, (b64) => setMasterCompany({ ...masterCompany, companyOfficeImageUrl: b64 }));
+                          }}
+                        />
+                        <Upload size={14} /> อัปโหลดภาพสำนักงาน
+                      </label>
+                    )}
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">ประวัติและข้อมูลองค์กร (Company Profile Overview)</label>
+                  <textarea
+                    className="form-textarea"
+                    rows={4}
+                    value={masterCompany.companyProfile}
+                    onChange={(e) => setMasterCompany({ ...masterCompany, companyProfile: e.target.value })}
+                  />
+                </div>
+
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="form-label">วิสัยทัศน์และพันธกิจ (Vision & Mission)</label>
+                    <textarea
+                      className="form-textarea"
+                      rows={3}
+                      value={masterCompany.visionMission}
+                      onChange={(e) => setMasterCompany({ ...masterCompany, visionMission: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">คำบรรยายภาพสำนักงาน</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={masterCompany.companyOfficeImageCaption || ''}
+                      placeholder="เช่น อาคารสำนักงานใหญ่ บริษัท ไพร์มดิจิทัล..."
+                      onChange={(e) => setMasterCompany({ ...masterCompany, companyOfficeImageCaption: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">ความเชี่ยวชาญหลัก (พิมพ์แยกทีละบรรทัด)</label>
+                  <textarea
+                    className="form-textarea"
+                    rows={3}
+                    value={(masterCompany.specializations || []).join('\n')}
+                    onChange={(e) => setMasterCompany({ ...masterCompany, specializations: e.target.value.split('\n').filter(Boolean) })}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">ใบรับรองมาตรฐานและทะเบียนที่ปรึกษา (พิมพ์แยกทีละบรรทัด)</label>
+                  <textarea
+                    className="form-textarea"
+                    rows={3}
+                    value={(masterCompany.certifications || []).join('\n')}
+                    onChange={(e) => setMasterCompany({ ...masterCompany, certifications: e.target.value.split('\n').filter(Boolean) })}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

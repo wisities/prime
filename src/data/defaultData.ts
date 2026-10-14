@@ -1,5 +1,27 @@
-import { ProposalData, PastProject, TeamMember, TorScopeItem, BiddingProject, DocumentStructureConfig } from '../types/proposal';
+import { ProposalData, PastProject, TeamMember, TorScopeItem, BiddingProject, DocumentStructureConfig, MasterCompanyProfile } from '../types/proposal';
 import { MasterBomItem } from '../types/bom';
+
+export const DEFAULT_MASTER_COMPANY_PROFILE: MasterCompanyProfile = {
+  companyName: 'บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด (Prime Digital Consultant Co., Ltd.)',
+  establishedYearBE: 2558,
+  registeredCapital: '20,000,000 บาท (ชำระเต็มจำนวน)',
+  companyProfile: 'บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด ก่อตั้งขึ้นเมื่อปี พ.ศ. 2558 โดยกลุ่มผู้เชี่ยวชาญด้านวิศวกรรมคอมพิวเตอร์และการบริหารจัดการเทคโนโลยีสารสนเทศ ด้วยความมุ่งมั่นที่จะเป็นผู้นำด้านการให้คำปรึกษาและพัฒนานวัตกรรมดิจิทัลสำหรับภาครัฐและองค์กรชั้นนำของประเทศ บริษัทฯ ได้สั่งสมประสบการณ์และความเชี่ยวชาญในการส่งมอบโครงการพัฒนาระบบสารสนเทศขนาดใหญ่มากกว่า 50 โครงการ ด้วยมาตรฐานการทำงานระดับสากลและความน่าเชื่อถือสูงสุด',
+  visionMission: 'มุ่งมั่นขับเคลื่อนการเปลี่ยนผ่านสู่ดิจิทัลของประเทศไทย ด้วยโซลูชันเทคโนโลยีที่ทันสมัย ปลอดภัย และสร้างคุณค่าที่ยั่งยืนให้แก่ประชาชนและองค์กรภาครัฐ',
+  specializations: [
+    'การให้คำปรึกษาและออกแบบสถาปัตยกรรมรัฐบาลดิจิทัล (Enterprise & Digital Government Architecture)',
+    'การพัฒนาระบบบริการประชาชนดิจิทัล (Citizen-Centric e-Services & Portals)',
+    'การบูรณาการข้อมูลขนาดใหญ่และการจัดทำคลังข้อมูลอัจฉริยะ (Big Data & Data Lakehouse Platform)',
+    'การพัฒนาระบบบริหารจัดการองค์กรภาครัฐและระบบการเงินการพัสดุ (Government ERP & Workflow)',
+    'การรักษาความมั่นคงปลอดภัยสารสนเทศและการปฏิบัติตามกฎหมายไซเบอร์และ PDPA',
+  ],
+  certifications: [
+    'ISO/IEC 29110 (Software Engineering - Lifecycle Profiles for Very Small Entities)',
+    'ISO/IEC 27001 (Information Security Management System)',
+    'ขึ้นทะเบียนที่ปรึกษากระทรวงการคลัง (สำนักงานบริหารหนี้สาธารณะ) ประเภทที่ปรึกษาไทย สาขาเทคโนโลยีสารสนเทศและการสื่อสาร',
+    'สมาชิกสภาอุตสาหกรรมแห่งประเทศไทย และสมาคมอุตสาหกรรมซอฟต์แวร์ไทย (ATSI)',
+  ],
+  maxYearsFilter: 3,
+};
 
 export const MASTER_PROJECTS_LIBRARY: PastProject[] = [
   {
@@ -1088,25 +1110,7 @@ export const INITIAL_PROPOSAL_DATA: ProposalData = {
     complianceMatrixOverview: 'บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด ยืนยันการปฏิบัติตามข้อกำหนดในขอบเขตงาน (TOR) ทุกประการ โดยในบางรายการสำคัญ บริษัทฯ ได้นำเสนอแนวทาง เทคโนโลยี และมาตรฐานที่สูงกว่าเกณฑ์ขั้นต่ำที่ TOR กำหนด เพื่อสร้างมูลค่าเพิ่มและความมั่นคงปลอดภัยสูงสุดให้แก่หน่วยงาน',
   },
   section5: {
-    companyName: 'บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด (Prime Digital Consultant Co., Ltd.)',
-    establishedYearBE: 2558,
-    registeredCapital: '20,000,000 บาท (ชำระเต็มจำนวน)',
-    companyProfile: 'บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด ก่อตั้งขึ้นเมื่อปี พ.ศ. 2558 โดยกลุ่มผู้เชี่ยวชาญด้านวิศวกรรมคอมพิวเตอร์และการบริหารจัดการเทคโนโลยีสารสนเทศ ด้วยความมุ่งมั่นที่จะเป็นผู้นำด้านการให้คำปรึกษาและพัฒนานวัตกรรมดิจิทัลสำหรับภาครัฐและองค์กรชั้นนำของประเทศ บริษัทฯ ได้สั่งสมประสบการณ์และความเชี่ยวชาญในการส่งมอบโครงการพัฒนาระบบสารสนเทศขนาดใหญ่มากกว่า 50 โครงการ ด้วยมาตรฐานการทำงานระดับสากลและความน่าเชื่อถือสูงสุด',
-    visionMission: 'มุ่งมั่นขับเคลื่อนการเปลี่ยนผ่านสู่ดิจิทัลของประเทศไทย ด้วยโซลูชันเทคโนโลยีที่ทันสมัย ปลอดภัย และสร้างคุณค่าที่ยั่งยืนให้แก่ประชาชนและองค์กรภาครัฐ',
-    specializations: [
-      'การให้คำปรึกษาและออกแบบสถาปัตยกรรมรัฐบาลดิจิทัล (Enterprise & Digital Government Architecture)',
-      'การพัฒนาระบบบริการประชาชนดิจิทัล (Citizen-Centric e-Services & Portals)',
-      'การบูรณาการข้อมูลขนาดใหญ่และการจัดทำคลังข้อมูลอัจฉริยะ (Big Data & Data Lakehouse Platform)',
-      'การพัฒนาระบบบริหารจัดการองค์กรภาครัฐและระบบการเงินการพัสดุ (Government ERP & Workflow)',
-      'การรักษาความมั่นคงปลอดภัยสารสนเทศและการปฏิบัติตามกฎหมายไซเบอร์และ PDPA',
-    ],
-    certifications: [
-      'ISO/IEC 29110 (Software Engineering - Lifecycle Profiles for Very Small Entities)',
-      'ISO/IEC 27001 (Information Security Management System)',
-      'ขึ้นทะเบียนที่ปรึกษากระทรวงการคลัง (สำนักงานบริหารหนี้สาธารณะ) ประเภทที่ปรึกษาไทย สาขาเทคโนโลยีสารสนเทศและการสื่อสาร',
-      'สมาชิกสภาอุตสาหกรรมแห่งประเทศไทย และสมาคมอุตสาหกรรมซอฟต์แวร์ไทย (ATSI)',
-    ],
-    maxYearsFilter: 3,
+    ...DEFAULT_MASTER_COMPANY_PROFILE,
     pastProjects: [...MASTER_PROJECTS_LIBRARY],
   },
 };

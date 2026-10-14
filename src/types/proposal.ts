@@ -180,6 +180,8 @@ export interface Section5Company {
   imageBlocks?: ReportImageBlock[]; // ภาพประกอบในส่วนที่ 5 ไม่จำกัดจำนวน
 }
 
+export type MasterCompanyProfile = Omit<Section5Company, 'pastProjects'>;
+
 export interface HeadingItemConfig {
   id: string; // e.g. "s1_background"
   title: string; // e.g. "ความเป็นมาและความสำคัญ"

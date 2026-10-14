@@ -137,17 +137,40 @@ CREATE TABLE IF NOT EXISTS public.master_bom_catalog (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 9. สร้าง Index สำหรับค้นหา Master Library
+-- ==============================================================================
+-- 9. ตาราง Master Library: ข้อมูลบริษัทกลาง (Master Company Profile)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.master_company_profile (
+    id TEXT PRIMARY KEY DEFAULT 'default_company',
+    company_name TEXT NOT NULL,
+    established_year_be INT DEFAULT 2558,
+    registered_capital TEXT,
+    company_profile TEXT,
+    vision_mission TEXT,
+    specializations JSONB DEFAULT '[]'::jsonb,
+    certifications JSONB DEFAULT '[]'::jsonb,
+    max_years_filter INT DEFAULT 5,
+    company_logo_url TEXT,
+    company_office_image_url TEXT,
+    company_office_image_caption TEXT,
+    image_blocks JSONB DEFAULT '[]'::jsonb,
+    data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 10. สร้าง Index สำหรับค้นหา Master Library
 CREATE INDEX IF NOT EXISTS idx_master_team_name ON public.master_team_library(name);
 CREATE INDEX IF NOT EXISTS idx_master_projects_name ON public.master_projects_library(project_name);
 CREATE INDEX IF NOT EXISTS idx_master_projects_value ON public.master_projects_library(contract_value);
 CREATE INDEX IF NOT EXISTS idx_master_bom_category ON public.master_bom_catalog(category);
 CREATE INDEX IF NOT EXISTS idx_master_bom_title ON public.master_bom_catalog(title);
 
--- 10. ตั้งค่าสิทธิ์ Row Level Security (RLS) สำหรับ Master Library
+-- 11. ตั้งค่าสิทธิ์ Row Level Security (RLS) สำหรับ Master Library
 ALTER TABLE public.master_team_library ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.master_projects_library ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.master_bom_catalog ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.master_company_profile ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Allow public read access to master_team_library" 
     ON public.master_team_library FOR SELECT USING (true);
@@ -167,9 +190,49 @@ CREATE POLICY "Allow public read access to master_bom_catalog"
 CREATE POLICY "Allow public insert/update/delete to master_bom_catalog" 
     ON public.master_bom_catalog FOR ALL USING (true);
 
+CREATE POLICY "Allow public read access to master_company_profile" 
+    ON public.master_company_profile FOR SELECT USING (true);
+
+CREATE POLICY "Allow public insert/update/delete to master_company_profile" 
+    ON public.master_company_profile FOR ALL USING (true);
+
 -- ==============================================================================
--- 11. Migration Scripts (สำหรับฐานข้อมูลเดิมที่เคยรันตารางไว้แล้ว)
+-- 12. Migration Scripts (สำหรับฐานข้อมูลเดิมที่เคยรันตารางไว้แล้ว)
 -- ==============================================================================
--- รันคำสั่ง 2 บรรทัดนี้ใน Supabase SQL Editor เพื่ออัปเกรดตารางผลงานโครงการให้รองรับโลโก้ลูกค้าและบล็อกภาพคู่ 3 นิ้ว
+-- รันคำสั่งด้านล่างนี้ใน Supabase SQL Editor หากเคยรันสคริปต์เวอร์ชันก่อนหน้า:
+
+-- A. อัปเกรดตารางผลงานโครงการให้รองรับโลโก้ลูกค้าและบล็อกภาพคู่ 3 นิ้ว
 ALTER TABLE public.master_projects_library ADD COLUMN IF NOT EXISTS client_logo_url TEXT;
 ALTER TABLE public.master_projects_library ADD COLUMN IF NOT EXISTS image_blocks JSONB;
+
+-- B. สร้างตารางข้อมูลบริษัทกลาง (Master Company Profile) หากยังไม่มี
+CREATE TABLE IF NOT EXISTS public.master_company_profile (
+    id TEXT PRIMARY KEY DEFAULT 'default_company',
+    company_name TEXT NOT NULL,
+    established_year_be INT DEFAULT 2558,
+    registered_capital TEXT,
+    company_profile TEXT,
+    vision_mission TEXT,
+    specializations JSONB DEFAULT '[]'::jsonb,
+    certifications JSONB DEFAULT '[]'::jsonb,
+    max_years_filter INT DEFAULT 5,
+    company_logo_url TEXT,
+    company_office_image_url TEXT,
+    company_office_image_caption TEXT,
+    image_blocks JSONB DEFAULT '[]'::jsonb,
+    data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.master_company_profile ENABLE ROW LEVEL SECURITY;
+
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public read access to master_company_profile') THEN
+        CREATE POLICY "Allow public read access to master_company_profile" ON public.master_company_profile FOR SELECT USING (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public insert/update/delete to master_company_profile') THEN
+        CREATE POLICY "Allow public insert/update/delete to master_company_profile" ON public.master_company_profile FOR ALL USING (true);
+    END IF;
+END $$;
