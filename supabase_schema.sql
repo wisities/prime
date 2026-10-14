@@ -111,6 +111,8 @@ CREATE TABLE IF NOT EXISTS public.master_projects_library (
     certificate_file_name TEXT,
     project_image_url TEXT,
     project_image_caption TEXT,
+    client_logo_url TEXT,
+    image_blocks JSONB,
     data JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
@@ -165,3 +167,9 @@ CREATE POLICY "Allow public read access to master_bom_catalog"
 CREATE POLICY "Allow public insert/update/delete to master_bom_catalog" 
     ON public.master_bom_catalog FOR ALL USING (true);
 
+-- ==============================================================================
+-- 11. Migration Scripts (สำหรับฐานข้อมูลเดิมที่เคยรันตารางไว้แล้ว)
+-- ==============================================================================
+-- รันคำสั่ง 2 บรรทัดนี้ใน Supabase SQL Editor เพื่ออัปเกรดตารางผลงานโครงการให้รองรับโลโก้ลูกค้าและบล็อกภาพคู่ 3 นิ้ว
+ALTER TABLE public.master_projects_library ADD COLUMN IF NOT EXISTS client_logo_url TEXT;
+ALTER TABLE public.master_projects_library ADD COLUMN IF NOT EXISTS image_blocks JSONB;
