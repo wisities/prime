@@ -1288,7 +1288,7 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                             {section5.pastProjects
                               .filter((p) => p.isSelected && (p.projectType || 'tor_reference') === 'tor_reference' && (2568 - p.completionYearBE <= section5.maxYearsFilter))
                               .map((p, pIdx) => {
-                                const blocks = p.imageBlocks && p.imageBlocks.length > 0
+                                const blocks = p.imageBlocks !== undefined
                                   ? p.imageBlocks
                                   : p.projectImageUrl
                                   ? [{ id: `img-${p.id}`, type: 'single' as const, url: p.projectImageUrl, caption: p.projectImageCaption || `ภาพที่ 5-1.${pIdx + 1} ภาพผลงาน: ${p.projectName}` }]
@@ -1358,7 +1358,7 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                             {section5.pastProjects
                               .filter((p) => p.isSelected && p.projectType === 'supplementary')
                               .map((p, pIdx) => {
-                                const blocks = p.imageBlocks && p.imageBlocks.length > 0
+                                const blocks = p.imageBlocks !== undefined
                                   ? p.imageBlocks
                                   : p.projectImageUrl
                                   ? [{ id: `img-${p.id}`, type: 'single' as const, url: p.projectImageUrl, caption: p.projectImageCaption || `ภาพที่ 5-2.${pIdx + 1} ภาพผลงานเสริม: ${p.projectName}` }]

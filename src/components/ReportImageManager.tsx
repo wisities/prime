@@ -410,6 +410,7 @@ export const ReportImageManager: React.FC<ReportImageManagerProps> = ({
                             onChange={(e) => {
                               const f = e.target.files?.[0];
                               if (f) handleFileUpload(block.id, 'url', f);
+                              e.target.value = '';
                             }}
                           />
                           <Upload size={22} color="var(--primary-600, #2563EB)" style={{ margin: '0 auto 0.25rem' }} />
@@ -432,6 +433,7 @@ export const ReportImageManager: React.FC<ReportImageManagerProps> = ({
                         onChange={(e) => {
                           const f = e.target.files?.[0];
                           if (f) handleFileUpload(block.id, 'url', f);
+                          e.target.value = '';
                         }}
                       />
                     </div>
@@ -524,6 +526,7 @@ export const ReportImageManager: React.FC<ReportImageManagerProps> = ({
                                 onChange={(e) => {
                                   const f = e.target.files?.[0];
                                   if (f) handleFileUpload(block.id, 'leftUrl', f);
+                                  e.target.value = '';
                                 }}
                               />
                               <Upload size={18} color="var(--slate-500, #64748B)" style={{ margin: '0 auto 2px' }} />
@@ -613,6 +616,7 @@ export const ReportImageManager: React.FC<ReportImageManagerProps> = ({
                                 onChange={(e) => {
                                   const f = e.target.files?.[0];
                                   if (f) handleFileUpload(block.id, 'rightUrl', f);
+                                  e.target.value = '';
                                 }}
                               />
                               <Upload size={18} color="var(--slate-500, #64748B)" style={{ margin: '0 auto 2px' }} />

@@ -122,7 +122,7 @@ function cloudRowToPastProject(row: any): PastProject {
       id: row.id,
       projectName: row.project_name || row.data.projectName,
       clientName: row.client_name || row.data.clientName || '',
-      clientLogoUrl: row.client_logo_url || row.data.clientLogoUrl || undefined,
+      clientLogoUrl: row.client_logo_url !== undefined ? (row.client_logo_url || undefined) : (row.data?.clientLogoUrl || undefined),
       contractValue: Number(row.contract_value) || Number(row.data.contractValue) || 0,
       completionYearBE: Number(row.completion_year_be) || Number(row.data.completionYearBE) || 2567,
       periodDuration: row.period_duration || row.data.periodDuration || '',
@@ -131,11 +131,11 @@ function cloudRowToPastProject(row: any): PastProject {
       isSelected: true,
       projectType: (row.project_type as any) || row.data.projectType || 'tor_reference',
       relevanceNote: row.relevance_note || row.data.relevanceNote || '',
-      certificateFileUrl: row.certificate_file_url || row.data.certificateFileUrl || undefined,
-      certificateFileName: row.certificate_file_name || row.data.certificateFileName || undefined,
-      projectImageUrl: row.project_image_url || row.data.projectImageUrl || undefined,
-      projectImageCaption: row.project_image_caption || row.data.projectImageCaption || undefined,
-      imageBlocks: row.image_blocks || row.data.imageBlocks || undefined,
+      certificateFileUrl: row.certificate_file_url !== undefined ? (row.certificate_file_url || undefined) : (row.data?.certificateFileUrl || undefined),
+      certificateFileName: row.certificate_file_name !== undefined ? (row.certificate_file_name || undefined) : (row.data?.certificateFileName || undefined),
+      projectImageUrl: row.project_image_url !== undefined ? (row.project_image_url || undefined) : (row.data?.projectImageUrl || undefined),
+      projectImageCaption: row.project_image_caption !== undefined ? (row.project_image_caption || undefined) : (row.data?.projectImageCaption || undefined),
+      imageBlocks: row.image_blocks !== undefined ? (row.image_blocks || undefined) : (row.data?.imageBlocks || undefined),
     };
   }
   return {
@@ -238,10 +238,10 @@ function cloudRowToCompanyProfile(row: any): MasterCompanyProfile {
       specializations: Array.isArray(row.specializations) ? row.specializations : (row.data.specializations || []),
       certifications: Array.isArray(row.certifications) ? row.certifications : (row.data.certifications || []),
       maxYearsFilter: Number(row.max_years_filter) || row.data.maxYearsFilter || 5,
-      companyLogoUrl: row.company_logo_url || row.data.companyLogoUrl || undefined,
-      companyOfficeImageUrl: row.company_office_image_url || row.data.companyOfficeImageUrl || undefined,
-      companyOfficeImageCaption: row.company_office_image_caption || row.data.companyOfficeImageCaption || undefined,
-      imageBlocks: row.image_blocks || row.data.imageBlocks || undefined,
+      companyLogoUrl: row.company_logo_url !== undefined ? (row.company_logo_url || undefined) : (row.data?.companyLogoUrl || undefined),
+      companyOfficeImageUrl: row.company_office_image_url !== undefined ? (row.company_office_image_url || undefined) : (row.data?.companyOfficeImageUrl || undefined),
+      companyOfficeImageCaption: row.company_office_image_caption !== undefined ? (row.company_office_image_caption || undefined) : (row.data?.companyOfficeImageCaption || undefined),
+      imageBlocks: row.image_blocks !== undefined ? (row.image_blocks || undefined) : (row.data?.imageBlocks || undefined),
     };
   }
   return {

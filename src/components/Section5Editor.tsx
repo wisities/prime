@@ -95,8 +95,12 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
     }
   };
 
+  const handleFieldsChange = (partial: Partial<Section5Company>) => {
+    onChange({ ...section5, ...partial });
+  };
+
   const handleFieldChange = (field: keyof Section5Company, value: any) => {
-    onChange({ ...section5, [field]: value });
+    handleFieldsChange({ [field]: value });
   };
 
   const handleFileUpload = (file: File, callback: (base64: string, fileName: string) => void) => {
@@ -114,11 +118,15 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
     onChange({ ...section5, pastProjects: updated });
   };
 
-  const handleProjectChange = (id: string, field: keyof PastProject, value: any) => {
+  const handleProjectFieldsChange = (id: string, partial: Partial<PastProject>) => {
     const updated = section5.pastProjects.map((p) =>
-      p.id === id ? { ...p, [field]: value } : p
+      p.id === id ? { ...p, ...partial } : p
     );
     onChange({ ...section5, pastProjects: updated });
+  };
+
+  const handleProjectChange = (id: string, field: keyof PastProject, value: any) => {
+    handleProjectFieldsChange(id, { [field]: value });
   };
 
   const handleAddProject = () => {
@@ -426,6 +434,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                   onChange={(e) => {
                     const f = e.target.files?.[0];
                     if (f) handleFileUpload(f, (b64) => handleFieldChange('companyLogoUrl', b64));
+                    e.target.value = '';
                   }}
                 />
                 <Upload size={16} /> อัปโหลดภาพโลโก้บริษัท
@@ -458,8 +467,10 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                   <button
                     type="button"
                     onClick={() => {
-                      handleFieldChange('companyOfficeImageUrl', undefined);
-                      handleFieldChange('companyOfficeImageCaption', undefined);
+                      handleFieldsChange({
+                        companyOfficeImageUrl: undefined,
+                        companyOfficeImageCaption: undefined,
+                      });
                     }}
                     className="btn btn-outline"
                     style={{ color: 'var(--danger)', borderColor: 'var(--danger-bg)', padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
@@ -491,6 +502,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                   onChange={(e) => {
                     const f = e.target.files?.[0];
                     if (f) handleFileUpload(f, (b64) => handleFieldChange('companyOfficeImageUrl', b64));
+                    e.target.value = '';
                   }}
                 />
                 <Upload size={16} /> อัปโหลดภาพสำนักงาน/บริษัท
@@ -843,7 +855,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                           />
                           <button
                             type="button"
-                            onClick={() => handleProjectChange(p.id, 'clientLogoUrl', undefined)}
+                            onClick={() => handleProjectFieldsChange(p.id, { clientLogoUrl: undefined })}
                             style={{
                               position: 'absolute',
                               top: '-5px',
@@ -894,8 +906,9 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                               const f = e.target.files?.[0];
                               if (f) {
                                 handleFileUpload(f, (b64) => {
-                                  handleProjectChange(p.id, 'clientLogoUrl', b64);
+                                  handleProjectFieldsChange(p.id, { clientLogoUrl: b64 });
                                 });
+                                e.target.value = '';
                               }
                             }}
                           />
@@ -1000,8 +1013,10 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                         <button
                           type="button"
                           onClick={() => {
-                            handleProjectChange(p.id, 'certificateFileUrl', undefined);
-                            handleProjectChange(p.id, 'certificateFileName', undefined);
+                            handleProjectFieldsChange(p.id, {
+                              certificateFileUrl: undefined,
+                              certificateFileName: undefined,
+                            });
                           }}
                           className="btn btn-outline"
                           style={{ color: 'var(--danger)', borderColor: 'var(--danger-bg)', padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
@@ -1034,9 +1049,12 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                             const f = e.target.files?.[0];
                             if (f) {
                               handleFileUpload(f, (b64, name) => {
-                                handleProjectChange(p.id, 'certificateFileUrl', b64);
-                                handleProjectChange(p.id, 'certificateFileName', name);
+                                handleProjectFieldsChange(p.id, {
+                                  certificateFileUrl: b64,
+                                  certificateFileName: name,
+                                });
                               });
+                              e.target.value = '';
                             }
                           }}
                         />
@@ -1077,7 +1095,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                   title="ภาพประกอบผลงานและระบบงานจริง (ไม่จำกัดจำนวน)"
                   subtitle="สามารถแทรกรูป 3 นิ้วสองรูปคู่ หรือภาพเดี่ยวขนาด 6 นิ้ว ประกอบผลงานนี้ได้ไม่จำกัดจำนวน"
                   imageBlocks={
-                    p.imageBlocks && p.imageBlocks.length > 0
+                    p.imageBlocks !== undefined
                       ? p.imageBlocks
                       : p.projectImageUrl
                       ? [
@@ -1091,11 +1109,11 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                       : []
                   }
                   onChange={(newBlocks) => {
-                    handleProjectChange(p.id, 'imageBlocks', newBlocks);
-                    if (p.projectImageUrl) {
-                      handleProjectChange(p.id, 'projectImageUrl', undefined);
-                      handleProjectChange(p.id, 'projectImageCaption', undefined);
-                    }
+                    handleProjectFieldsChange(p.id, {
+                      imageBlocks: newBlocks,
+                      projectImageUrl: undefined,
+                      projectImageCaption: undefined,
+                    });
                   }}
                   defaultCaptionPrefix={`ภาพผลงาน ${idx + 1}`}
                 />
@@ -1507,7 +1525,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                         />
                         <button
                           type="button"
-                          onClick={() => setMasterCompany({ ...masterCompany, companyOfficeImageUrl: undefined })}
+                          onClick={() => setMasterCompany({ ...masterCompany, companyOfficeImageUrl: undefined, companyOfficeImageCaption: undefined })}
                           className="btn btn-outline"
                           style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', color: '#DC2626', borderColor: '#FCA5A5' }}
                         >
@@ -1523,6 +1541,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                           onChange={(e) => {
                             const f = e.target.files?.[0];
                             if (f) handleFileUpload(f, (b64) => setMasterCompany({ ...masterCompany, companyOfficeImageUrl: b64 }));
+                            e.target.value = '';
                           }}
                         />
                         <Upload size={14} /> อัปโหลดภาพสำนักงาน

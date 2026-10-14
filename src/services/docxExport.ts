@@ -2052,7 +2052,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
 
         torReferenceProjects.forEach((proj, idx) => {
           const blocksToRender: ReportImageBlock[] = [];
-          if (proj.imageBlocks && proj.imageBlocks.length > 0) {
+          if (proj.imageBlocks !== undefined) {
             blocksToRender.push(...proj.imageBlocks);
           } else if (proj.projectImageUrl) {
             blocksToRender.push({
@@ -2120,7 +2120,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
 
           supplementaryProjects.forEach((proj, idx) => {
             const blocksToRender: ReportImageBlock[] = [];
-            if (proj.imageBlocks && proj.imageBlocks.length > 0) {
+            if (proj.imageBlocks !== undefined) {
               blocksToRender.push(...proj.imageBlocks);
             } else if (proj.projectImageUrl) {
               blocksToRender.push({
