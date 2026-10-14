@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { TorScopeItem, TorImageLayout } from '../types/proposal';
+import { TorScopeItem } from '../types/proposal';
+import { ReportImageManager } from './ReportImageManager';
+import { normalizeTorItemImageBlocks } from '../utils/imageBlockUtils';
 import {
   CheckCircle,
   AlertTriangle,
@@ -7,12 +9,6 @@ import {
   BookOpen,
   ChevronDown,
   ChevronUp,
-  Image as ImageIcon,
-  Upload,
-  Trash2,
-  Columns,
-  Maximize2,
-  Layers,
   Table,
   List,
 } from 'lucide-react';
@@ -37,25 +33,6 @@ export const TorMapper: React.FC<TorMapperProps> = ({ scopeItems, onChange }) =>
     onChange(
       scopeItems.map((item) => (item.id === id ? { ...item, [field]: value } : item))
     );
-  };
-
-  const handleImageUpload = (
-    id: string,
-    field: 'singleImage' | 'twoColumnImageLeft' | 'twoColumnImageRight',
-    file: File
-  ) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        const item = scopeItems.find((s) => s.id === id);
-        const existing = (item as any)?.[field] || {};
-        handleItemChange(id, field, {
-          url: reader.result,
-          caption: existing.caption || 'คำบรรยายภาพประกอบการดำเนินงาน',
-        });
-      }
-    };
-    reader.readAsDataURL(file);
   };
 
   const levelBadges = [
@@ -263,240 +240,16 @@ export const TorMapper: React.FC<TorMapperProps> = ({ scopeItems, onChange }) =>
                     </div>
                   </div>
 
-                  {/* Image Layout Controls */}
-                  <div
-                    style={{
-                      backgroundColor: '#F8FAFC',
-                      border: '1px solid var(--slate-300)',
-                      borderRadius: '8px',
-                      padding: '0.85rem 1rem',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '0.75rem',
+                  {/* ภาพประกอบในหัวข้อนี้ (ไม่จำกัดจำนวน: ภาพเดี่ยว 6 นิ้ว & ภาพคู่ 3 นิ้ว) */}
+                  <ReportImageManager
+                    title={`ภาพประกอบสำหรับข้อ ${item.clauseNumber}: ${item.title}`}
+                    subtitle="สามารถอัปโหลดภาพเดี่ยว 6 นิ้ว กึ่งกลาง หรือภาพคู่ 3 นิ้ว 2 คอลัมน์ ได้ไม่จำกัดจำนวนสำหรับข้อนี้"
+                    imageBlocks={normalizeTorItemImageBlocks(item)}
+                    defaultCaptionPrefix={`ภาพที่ 3.2-${item.clauseNumber}`}
+                    onChange={(newBlocks) => {
+                      handleItemChange(item.id, 'imageBlocks', newBlocks);
                     }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <label className="form-label" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <ImageIcon size={16} color="var(--primary-700)" />
-                        แทรกรูปภาพประกอบการดำเนินงานตาม TOR ข้อนี้
-                      </label>
-
-                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                        <button
-                          type="button"
-                          onClick={() => handleItemChange(item.id, 'imageLayout', 'none')}
-                          className={`btn ${imageLayout === 'none' ? 'btn-primary' : 'btn-outline'}`}
-                          style={{ padding: '0.25rem 0.55rem', fontSize: '0.75rem' }}
-                        >
-                          ไม่แทรกรูป
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleItemChange(item.id, 'imageLayout', 'single_centered')}
-                          className={`btn ${imageLayout === 'single_centered' ? 'btn-primary' : 'btn-outline'}`}
-                          style={{ padding: '0.25rem 0.55rem', fontSize: '0.75rem' }}
-                        >
-                          <Maximize2 size={12} /> แบบที่ 1: รูปเดี่ยว 6 นิ้ว
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleItemChange(item.id, 'imageLayout', 'two_columns')}
-                          className={`btn ${imageLayout === 'two_columns' ? 'btn-primary' : 'btn-outline'}`}
-                          style={{ padding: '0.25rem 0.55rem', fontSize: '0.75rem' }}
-                        >
-                          <Columns size={12} /> แบบที่ 2: 2 คอลัมน์ 3 นิ้ว
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleItemChange(item.id, 'imageLayout', 'both')}
-                          className={`btn ${imageLayout === 'both' ? 'btn-primary' : 'btn-outline'}`}
-                          style={{ padding: '0.25rem 0.55rem', fontSize: '0.75rem' }}
-                        >
-                          <Layers size={12} /> แทรกทั้งสองแบบ (6 นิ้ว + 2 คอลัมน์)
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* แบบที่ 1: ภาพเดี่ยว กว้าง 6 นิ้ว กึ่งกลาง */}
-                    {(imageLayout === 'single_centered' || imageLayout === 'both') && (
-                      <div style={{ backgroundColor: '#FFFFFF', padding: '1rem', borderRadius: '6px', border: '1px solid var(--slate-200)' }}>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--primary-900)', marginBottom: '0.5rem' }}>
-                          ภาพอธิบายการทำงานแบบเดี่ยว (กว้าง 6 นิ้ว จัดวางกึ่งกลางหน้ากระดาษ Word)
-                        </div>
-
-                        {item.singleImage?.url ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-                            <img
-                              src={item.singleImage.url}
-                              alt="Single"
-                              style={{ maxWidth: '480px', maxHeight: '240px', objectFit: 'contain', border: '1px solid var(--slate-200)', borderRadius: '4px' }}
-                            />
-                            <div style={{ width: '100%', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                              <input
-                                type="text"
-                                className="form-input"
-                                placeholder="คำบรรยายใต้ภาพ (เช่น ภาพที่ 3.X แผนผังสถาปัตยกรรม...)"
-                                value={item.singleImage.caption}
-                                onChange={(e) =>
-                                  handleItemChange(item.id, 'singleImage', {
-                                    ...item.singleImage,
-                                    caption: e.target.value,
-                                  })
-                                }
-                              />
-                              <button
-                                type="button"
-                                onClick={() => handleItemChange(item.id, 'singleImage', undefined)}
-                                className="btn btn-outline"
-                                style={{ color: 'var(--danger)', borderColor: 'var(--danger-bg)' }}
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <label
-                            style={{
-                              display: 'block',
-                              border: '2px dashed var(--slate-300)',
-                              borderRadius: '6px',
-                              padding: '1.5rem',
-                              textAlign: 'center',
-                              cursor: 'pointer',
-                              backgroundColor: 'var(--slate-50)',
-                            }}
-                          >
-                            <input
-                              type="file"
-                              accept="image/*"
-                              style={{ display: 'none' }}
-                              onChange={(e) => {
-                                const f = e.target.files?.[0];
-                                if (f) handleImageUpload(item.id, 'singleImage', f);
-                              }}
-                            />
-                            <Upload size={24} color="var(--primary-600)" style={{ margin: '0 auto 0.25rem' }} />
-                            <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--primary-800)' }}>
-                              คลิกเพื่ออัปโหลดภาพ (ความกว้างใน Word: 6 นิ้ว กึ่งกลาง)
-                            </div>
-                          </label>
-                        )}
-                      </div>
-                    )}
-
-                    {/* แบบที่ 2: ภาพประกอบในตาราง 2 คอลัมน์ ภาพละ 3 นิ้ว */}
-                    {(imageLayout === 'two_columns' || imageLayout === 'both') && (
-                      <div style={{ backgroundColor: '#FFFFFF', padding: '1rem', borderRadius: '6px', border: '1px solid var(--slate-200)' }}>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--primary-900)', marginBottom: '0.5rem' }}>
-                          แบบที่ 2: ภาพประกอบการทำงาน แทรกในตาราง 2 คอลัมน์ (ขนาดภาพละ กว้าง 3 นิ้ว วางคู่กัน)
-                        </div>
-
-                        <div className="grid-2">
-                          {/* Left Column Image (3 inches) */}
-                          <div style={{ border: '1px solid var(--slate-200)', borderRadius: '6px', padding: '0.75rem', backgroundColor: '#F8FAFC' }}>
-                            <div style={{ fontSize: '0.775rem', fontWeight: 600, color: 'var(--slate-700)', marginBottom: '0.35rem' }}>
-                              คอลัมน์ซ้าย (กว้าง 3 นิ้ว)
-                            </div>
-                            {item.twoColumnImageLeft?.url ? (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                                <img
-                                  src={item.twoColumnImageLeft.url}
-                                  alt="Col Left"
-                                  style={{ width: '100%', maxHeight: '160px', objectFit: 'contain', borderRadius: '4px' }}
-                                />
-                                <input
-                                  type="text"
-                                  className="form-input"
-                                  style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
-                                  placeholder="คำบรรยายภาพซ้าย"
-                                  value={item.twoColumnImageLeft.caption}
-                                  onChange={(e) =>
-                                    handleItemChange(item.id, 'twoColumnImageLeft', {
-                                      ...item.twoColumnImageLeft,
-                                      caption: e.target.value,
-                                    })
-                                  }
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => handleItemChange(item.id, 'twoColumnImageLeft', undefined)}
-                                  className="btn btn-outline"
-                                  style={{ padding: '0.2rem', color: 'var(--danger)' }}
-                                >
-                                  <Trash2 size={12} /> ลบภาพซ้าย
-                                </button>
-                              </div>
-                            ) : (
-                              <label style={{ display: 'block', padding: '1rem', border: '1px dashed var(--slate-300)', textAlign: 'center', cursor: 'pointer' }}>
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  style={{ display: 'none' }}
-                                  onChange={(e) => {
-                                    const f = e.target.files?.[0];
-                                    if (f) handleImageUpload(item.id, 'twoColumnImageLeft', f);
-                                  }}
-                                />
-                                <Upload size={18} color="var(--slate-500)" style={{ margin: '0 auto 2px' }} />
-                                <div style={{ fontSize: '0.75rem', color: 'var(--primary-700)' }}>อัปโหลดภาพซ้าย (3 นิ้ว)</div>
-                              </label>
-                            )}
-                          </div>
-
-                          {/* Right Column Image (3 inches) */}
-                          <div style={{ border: '1px solid var(--slate-200)', borderRadius: '6px', padding: '0.75rem', backgroundColor: '#F8FAFC' }}>
-                            <div style={{ fontSize: '0.775rem', fontWeight: 600, color: 'var(--slate-700)', marginBottom: '0.35rem' }}>
-                              คอลัมน์ขวา (กว้าง 3 นิ้ว)
-                            </div>
-                            {item.twoColumnImageRight?.url ? (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                                <img
-                                  src={item.twoColumnImageRight.url}
-                                  alt="Col Right"
-                                  style={{ width: '100%', maxHeight: '160px', objectFit: 'contain', borderRadius: '4px' }}
-                                />
-                                <input
-                                  type="text"
-                                  className="form-input"
-                                  style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
-                                  placeholder="คำบรรยายภาพขวา"
-                                  value={item.twoColumnImageRight.caption}
-                                  onChange={(e) =>
-                                    handleItemChange(item.id, 'twoColumnImageRight', {
-                                      ...item.twoColumnImageRight,
-                                      caption: e.target.value,
-                                    })
-                                  }
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => handleItemChange(item.id, 'twoColumnImageRight', undefined)}
-                                  className="btn btn-outline"
-                                  style={{ padding: '0.2rem', color: 'var(--danger)' }}
-                                >
-                                  <Trash2 size={12} /> ลบภาพขวา
-                                </button>
-                              </div>
-                            ) : (
-                              <label style={{ display: 'block', padding: '1rem', border: '1px dashed var(--slate-300)', textAlign: 'center', cursor: 'pointer' }}>
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  style={{ display: 'none' }}
-                                  onChange={(e) => {
-                                    const f = e.target.files?.[0];
-                                    if (f) handleImageUpload(item.id, 'twoColumnImageRight', f);
-                                  }}
-                                />
-                                <Upload size={18} color="var(--slate-500)" style={{ margin: '0 auto 2px' }} />
-                                <div style={{ fontSize: '0.75rem', color: 'var(--primary-700)' }}>อัปโหลดภาพขวา (3 นิ้ว)</div>
-                              </label>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  />
                 </div>
               )}
             </div>

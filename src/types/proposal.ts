@@ -20,6 +20,21 @@ export interface TorScopeImage {
   caption: string;
 }
 
+export type ReportImageType = 'single' | 'pair';
+
+export interface ReportImageBlock {
+  id: string;
+  type: ReportImageType; // 'single': ภาพเดี่ยวกว้าง 6 นิ้ว กึ่งกลาง | 'pair': ภาพคู่ 2 คอลัมน์ กว้างคอลัมน์ละ 3 นิ้ว
+  // แบบภาพเดี่ยว 6 นิ้ว:
+  url?: string;
+  caption?: string;
+  // แบบภาพคู่ 3 นิ้ว:
+  leftUrl?: string;
+  leftCaption?: string;
+  rightUrl?: string;
+  rightCaption?: string;
+}
+
 export interface TorScopeItem {
   id: string;
   clauseNumber: string; // e.g. "4.1" or "4.1.2.3.1"
@@ -39,8 +54,11 @@ export interface TorScopeItem {
   toolsAndTechnology: string; // เครื่องมือและเทคโนโลยีที่ใช้
   deliverable: string; // ผลลัพธ์หรือสิ่งส่งมอบตามข้อนั้น
 
-  // ภาพประกอบในส่วนที่ 3 (2 รูปแบบ)
-  imageLayout?: TorImageLayout; // 'none' | 'single_centered' | 'two_columns'
+  // ภาพประกอบในหัวข้อนี้ (ไม่จำกัดจำนวน: รองรับทั้งภาพเดี่ยว 6 นิ้ว และภาพคู่ 3 นิ้ว)
+  imageBlocks?: ReportImageBlock[];
+
+  // ภาพประกอบเดิม (Backward compatibility)
+  imageLayout?: TorImageLayout; // 'none' | 'single_centered' | 'two_columns' | 'both'
   singleImage?: TorScopeImage; // แบบที่ 1: ภาพกว้าง 6 นิ้ว วางกึ่งกลาง
   twoColumnImageLeft?: TorScopeImage; // แบบที่ 2: ภาพซ้าย กว้าง 3 นิ้ว
   twoColumnImageRight?: TorScopeImage; // แบบที่ 2: ภาพขวา กว้าง 3 นิ้ว
@@ -62,6 +80,7 @@ export interface Section1Intro {
   projectDurationMonths: number;
   budgetAmount: number;
   scopeItems: TorScopeItem[]; // ขอบเขตงานเต็มทุกข้อตามประกาศจัดจ้าง
+  imageBlocks?: ReportImageBlock[]; // ภาพประกอบในส่วนที่ 1 ไม่จำกัดจำนวน (ทั้งภาพเดี่ยว 6 นิ้ว และภาพคู่ 3 นิ้ว)
 }
 
 export interface Milestone {
@@ -77,12 +96,14 @@ export interface Milestone {
 export interface Section2WorkPlan {
   workPlanOverview: string;
   milestones: Milestone[];
+  imageBlocks?: ReportImageBlock[]; // ภาพประกอบในส่วนที่ 2 ไม่จำกัดจำนวน
 }
 
 export interface Section3Methodology {
   frameworkOverview: string;
   conceptualDiagramImage?: string; // base64
   conceptualDiagramCaption: string;
+  imageBlocks?: ReportImageBlock[]; // ภาพประกอบกรอบแนวคิดเพิ่มเติมในส่วนที่ 3.1 ไม่จำกัดจำนวน
 }
 
 export interface TeamMember {
@@ -115,6 +136,7 @@ export interface Section4TeamAndRisk {
   riskManagementOverview: string;
   riskItems: RiskItem[];
   complianceMatrixOverview?: string; // คำนำสำหรับตารางเปรียบเทียบข้อเสนอโครงการกับ TOR
+  imageBlocks?: ReportImageBlock[]; // ภาพประกอบในส่วนที่ 4 (เช่น แผนผังองค์กร 6 นิ้ว หรือภาพคู่ 3 นิ้ว) ไม่จำกัดจำนวน
 }
 
 export type ProjectTrackType = 'tor_reference' | 'supplementary';
@@ -150,6 +172,7 @@ export interface Section5Company {
   companyOfficeImageUrl?: string; // ภาพสำนักงานหรืออาคารบริษัท
   companyOfficeImageCaption?: string;
   pastProjects: PastProject[];
+  imageBlocks?: ReportImageBlock[]; // ภาพประกอบในส่วนที่ 5 ไม่จำกัดจำนวน
 }
 
 export interface HeadingItemConfig {

@@ -21,8 +21,9 @@ import {
   ISectionOptions,
 } from 'docx';
 import saveAs from 'file-saver';
-import { ProposalData } from '../types/proposal';
+import { ProposalData, ReportImageBlock } from '../types/proposal';
 import { normalizeDocumentStructure } from '../data/defaultData';
+import { normalizeTorItemImageBlocks } from '../utils/imageBlockUtils';
 import { generateGanttChartImage, generateDefaultConceptualDiagram } from '../utils/ganttRenderer';
 
 function base64ToUint8Array(base64: string): Uint8Array {
@@ -41,6 +42,149 @@ const COLOR_PRIMARY = '0F2744'; // Navy
 const COLOR_SECONDARY = '1E3A8A';
 const COLOR_TEXT = '1E293B';
 const COLOR_MUTED = '64748B';
+
+// Helper function to render unlimited 6-inch single and 3-inch paired images to docx
+function renderImageBlocksToDocx(
+  blocks?: ReportImageBlock[],
+  defaultPrefix: string = 'ภาพที่'
+): (Paragraph | Table)[] {
+  if (!blocks || !Array.isArray(blocks) || blocks.length === 0) return [];
+  const elements: (Paragraph | Table)[] = [];
+
+  blocks.forEach((block, bIdx) => {
+    if (block.type === 'single' && block.url) {
+      try {
+        const imgBytes = base64ToUint8Array(block.url);
+        elements.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 140, after: 60 },
+            children: [
+              new ImageRun({
+                data: imgBytes,
+                transformation: { width: 576, height: 260 }, // กว้าง 6 นิ้ว (576 px) กึ่งกลาง
+              } as any),
+            ],
+          }),
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 140 },
+            children: [
+              new TextRun({
+                text: block.caption || `${defaultPrefix}-${bIdx + 1} ภาพแสดงรายละเอียดการดำเนินงาน`,
+                font: FONT_FAMILY,
+                size: 26,
+                italics: true,
+                color: COLOR_MUTED,
+              }),
+            ],
+          })
+        );
+      } catch (e) {
+        console.error('Failed to embed single image', e);
+      }
+    } else if (block.type === 'pair' && (block.leftUrl || block.rightUrl)) {
+      try {
+        const leftCellChildren: Paragraph[] = [];
+        const rightCellChildren: Paragraph[] = [];
+
+        if (block.leftUrl) {
+          const leftBytes = base64ToUint8Array(block.leftUrl);
+          leftCellChildren.push(
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 40 },
+              children: [
+                new ImageRun({
+                  data: leftBytes,
+                  transformation: { width: 288, height: 160 }, // กว้าง 3 นิ้ว (288 px)
+                } as any),
+              ],
+            }),
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [
+                new TextRun({
+                  text: block.leftCaption || 'ภาพประกอบ (กว้าง 3 นิ้ว)',
+                  font: FONT_FAMILY,
+                  size: 24,
+                  italics: true,
+                  color: COLOR_MUTED,
+                }),
+              ],
+            })
+          );
+        } else {
+          leftCellChildren.push(new Paragraph({ children: [] }));
+        }
+
+        if (block.rightUrl) {
+          const rightBytes = base64ToUint8Array(block.rightUrl);
+          rightCellChildren.push(
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 40 },
+              children: [
+                new ImageRun({
+                  data: rightBytes,
+                  transformation: { width: 288, height: 160 }, // กว้าง 3 นิ้ว (288 px)
+                } as any),
+              ],
+            }),
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [
+                new TextRun({
+                  text: block.rightCaption || 'ภาพประกอบ (กว้าง 3 นิ้ว)',
+                  font: FONT_FAMILY,
+                  size: 24,
+                  italics: true,
+                  color: COLOR_MUTED,
+                }),
+              ],
+            })
+          );
+        } else {
+          rightCellChildren.push(new Paragraph({ children: [] }));
+        }
+
+        const twoColTable = new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          borders: {
+            top: { style: BorderStyle.NONE },
+            bottom: { style: BorderStyle.NONE },
+            left: { style: BorderStyle.NONE },
+            right: { style: BorderStyle.NONE },
+            insideHorizontal: { style: BorderStyle.NONE },
+            insideVertical: { style: BorderStyle.NONE },
+          },
+          rows: [
+            new TableRow({
+              children: [
+                new TableCell({
+                  width: { size: 50, type: WidthType.PERCENTAGE },
+                  margins: { top: 60, bottom: 60, left: 60, right: 60 },
+                  children: leftCellChildren,
+                }),
+                new TableCell({
+                  width: { size: 50, type: WidthType.PERCENTAGE },
+                  margins: { top: 60, bottom: 60, left: 60, right: 60 },
+                  children: rightCellChildren,
+                }),
+              ],
+            }),
+          ],
+        });
+
+        elements.push(twoColTable);
+      } catch (e) {
+        console.error('Failed to embed two-column images', e);
+      }
+    }
+  });
+
+  return elements;
+}
 
 // Helper for Thai standard body paragraphs (มีย่อหน้า 0.5 นิ้ว / 720 twips, AlignmentType.LEFT ป้องกันตัวอักษรยืด, Line Spacing = Single)
 function createBodyParagraphs(
@@ -737,6 +881,10 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
         });
       }
     });
+
+    if (section1.imageBlocks && section1.imageBlocks.length > 0) {
+      part1Children.push(...renderImageBlocksToDocx(section1.imageBlocks, 'ภาพที่ 1'));
+    }
   }
 
   // =========================================================================
@@ -843,6 +991,10 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
         );
       }
     });
+
+    if (section2.imageBlocks && section2.imageBlocks.length > 0) {
+      part2Children.push(...renderImageBlocksToDocx(section2.imageBlocks, 'ภาพที่ 2'));
+    }
   }
 
   // =========================================================================
@@ -897,6 +1049,12 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
         } catch (e) {
           console.error('Failed to embed conceptual diagram', e);
         }
+
+        if (section3.imageBlocks && section3.imageBlocks.length > 0) {
+          part3Children.push(
+            ...renderImageBlocksToDocx(section3.imageBlocks, `ภาพที่ ${numPrefix}`)
+          );
+        }
       } else if (h.id === 's3_methodology') {
         part3Children.push(
           createH2(`${numPrefix} วิธีการดำเนินงาน`)
@@ -924,146 +1082,12 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
             ...renderMethodologyParagraphsAndTables(item.proposedMethodology)
           );
 
-          // แบบที่ 1: ภาพอธิบายการทำงาน 1 รูป กว้าง 6 นิ้ว (576 px) จัดกึ่งกลาง
-          const showSingle =
-            (item.imageLayout === 'single_centered' || item.imageLayout === 'both') &&
-            Boolean(item.singleImage?.url);
-
-          if (showSingle && item.singleImage?.url) {
-            try {
-              const imgBytes = base64ToUint8Array(item.singleImage.url);
-              part3Children.push(
-                new Paragraph({
-                  alignment: AlignmentType.CENTER,
-                  spacing: { before: 140, after: 60 },
-                  children: [
-                    new ImageRun({
-                      data: imgBytes,
-                      transformation: { width: 576, height: 260 }, // กว้าง 6 นิ้ว (576 px)
-                    } as any),
-                  ],
-                }),
-                new Paragraph({
-                  alignment: AlignmentType.CENTER,
-                  spacing: { after: 140 },
-                  children: [
-                    new TextRun({
-                      text: item.singleImage.caption || `ภาพที่ ${numPrefix}.${idx + 1}-1 ภาพอธิบายขั้นตอนและวิธีการดำเนินงาน`,
-                      font: FONT_FAMILY,
-                      size: 26,
-                      italics: true,
-                      color: COLOR_MUTED,
-                    }),
-                  ],
-                })
-              );
-            } catch (e) {
-              console.error('Failed to embed single image', e);
-            }
-          }
-
-          // แบบที่ 2: ภาพประกอบการทำงาน แทรกในตาราง 2 คอลัมน์ ขนาดภาพละ กว้าง 3 นิ้ว (288 px)
-          const showTwoCols =
-            (item.imageLayout === 'two_columns' || item.imageLayout === 'both') &&
-            Boolean(item.twoColumnImageLeft?.url || item.twoColumnImageRight?.url);
-
-          if (showTwoCols) {
-            try {
-              const leftCellChildren: Paragraph[] = [];
-              const rightCellChildren: Paragraph[] = [];
-
-              if (item.twoColumnImageLeft?.url) {
-                const leftBytes = base64ToUint8Array(item.twoColumnImageLeft.url);
-                leftCellChildren.push(
-                  new Paragraph({
-                    alignment: AlignmentType.CENTER,
-                    spacing: { after: 40 },
-                    children: [
-                      new ImageRun({
-                        data: leftBytes,
-                        transformation: { width: 288, height: 160 }, // กว้าง 3 นิ้ว (288 px)
-                      } as any),
-                    ],
-                  }),
-                  new Paragraph({
-                    alignment: AlignmentType.CENTER,
-                    children: [
-                      new TextRun({
-                        text: item.twoColumnImageLeft.caption || 'ภาพประกอบ (กว้าง 3 นิ้ว)',
-                        font: FONT_FAMILY,
-                        size: 24,
-                        italics: true,
-                        color: COLOR_MUTED,
-                      }),
-                    ],
-                  })
-                );
-              } else {
-                leftCellChildren.push(new Paragraph({ children: [] }));
-              }
-
-              if (item.twoColumnImageRight?.url) {
-                const rightBytes = base64ToUint8Array(item.twoColumnImageRight.url);
-                rightCellChildren.push(
-                  new Paragraph({
-                    alignment: AlignmentType.CENTER,
-                    spacing: { after: 40 },
-                    children: [
-                      new ImageRun({
-                        data: rightBytes,
-                        transformation: { width: 288, height: 160 }, // กว้าง 3 นิ้ว (288 px)
-                      } as any),
-                    ],
-                  }),
-                  new Paragraph({
-                    alignment: AlignmentType.CENTER,
-                    children: [
-                      new TextRun({
-                        text: item.twoColumnImageRight.caption || 'ภาพประกอบ (กว้าง 3 นิ้ว)',
-                        font: FONT_FAMILY,
-                        size: 24,
-                        italics: true,
-                        color: COLOR_MUTED,
-                      }),
-                    ],
-                  })
-                );
-              } else {
-                rightCellChildren.push(new Paragraph({ children: [] }));
-              }
-
-              const twoColTable = new Table({
-                width: { size: 100, type: WidthType.PERCENTAGE },
-                borders: {
-                  top: { style: BorderStyle.NONE },
-                  bottom: { style: BorderStyle.NONE },
-                  left: { style: BorderStyle.NONE },
-                  right: { style: BorderStyle.NONE },
-                  insideHorizontal: { style: BorderStyle.NONE },
-                  insideVertical: { style: BorderStyle.NONE },
-                },
-                rows: [
-                  new TableRow({
-                    children: [
-                      new TableCell({
-                        width: { size: 50, type: WidthType.PERCENTAGE },
-                        margins: { top: 60, bottom: 60, left: 60, right: 60 },
-                        children: leftCellChildren,
-                      }),
-                      new TableCell({
-                        width: { size: 50, type: WidthType.PERCENTAGE },
-                        margins: { top: 60, bottom: 60, left: 60, right: 60 },
-                        children: rightCellChildren,
-                      }),
-                    ],
-                  }),
-                ],
-              });
-
-              part3Children.push(twoColTable);
-            } catch (e) {
-              console.error('Failed to embed two-column images', e);
-            }
+          // ภาพประกอบในหัวข้อนี้ (ไม่จำกัดจำนวน: รองรับทั้งภาพเดี่ยว 6 นิ้ว และภาพคู่ 3 นิ้ว)
+          const itemBlocks = normalizeTorItemImageBlocks(item);
+          if (itemBlocks.length > 0) {
+            part3Children.push(
+              ...renderImageBlocksToDocx(itemBlocks, `ภาพที่ ${numPrefix}.${idx + 1}`)
+            );
           }
 
           part3Children.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
@@ -1129,6 +1153,10 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
             rows: teamRows,
           })
         );
+
+        if (section4.imageBlocks && section4.imageBlocks.length > 0) {
+          part4Children.push(...renderImageBlocksToDocx(section4.imageBlocks, `ภาพที่ ${numPrefix}`));
+        }
       } else if (h.id === 's4_team_cv') {
         // 4.1.2 ประวัติส่วนตัวและประสบการณ์การทำงานรายบุคคล (Detailed Curriculum Vitae - CV)
         part4Children.push(
@@ -1513,6 +1541,10 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
           } catch (e) {
             console.warn('Failed to embed office image', e);
           }
+        }
+
+        if (section5.imageBlocks && section5.imageBlocks.length > 0) {
+          part5AChildren.push(...renderImageBlocksToDocx(section5.imageBlocks, `ภาพที่ ${numPrefix}`));
         }
       } else if (h.id === 's5_certifications') {
         part5AChildren.push(

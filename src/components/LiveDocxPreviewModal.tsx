@@ -1,7 +1,8 @@
 import React from 'react';
-import { ProposalData } from '../types/proposal';
+import { ProposalData, ReportImageBlock } from '../types/proposal';
 import { FileDown, Eye, X, SlidersHorizontal } from 'lucide-react';
 import { normalizeDocumentStructure } from '../data/defaultData';
+import { normalizeTorItemImageBlocks } from '../utils/imageBlockUtils';
 
 interface LiveDocxPreviewModalProps {
   data: ProposalData;
@@ -17,6 +18,106 @@ const formatTorClauseNumber = (clause: string): string => {
   if (!trimmed) return 'ข้อ ';
   if (trimmed.startsWith('ข้อ')) return trimmed;
   return `ข้อ ${trimmed}`;
+};
+
+const renderImageBlocksPreview = (blocks?: ReportImageBlock[], defaultPrefix: string = 'ภาพที่') => {
+  if (!blocks || !Array.isArray(blocks) || blocks.length === 0) return null;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.75rem', marginBottom: '0.75rem' }}>
+      {blocks.map((block, bIdx) => {
+        if (block.type === 'single' && block.url) {
+          return (
+            <div
+              key={block.id || bIdx}
+              style={{
+                textAlign: 'center',
+                backgroundColor: '#F8FAFC',
+                padding: '0.65rem',
+                borderRadius: '6px',
+                border: '1px solid var(--slate-200)',
+              }}
+            >
+              <img
+                src={block.url}
+                alt="ภาพเดี่ยว 6 นิ้ว"
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '260px',
+                  objectFit: 'contain',
+                  borderRadius: '4px',
+                  margin: '0 auto',
+                  display: 'block',
+                }}
+              />
+              <div
+                style={{
+                  fontSize: '0.8rem',
+                  color: 'var(--slate-600)',
+                  fontStyle: 'italic',
+                  marginTop: '0.35rem',
+                }}
+              >
+                {block.caption || `${defaultPrefix}-${bIdx + 1} ภาพประกอบ (กว้าง 6 นิ้ว กึ่งกลาง)`}
+              </div>
+            </div>
+          );
+        }
+
+        if (block.type === 'pair' && (block.leftUrl || block.rightUrl)) {
+          return (
+            <div
+              key={block.id || bIdx}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '0.5rem',
+                backgroundColor: '#F8FAFC',
+                padding: '0.65rem',
+                borderRadius: '6px',
+                border: '1px solid var(--slate-200)',
+              }}
+            >
+              <div style={{ textAlign: 'center' }}>
+                {block.leftUrl ? (
+                  <>
+                    <img
+                      src={block.leftUrl}
+                      alt="ภาพซ้าย 3 นิ้ว"
+                      style={{ maxWidth: '100%', maxHeight: '160px', objectFit: 'contain', borderRadius: '4px' }}
+                    />
+                    <div style={{ fontSize: '0.75rem', color: 'var(--slate-600)', fontStyle: 'italic', marginTop: '0.25rem' }}>
+                      {block.leftCaption || 'ภาพประกอบ (กว้าง 3 นิ้ว)'}
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ color: 'var(--slate-400)', fontSize: '0.75rem', padding: '1rem' }}>- คอลัมน์ซ้ายว่าง -</div>
+                )}
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                {block.rightUrl ? (
+                  <>
+                    <img
+                      src={block.rightUrl}
+                      alt="ภาพขวา 3 นิ้ว"
+                      style={{ maxWidth: '100%', maxHeight: '160px', objectFit: 'contain', borderRadius: '4px' }}
+                    />
+                    <div style={{ fontSize: '0.75rem', color: 'var(--slate-600)', fontStyle: 'italic', marginTop: '0.25rem' }}>
+                      {block.rightCaption || 'ภาพประกอบ (กว้าง 3 นิ้ว)'}
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ color: 'var(--slate-400)', fontSize: '0.75rem', padding: '1rem' }}>- คอลัมน์ขวาว่าง -</div>
+                )}
+              </div>
+            </div>
+          );
+        }
+
+        return null;
+      })}
+    </div>
+  );
 };
 
 export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
@@ -291,6 +392,8 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                       }
                       return null;
                     })}
+
+                    {renderImageBlocksPreview(section1.imageBlocks, 'ภาพที่ 1')}
                   </div>
                 );
               }
@@ -400,6 +503,8 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                       }
                       return null;
                     })}
+
+                    {renderImageBlocksPreview(section2.imageBlocks, 'ภาพที่ 2')}
                   </div>
                 );
               }
@@ -437,6 +542,7 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                                 />
                               </div>
                             )}
+                            {renderImageBlocksPreview(section3.imageBlocks, `ภาพที่ ${numPrefix}`)}
                           </div>
                         );
                       }
@@ -448,13 +554,6 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                             </h3>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                               {section1.scopeItems.map((item, idx) => {
-                                const showSingle =
-                                  (item.imageLayout === 'single_centered' || item.imageLayout === 'both') &&
-                                  Boolean(item.singleImage?.url);
-                                const showTwoCols =
-                                  (item.imageLayout === 'two_columns' || item.imageLayout === 'both') &&
-                                  Boolean(item.twoColumnImageLeft?.url || item.twoColumnImageRight?.url);
-
                                 const methLines = (item.proposedMethodology || 'บริษัทฯ มุ่งมั่นปฏิบัติงานตามมาตรฐานสากลและส่งมอบตามเกณฑ์ที่กำหนด')
                                   .split('\n')
                                   .map((l) => l.trim())
@@ -577,54 +676,9 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                                       {parsedElements}
                                     </div>
 
-                                    {showSingle && item.singleImage?.url && (
-                                      <div style={{ marginTop: '0.5rem', textAlign: 'center', backgroundColor: '#F8FAFC', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--slate-200)' }}>
-                                        <img
-                                          src={item.singleImage.url}
-                                          alt="ภาพอธิบายการทำงาน"
-                                          style={{ maxWidth: '100%', maxHeight: '240px', objectFit: 'contain', borderRadius: '4px', margin: '0 auto', display: 'block' }}
-                                        />
-                                        <div style={{ fontSize: '0.8rem', color: 'var(--slate-600)', fontStyle: 'italic', marginTop: '0.35rem' }}>
-                                          {item.singleImage.caption || `ภาพที่ ${numPrefix}.${idx + 1}-1 ภาพอธิบายขั้นตอนและวิธีการดำเนินงาน`}
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {showTwoCols && (
-                                      <div style={{ marginTop: '0.5rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', backgroundColor: '#F8FAFC', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--slate-200)' }}>
-                                        <div style={{ textAlign: 'center' }}>
-                                          {item.twoColumnImageLeft?.url ? (
-                                            <>
-                                              <img
-                                                src={item.twoColumnImageLeft.url}
-                                                alt="ภาพซ้าย"
-                                                style={{ maxWidth: '100%', maxHeight: '160px', objectFit: 'contain', borderRadius: '4px' }}
-                                              />
-                                              <div style={{ fontSize: '0.75rem', color: 'var(--slate-600)', fontStyle: 'italic', marginTop: '0.25rem' }}>
-                                                {item.twoColumnImageLeft.caption || 'ภาพประกอบ (กว้าง 3 นิ้ว)'}
-                                              </div>
-                                            </>
-                                          ) : (
-                                            <div style={{ color: 'var(--slate-400)', fontSize: '0.75rem', padding: '1rem' }}>- คอลัมน์ซ้ายว่าง -</div>
-                                          )}
-                                        </div>
-                                        <div style={{ textAlign: 'center' }}>
-                                          {item.twoColumnImageRight?.url ? (
-                                            <>
-                                              <img
-                                                src={item.twoColumnImageRight.url}
-                                                alt="ภาพขวา"
-                                                style={{ maxWidth: '100%', maxHeight: '160px', objectFit: 'contain', borderRadius: '4px' }}
-                                              />
-                                              <div style={{ fontSize: '0.75rem', color: 'var(--slate-600)', fontStyle: 'italic', marginTop: '0.25rem' }}>
-                                                {item.twoColumnImageRight.caption || 'ภาพประกอบ (กว้าง 3 นิ้ว)'}
-                                              </div>
-                                            </>
-                                          ) : (
-                                            <div style={{ color: 'var(--slate-400)', fontSize: '0.75rem', padding: '1rem' }}>- คอลัมน์ขวาว่าง -</div>
-                                          )}
-                                        </div>
-                                      </div>
+                                    {renderImageBlocksPreview(
+                                      normalizeTorItemImageBlocks(item),
+                                      `ภาพที่ ${numPrefix}.${idx + 1}`
                                     )}
                                   </div>
                                 );
@@ -699,6 +753,7 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                                 ))}
                               </tbody>
                             </table>
+                            {renderImageBlocksPreview(section4.imageBlocks, `ภาพที่ ${numPrefix}`)}
                           </div>
                         );
                       }
@@ -924,6 +979,7 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                                 </div>
                               </div>
                             )}
+                            {renderImageBlocksPreview(section5.imageBlocks, `ภาพที่ ${numPrefix}`)}
                           </div>
                         );
                       }

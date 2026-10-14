@@ -1,6 +1,7 @@
 import React from 'react';
 import { Section2WorkPlan, Milestone, TorScopeItem } from '../types/proposal';
 import { GanttChart } from './GanttChart';
+import { ReportImageManager } from './ReportImageManager';
 import { Plus, Trash2, CalendarRange, CheckCircle2, AlertCircle } from 'lucide-react';
 
 interface Section2EditorProps {
@@ -294,6 +295,17 @@ export const Section2Editor: React.FC<Section2EditorProps> = ({
             </div>
           ))}
         </div>
+      </div>
+
+      {/* ภาพประกอบในส่วนที่ 2 (ไม่จำกัดจำนวน: แผนภูมิ, ขั้นตอนการทำงาน, ไทม์ไลน์) */}
+      <div className="card">
+        <ReportImageManager
+          title="ภาพประกอบส่วนที่ 2: แผนการดำเนินงานและกระบวนการส่งมอบ (ไม่จำกัดจำนวน)"
+          subtitle="รองรับทั้งภาพเดี่ยว 6 นิ้ว กึ่งกลาง และภาพคู่ 2 คอลัมน์ 3 นิ้ว เช่น ขั้นตอนการส่งมอบงาน แผนภาพ Workflow"
+          imageBlocks={section2.imageBlocks || []}
+          defaultCaptionPrefix="ภาพที่ 2-"
+          onChange={(newBlocks) => onChangeSection2({ ...section2, imageBlocks: newBlocks })}
+        />
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Section5Company, PastProject } from '../types/proposal';
+import { ReportImageManager } from './ReportImageManager';
 import {
   getMasterProjectsLibrary,
   fetchMasterProjectsLibraryFromCloud,
@@ -367,6 +368,15 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
             onChange={(e) => handleFieldChange('visionMission', e.target.value)}
           />
         </div>
+
+        {/* ภาพประกอบในส่วนที่ 5 (ไม่จำกัดจำนวน: ภาพสำนักงาน บรรยากาศการทำงาน ห้อง Data Center ฯลฯ) */}
+        <ReportImageManager
+          title="ภาพประกอบบริษัท สำนักงาน และสิ่งอำนวยความสะดวก (ไม่จำกัดจำนวน)"
+          subtitle="รองรับทั้งภาพเดี่ยว 6 นิ้ว กึ่งกลาง และภาพคู่ 2 คอลัมน์ 3 นิ้ว เช่น ภาพอาคารสำนักงาน ห้องปฏิบัติการ/Data Center ภาพทีมงาน"
+          imageBlocks={section5.imageBlocks || []}
+          defaultCaptionPrefix="ภาพที่ 5.1-"
+          onChange={(newBlocks) => onChange({ ...section5, imageBlocks: newBlocks })}
+        />
       </div>
 
       {/* 5.2 Past Projects & Year Filter Card */}

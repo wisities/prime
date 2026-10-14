@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { Section3Methodology, TorScopeItem } from '../types/proposal';
 import { TorMapper } from './TorMapper';
+import { ReportImageManager } from './ReportImageManager';
 import { generateDefaultConceptualDiagram } from '../utils/ganttRenderer';
 import { Layers, Image as ImageIcon, Upload, Trash2, Sparkles } from 'lucide-react';
 
@@ -168,6 +169,15 @@ export const Section3Editor: React.FC<Section3EditorProps> = ({
               </div>
             </div>
           )}
+
+          {/* ภาพประกอบเพิ่มเติมในส่วนที่ 3.1 (ไม่จำกัดจำนวน) */}
+          <ReportImageManager
+            title="ภาพประกอบเพิ่มเติมในหัวข้อ 3.1 กรอบแนวคิด (ไม่จำกัดจำนวน)"
+            subtitle="รองรับทั้งแผนภาพเดี่ยว 6 นิ้ว กึ่งกลาง และภาพคู่ 3 นิ้ว 2 คอลัมน์"
+            imageBlocks={section3.imageBlocks || []}
+            defaultCaptionPrefix="ภาพที่ 3.1-"
+            onChange={(newBlocks) => onChangeSection3({ ...section3, imageBlocks: newBlocks })}
+          />
         </div>
       </div>
 

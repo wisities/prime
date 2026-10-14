@@ -1,6 +1,7 @@
 import React from 'react';
 import { Section1Intro, TorScopeItem } from '../types/proposal';
 import { ScopeHierarchyManager } from './ScopeHierarchyManager';
+import { ReportImageManager } from './ReportImageManager';
 import { Plus, Trash2, BookMarked, Target, Award, Clock, ListTree, FileUp, FileSpreadsheet } from 'lucide-react';
 
 interface Section1EditorProps {
@@ -263,6 +264,15 @@ export const Section1Editor: React.FC<Section1EditorProps> = ({ section1, onChan
             onChange={(e) => handleFieldChange('projectScopeOverview', e.target.value)}
           />
         </div>
+
+        {/* ภาพประกอบในส่วนที่ 1 (ไม่จำกัดจำนวน: ภาพเดี่ยว 6 นิ้ว & ภาพคู่ 3 นิ้ว) */}
+        <ReportImageManager
+          title="ภาพประกอบส่วนที่ 1: บทนำและภาพรวมโครงการ (ไม่จำกัดจำนวน)"
+          subtitle="รองรับทั้งภาพเดี่ยว 6 นิ้ว กึ่งกลาง และภาพคู่ 2 คอลัมน์ 3 นิ้ว เช่น แผนภาพบริบทโครงการ สถาปัตยกรรมภาพรวม"
+          imageBlocks={section1.imageBlocks || []}
+          defaultCaptionPrefix="ภาพที่ 1-"
+          onChange={(newBlocks) => onChange({ ...section1, imageBlocks: newBlocks })}
+        />
       </div>
 
       {/* 2. รายการขอบเขตงานเต็มทุกข้อตามประกาศจัดจ้าง (Hierarchical Tree up to Level 5) */}

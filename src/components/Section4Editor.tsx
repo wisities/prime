@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Section4TeamAndRisk, TeamMember, RiskItem, TorScopeItem } from '../types/proposal';
+import { ReportImageManager } from './ReportImageManager';
 import {
   getMasterTeamLibrary,
   fetchMasterTeamLibraryFromCloud,
@@ -278,6 +279,15 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
             onChange={(e) => onChange({ ...section4, teamOverview: e.target.value })}
           />
         </div>
+
+        {/* ภาพประกอบในส่วนที่ 4 (ไม่จำกัดจำนวน: เช่น แผนผังองค์กร 6 นิ้ว หรือภาพคู่ 3 นิ้ว) */}
+        <ReportImageManager
+          title="ภาพผังโครงสร้างองค์กรและคณะผู้ดำเนินงาน (ไม่จำกัดจำนวน)"
+          subtitle="รองรับทั้งภาพผังองค์กรเดี่ยว 6 นิ้ว กึ่งกลาง และภาพคู่ 2 คอลัมน์ 3 นิ้ว เช่น ผังโครงสร้างโครงการ สายการบังคับบัญชา แผนภาพการประสานงาน"
+          imageBlocks={section4.imageBlocks || []}
+          defaultCaptionPrefix="ภาพที่ 4.1-"
+          onChange={(newBlocks) => onChange({ ...section4, imageBlocks: newBlocks })}
+        />
 
         {/* Toast Notification */}
         {savedMemberToast && (
