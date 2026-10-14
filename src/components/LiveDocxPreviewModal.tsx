@@ -540,6 +540,9 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                     {activeHeadings.map((h, hIdx) => {
                       const numPrefix = autoRenumber ? `${secNum}.${hIdx + 1}` : h.originalCode;
                       if (h.id === 's3_framework') {
+                        let hasRenderedFirstImage = false;
+                        const firstImageFromProp = section3.conceptualDiagramImage;
+
                         return (
                           <div key={h.id} style={{ marginBottom: '1.5rem' }}>
                             <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '0.5rem' }}>
@@ -548,16 +551,175 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                             <p style={{ marginBottom: '1rem', textAlign: 'justify', textIndent: '2rem', lineHeight: 1.5 }}>
                               {section3.frameworkOverview}
                             </p>
-                            {section3.conceptualDiagramImage && (
-                              <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-                                <img
-                                  src={section3.conceptualDiagramImage}
-                                  alt="Conceptual Diagram"
-                                  style={{ maxWidth: '100%', maxHeight: '280px', objectFit: 'contain', borderRadius: '4px', border: '1px solid var(--slate-200)' }}
-                                />
-                              </div>
-                            )}
-                            {renderImageBlocksPreview(section3.imageBlocks, `ภาพที่ ${numPrefix}`)}
+
+                            {/* ภาพแรกจาก conceptualDiagramImage (ถ้ามี) */}
+                            {firstImageFromProp && (() => {
+                              hasRenderedFirstImage = true;
+                              return (
+                                <div style={{ textAlign: 'center', marginBottom: '1.5rem', backgroundColor: '#F8FAFC', padding: '1rem', borderRadius: '6px', border: '1px solid var(--slate-200)' }}>
+                                  <img
+                                    src={firstImageFromProp}
+                                    alt="Conceptual Diagram"
+                                    style={{
+                                      maxWidth: '100%',
+                                      width: '100%',
+                                      maxHeight: '340px',
+                                      objectFit: 'contain',
+                                      borderRadius: '4px',
+                                      margin: '0 auto',
+                                      display: 'block',
+                                    }}
+                                  />
+                                  <div style={{ fontSize: '0.82rem', color: 'var(--slate-700)', fontStyle: 'italic', marginTop: '0.45rem', fontWeight: 500 }}>
+                                    {section3.conceptualDiagramCaption || `ภาพที่ ${numPrefix}-1 แผนภาพกรอบแนวคิดการดำเนินงาน`}
+                                  </div>
+                                  <div style={{ fontSize: '0.72rem', color: '#16A34A', marginTop: '2px', fontWeight: 500 }}>
+                                    [ภาพแรก: ขนาดกว้าง 6 นิ้ว ความสูงไม่เกิน 19 ซม.]
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
+                            {/* รายการภาพจาก imageBlocks ใน 3.1 (ภาพแรกถ้ายังไม่มีให้เป็น 19 ซม., ภาพถัดไปขึ้นหน้าใหม่เต็มหน้า 23 ซม.) */}
+                            {section3.imageBlocks && section3.imageBlocks.map((block, bIdx) => {
+                              const isFirst = !hasRenderedFirstImage && bIdx === 0;
+                              const imgNumber = hasRenderedFirstImage ? bIdx + 2 : bIdx + 1;
+
+                              if (block.type === 'single' && block.url) {
+                                return (
+                                  <React.Fragment key={block.id || bIdx}>
+                                    {!isFirst && (
+                                      <div
+                                        style={{
+                                          margin: '1.5rem 0 1rem',
+                                          padding: '0.45rem 0.85rem',
+                                          backgroundColor: '#EFF6FF',
+                                          border: '1px dashed #3B82F6',
+                                          borderRadius: '6px',
+                                          color: '#1D4ED8',
+                                          fontSize: '0.78rem',
+                                          fontWeight: 600,
+                                          textAlign: 'center',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          gap: '0.4rem',
+                                        }}
+                                      >
+                                        <span>📄 ขึ้นหน้าใหม่ (Page Break) — แสดงเต็มหน้ากระดาษ A4 กว้าง 6 นิ้ว สูงไม่เกิน 23 ซม.</span>
+                                      </div>
+                                    )}
+                                    <div
+                                      style={{
+                                        textAlign: 'center',
+                                        backgroundColor: '#F8FAFC',
+                                        padding: '1rem',
+                                        borderRadius: '6px',
+                                        border: '1px solid var(--slate-200)',
+                                        marginBottom: '1rem',
+                                      }}
+                                    >
+                                      <img
+                                        src={block.url}
+                                        alt={isFirst ? 'ภาพแรก 6 นิ้ว' : 'แผนภาพแสดงเต็มหน้า'}
+                                        style={{
+                                          maxWidth: '100%',
+                                          width: '100%',
+                                          maxHeight: isFirst ? '340px' : '440px',
+                                          objectFit: 'contain',
+                                          borderRadius: '4px',
+                                          margin: '0 auto',
+                                          display: 'block',
+                                        }}
+                                      />
+                                      <div style={{ fontSize: '0.82rem', color: 'var(--slate-700)', fontStyle: 'italic', marginTop: '0.45rem', fontWeight: 500 }}>
+                                        {block.caption || `ภาพที่ ${numPrefix}-${imgNumber} ${isFirst ? 'แผนภาพกรอบแนวคิดการดำเนินงาน' : 'แผนภาพรายละเอียดการดำเนินงาน'}`}
+                                      </div>
+                                      <div style={{ fontSize: '0.72rem', color: isFirst ? '#16A34A' : '#2563EB', marginTop: '2px', fontWeight: 500 }}>
+                                        {isFirst
+                                          ? '[ภาพแรก: ขนาดกว้าง 6 นิ้ว ความสูงไม่เกิน 19 ซม.]'
+                                          : '[แสดงเต็มหน้า: ขนาดกว้าง 6 นิ้ว ความสูงไม่เกิน 23 ซม.]'}
+                                      </div>
+                                    </div>
+                                  </React.Fragment>
+                                );
+                              }
+
+                              if (block.type === 'pair' && (block.leftUrl || block.rightUrl)) {
+                                return (
+                                  <React.Fragment key={block.id || bIdx}>
+                                    {!isFirst && (
+                                      <div
+                                        style={{
+                                          margin: '1.5rem 0 1rem',
+                                          padding: '0.45rem 0.85rem',
+                                          backgroundColor: '#EFF6FF',
+                                          border: '1px dashed #3B82F6',
+                                          borderRadius: '6px',
+                                          color: '#1D4ED8',
+                                          fontSize: '0.78rem',
+                                          fontWeight: 600,
+                                          textAlign: 'center',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          gap: '0.4rem',
+                                        }}
+                                      >
+                                        <span>📄 ขึ้นหน้าใหม่ (Page Break) — ภาพคู่แสดงเต็มหน้า</span>
+                                      </div>
+                                    )}
+                                    <div
+                                      style={{
+                                        display: 'grid',
+                                        gridTemplateColumns: '1fr 1fr',
+                                        gap: '0.5rem',
+                                        backgroundColor: '#F8FAFC',
+                                        padding: '0.65rem',
+                                        borderRadius: '6px',
+                                        border: '1px solid var(--slate-200)',
+                                        marginBottom: '1rem',
+                                      }}
+                                    >
+                                      <div style={{ textAlign: 'center' }}>
+                                        {block.leftUrl ? (
+                                          <>
+                                            <img
+                                              src={block.leftUrl}
+                                              alt="ภาพซ้าย 3 นิ้ว"
+                                              style={{ maxWidth: '100%', maxHeight: '180px', objectFit: 'contain', borderRadius: '4px' }}
+                                            />
+                                            <div style={{ fontSize: '0.75rem', color: 'var(--slate-600)', fontStyle: 'italic', marginTop: '0.25rem' }}>
+                                              {block.leftCaption || 'ภาพประกอบ (กว้าง 3 นิ้ว)'}
+                                            </div>
+                                          </>
+                                        ) : (
+                                          <div style={{ color: 'var(--slate-400)', fontSize: '0.75rem', padding: '1rem' }}>- คอลัมน์ซ้ายว่าง -</div>
+                                        )}
+                                      </div>
+                                      <div style={{ textAlign: 'center' }}>
+                                        {block.rightUrl ? (
+                                          <>
+                                            <img
+                                              src={block.rightUrl}
+                                              alt="ภาพขวา 3 นิ้ว"
+                                              style={{ maxWidth: '100%', maxHeight: '180px', objectFit: 'contain', borderRadius: '4px' }}
+                                            />
+                                            <div style={{ fontSize: '0.75rem', color: 'var(--slate-600)', fontStyle: 'italic', marginTop: '0.25rem' }}>
+                                              {block.rightCaption || 'ภาพประกอบ (กว้าง 3 นิ้ว)'}
+                                            </div>
+                                          </>
+                                        ) : (
+                                          <div style={{ color: 'var(--slate-400)', fontSize: '0.75rem', padding: '1rem' }}>- คอลัมน์ขวาว่าง -</div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </React.Fragment>
+                                );
+                              }
+
+                              return null;
+                            })}
                           </div>
                         );
                       }

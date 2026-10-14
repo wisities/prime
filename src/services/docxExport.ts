@@ -42,6 +42,33 @@ function base64ToUint8Array(base64: string): Uint8Array {
   return bytes;
 }
 
+function getImageDimensionsFromBytes(bytes: Uint8Array): { width: number; height: number } | null {
+  try {
+    // PNG format (bytes 16-23 contain width & height in big-endian)
+    if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 && bytes.length >= 24) {
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      return { width: view.getUint32(16), height: view.getUint32(20) };
+    }
+    // JPEG format (scan for SOF markers 0xC0, 0xC1, 0xC2)
+    if (bytes[0] === 0xff && bytes[1] === 0xd8) {
+      let offset = 2;
+      const len = bytes.length;
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      while (offset < len) {
+        if (bytes[offset] !== 0xff) break;
+        const marker = bytes[offset + 1];
+        if (marker === 0xc0 || marker === 0xc1 || marker === 0xc2) {
+          return { height: view.getUint16(offset + 5), width: view.getUint16(offset + 7) };
+        }
+        offset += 2 + view.getUint16(offset + 2);
+      }
+    }
+  } catch (e) {
+    // ignore parsing errors
+  }
+  return null;
+}
+
 const FONT_FAMILY = 'TH Sarabun New';
 const COLOR_PRIMARY = '0F2744'; // Navy
 const COLOR_SECONDARY = '1E3A8A';
@@ -590,7 +617,8 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
     cover.projectTitle
   );
 
-  const conceptualImageBase64 = section3.conceptualDiagramImage || generateDefaultConceptualDiagram();
+  const hasCustomImagesInS3 = !!section3.conceptualDiagramImage || (!!section3.imageBlocks && section3.imageBlocks.length > 0);
+  const conceptualImageBase64 = section3.conceptualDiagramImage || (hasCustomImagesInS3 ? undefined : generateDefaultConceptualDiagram());
 
   // Create Header / Footer generators with support for full-page A4 Backgrounds (Header & Footer graphics)
   const createCommonHeader = (isLandscape: boolean = false) => {
@@ -1072,41 +1100,123 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
           ...createBodyParagraphs(section3.frameworkOverview)
         );
 
-        try {
-          const conceptualBytes = base64ToUint8Array(conceptualImageBase64);
-          part3Children.push(
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              spacing: { before: 140, after: 80 },
-              children: [
-                new ImageRun({
-                  data: conceptualBytes,
-                  transformation: { width: 620, height: 300 },
-                } as any),
-              ],
-            }),
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              spacing: { after: 200 },
-              children: [
-                new TextRun({
-                  text: section3.conceptualDiagramCaption,
-                  font: FONT_FAMILY,
-                  size: 26,
-                  italics: true,
-                  color: COLOR_MUTED,
-                }),
-              ],
-            })
-          );
-        } catch (e) {
-          console.error('Failed to embed conceptual diagram', e);
+        // 3.1 Images Rendering:
+        // ภาพแรกมีหัวข้อ: บังคับกว้าง 6 นิ้ว (576 px), สูงไม่เกิน 19 ซม. (718 px)
+        // ภาพถัดไป: แสดงเต็มหน้า (ขึ้นหน้าใหม่ด้วย PageBreak), กว้าง 6 นิ้ว (576 px), สูงไม่เกิน 23 ซม. (870 px)
+        let hasRenderedFirstImage = false;
+
+        if (conceptualImageBase64) {
+          try {
+            const conceptualBytes = base64ToUint8Array(conceptualImageBase64);
+            const dims = getImageDimensionsFromBytes(conceptualBytes);
+            let imgHeight = 718; // 19 cm max
+            if (dims && dims.width > 0) {
+              const scaled = Math.round(576 * (dims.height / dims.width));
+              imgHeight = Math.min(718, scaled);
+            } else {
+              imgHeight = 350;
+            }
+
+            part3Children.push(
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 140, after: 80 },
+                children: [
+                  new ImageRun({
+                    data: conceptualBytes,
+                    transformation: { width: 576, height: imgHeight }, // กว้าง 6 นิ้ว สูงไม่เกิน 19 ซม.
+                  } as any),
+                ],
+              }),
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 200 },
+                children: [
+                  new TextRun({
+                    text: section3.conceptualDiagramCaption || `ภาพที่ ${numPrefix}-1 แผนภาพกรอบแนวคิดการดำเนินงาน`,
+                    font: FONT_FAMILY,
+                    size: 26,
+                    italics: true,
+                    color: COLOR_MUTED,
+                  }),
+                ],
+              })
+            );
+            hasRenderedFirstImage = true;
+          } catch (e) {
+            console.error('Failed to embed conceptual diagram', e);
+          }
         }
 
         if (section3.imageBlocks && section3.imageBlocks.length > 0) {
-          part3Children.push(
-            ...renderImageBlocksToDocx(section3.imageBlocks, `ภาพที่ ${numPrefix}`)
-          );
+          section3.imageBlocks.forEach((block, bIdx) => {
+            const isFirst = !hasRenderedFirstImage && bIdx === 0;
+            const maxCmHeight = isFirst ? 718 : 870; // ภาพแรกสูงไม่เกิน 19 ซม. (718 px), ภาพถัดไปสูงไม่เกิน 23 ซม. (870 px)
+
+            if (block.type === 'single' && block.url) {
+              try {
+                const subBytes = base64ToUint8Array(block.url);
+                const dims = getImageDimensionsFromBytes(subBytes);
+                let imgHeight = maxCmHeight;
+                if (dims && dims.width > 0) {
+                  const scaled = Math.round(576 * (dims.height / dims.width));
+                  imgHeight = Math.min(maxCmHeight, scaled);
+                } else {
+                  imgHeight = isFirst ? 350 : 700;
+                }
+
+                // ภาพถัดไปแสดงเต็มหน้า (ขึ้นหน้าใหม่ด้วย PageBreak)
+                if (!isFirst) {
+                  part3Children.push(
+                    new Paragraph({
+                      children: [new PageBreak()],
+                    })
+                  );
+                }
+
+                part3Children.push(
+                  new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    spacing: { before: isFirst ? 140 : 100, after: 80 },
+                    children: [
+                      new ImageRun({
+                        data: subBytes,
+                        transformation: { width: 576, height: imgHeight }, // กว้าง 6 นิ้ว สูงไม่เกิน 19 หรือ 23 ซม.
+                      } as any),
+                    ],
+                  }),
+                  new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    spacing: { after: 180 },
+                    children: [
+                      new TextRun({
+                        text: block.caption || `ภาพที่ ${numPrefix}-${hasRenderedFirstImage ? bIdx + 2 : bIdx + 1} แผนภาพรายละเอียดการดำเนินงาน`,
+                        font: FONT_FAMILY,
+                        size: 26,
+                        italics: true,
+                        color: COLOR_MUTED,
+                      }),
+                    ],
+                  })
+                );
+                if (isFirst) hasRenderedFirstImage = true;
+              } catch (e) {
+                console.error('Failed to embed Section 3.1 image block', e);
+              }
+            } else if (block.type === 'pair' && (block.leftUrl || block.rightUrl)) {
+              if (!isFirst) {
+                part3Children.push(
+                  new Paragraph({
+                    children: [new PageBreak()],
+                  })
+                );
+              }
+              part3Children.push(
+                ...renderImageBlocksToDocx([block], `ภาพที่ ${numPrefix}-${hasRenderedFirstImage ? bIdx + 2 : bIdx + 1}`)
+              );
+              if (isFirst) hasRenderedFirstImage = true;
+            }
+          });
         }
       } else if (h.id === 's3_methodology') {
         part3Children.push(

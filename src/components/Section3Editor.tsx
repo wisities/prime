@@ -74,11 +74,16 @@ export const Section3Editor: React.FC<Section3EditorProps> = ({
 
         {/* Conceptual Diagram Image Uploader */}
         <div style={{ marginTop: '1rem', borderTop: '1px solid var(--slate-200)', paddingTop: '1.25rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
-            <label className="form-label" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <ImageIcon size={18} color="var(--primary-700)" />
-              แผนภาพกรอบแนวคิดการดำเนินงาน (Conceptual Framework Diagram)
-            </label>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <div>
+              <label className="form-label" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <ImageIcon size={18} color="var(--primary-700)" />
+                แผนภาพกรอบแนวคิดการดำเนินงาน (ภาพแรก - กว้าง 6 นิ้ว สูงไม่เกิน 19 ซม.)
+              </label>
+              <div style={{ fontSize: '0.75rem', color: 'var(--slate-500)', marginTop: '2px' }}>
+                ภาพแรกจะแสดงต่อจากหัวข้อ 3.1 ในหน้าแรกพอดี (ขนาดบังคับกว้าง 6 นิ้ว ความสูงไม่เกิน 19 ซม.)
+              </div>
+            </div>
 
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button
@@ -162,18 +167,18 @@ export const Section3Editor: React.FC<Section3EditorProps> = ({
             >
               <ImageIcon size={36} color="var(--slate-400)" style={{ margin: '0 auto 0.5rem' }} />
               <div style={{ fontWeight: 500, color: 'var(--primary-800)' }}>
-                คลิกเพื่ออัปโหลดภาพแผนภาพกรอบแนวคิด (Diagram)
+                คลิกเพื่ออัปโหลดภาพแผนภาพกรอบแนวคิด (ภาพแรก)
               </div>
               <div style={{ fontSize: '0.8rem', color: 'var(--slate-500)', marginTop: '0.25rem' }}>
-                หรือกดปุ่ม "สร้างไดอะแกรมสถาปัตยกรรมตัวอย่าง" ด้านบนเพื่อใช้แบบจำลองสถาปัตยกรรม 4 ชั้นมาตรฐาน
+                ขนาดกว้าง 6 นิ้ว สูงไม่เกิน 19 ซม. หรือกดปุ่ม "สร้างไดอะแกรมสถาปัตยกรรมตัวอย่าง" ด้านบน
               </div>
             </div>
           )}
 
-          {/* ภาพประกอบเพิ่มเติมในส่วนที่ 3.1 (ไม่จำกัดจำนวน) */}
+          {/* ภาพประกอบเพิ่มเติมในส่วนที่ 3.1 (ภาพถัดไป - แสดงเต็มหน้า กว้าง 6 นิ้ว สูงไม่เกิน 23 ซม.) */}
           <ReportImageManager
-            title="ภาพประกอบเพิ่มเติมในหัวข้อ 3.1 กรอบแนวคิด (ไม่จำกัดจำนวน)"
-            subtitle="รองรับทั้งแผนภาพเดี่ยว 6 นิ้ว กึ่งกลาง และภาพคู่ 3 นิ้ว 2 คอลัมน์"
+            title="แผนภาพถัดไปในหัวข้อ 3.1 (แสดงเต็มหน้า กว้าง 6 นิ้ว สูงไม่เกิน 23 ซม.)"
+            subtitle="ภาพถัดไปจากภาพแรก ระบบจะขึ้นหน้าใหม่ (Page Break) และจัดวางเต็มหน้ากระดาษ A4 ขนาดกว้าง 6 นิ้ว สูงไม่เกิน 23 ซม. ให้อัตโนมัติ"
             imageBlocks={section3.imageBlocks || []}
             defaultCaptionPrefix="ภาพที่ 3.1-"
             onChange={(newBlocks) => onChangeSection3({ ...section3, imageBlocks: newBlocks })}
