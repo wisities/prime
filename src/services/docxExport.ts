@@ -19,6 +19,11 @@ import {
   PageOrientation,
   LineRuleType,
   ISectionOptions,
+  HorizontalPositionRelativeFrom,
+  VerticalPositionRelativeFrom,
+  HorizontalPositionAlign,
+  VerticalPositionAlign,
+  TextWrappingType,
 } from 'docx';
 import saveAs from 'file-saver';
 import { ProposalData, ReportImageBlock } from '../types/proposal';
@@ -587,10 +592,51 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
 
   const conceptualImageBase64 = section3.conceptualDiagramImage || generateDefaultConceptualDiagram();
 
-  // Create Header / Footer generators
-  const createCommonHeader = () =>
-    new Header({
-      children: [
+  // Create Header / Footer generators with support for full-page A4 Backgrounds (Header & Footer graphics)
+  const createCommonHeader = (isLandscape: boolean = false) => {
+    const children: Paragraph[] = [];
+    const bgImageBase64 = isLandscape ? cover.landscapeBgImage : cover.portraitBgImage;
+
+    if (bgImageBase64) {
+      try {
+        const bgBytes = base64ToUint8Array(bgImageBase64);
+        // A4 Portrait = 794 x 1123 px, A4 Landscape = 1123 x 794 px at 96 DPI
+        const width = isLandscape ? 1123 : 794;
+        const height = isLandscape ? 794 : 1123;
+
+        children.push(
+          new Paragraph({
+            children: [
+              new ImageRun({
+                data: bgBytes,
+                transformation: { width, height },
+                floating: {
+                  horizontalPosition: {
+                    relative: HorizontalPositionRelativeFrom.PAGE,
+                    align: HorizontalPositionAlign.LEFT,
+                    offset: 0,
+                  },
+                  verticalPosition: {
+                    relative: VerticalPositionRelativeFrom.PAGE,
+                    align: VerticalPositionAlign.TOP,
+                    offset: 0,
+                  },
+                  wrap: {
+                    type: TextWrappingType.NONE,
+                  },
+                  behindDocument: true,
+                },
+              } as any),
+            ],
+          })
+        );
+      } catch (e) {
+        console.warn('Failed to embed background image in header', e);
+      }
+    }
+
+    if (!cover.hideDefaultHeaderFooter) {
+      children.push(
         new Paragraph({
           alignment: AlignmentType.RIGHT,
           children: [
@@ -601,12 +647,18 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
               color: '94A3B8',
             }),
           ],
-        }),
-      ],
-    });
+        })
+      );
+    }
 
-  const createCommonFooter = () =>
-    new Footer({
+    return new Header({ children });
+  };
+
+  const createCommonFooter = () => {
+    if (cover.hideDefaultHeaderFooter) {
+      return new Footer({ children: [] });
+    }
+    return new Footer({
       children: [
         new Paragraph({
           alignment: AlignmentType.RIGHT,
@@ -639,6 +691,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
         }),
       ],
     });
+  };
 
   // =========================================================================
   // SECTION 1 (Portrait - แนวตั้ง): หน้าปก, สารบัญ, และ ส่วนที่ 1 บทนำ & ขอบเขตงาน TOR
@@ -1871,9 +1924,16 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
           size: { orientation: PageOrientation.PORTRAIT },
           margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
         },
+        titlePage: true, // First page (Front Cover) does not have letterhead background
       },
-      headers: { default: createCommonHeader() },
-      footers: { default: createCommonFooter() },
+      headers: {
+        default: createCommonHeader(false),
+        first: new Header({ children: [] }),
+      },
+      footers: {
+        default: createCommonFooter(),
+        first: new Footer({ children: [] }),
+      },
       children: part1Children,
     },
   ];
@@ -1886,7 +1946,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
           margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
         },
       },
-      headers: { default: createCommonHeader() },
+      headers: { default: createCommonHeader(true) },
       footers: { default: createCommonFooter() },
       children: part2Children,
     });
@@ -1900,7 +1960,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
           margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
         },
       },
-      headers: { default: createCommonHeader() },
+      headers: { default: createCommonHeader(false) },
       footers: { default: createCommonFooter() },
       children: part3Children,
     });
@@ -1914,7 +1974,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
           margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
         },
       },
-      headers: { default: createCommonHeader() },
+      headers: { default: createCommonHeader(true) },
       footers: { default: createCommonFooter() },
       children: part4Children,
     });
@@ -1928,7 +1988,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
           margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
         },
       },
-      headers: { default: createCommonHeader() },
+      headers: { default: createCommonHeader(false) },
       footers: { default: createCommonFooter() },
       children: part5AChildren,
     });
@@ -1942,7 +2002,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
           margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
         },
       },
-      headers: { default: createCommonHeader() },
+      headers: { default: createCommonHeader(true) },
       footers: { default: createCommonFooter() },
       children: part5BChildren,
     });
@@ -1956,7 +2016,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
           margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
         },
       },
-      headers: { default: createCommonHeader() },
+      headers: { default: createCommonHeader(false) },
       footers: { default: createCommonFooter() },
       children: part6Children,
     });

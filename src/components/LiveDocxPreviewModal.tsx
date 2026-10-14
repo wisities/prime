@@ -201,6 +201,21 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
         <div className="modal-body" style={{ backgroundColor: 'var(--slate-100)', padding: '2rem 1rem' }}>
           {/* Simulated A4 Document Container */}
           <div className="doc-preview-paper">
+            {/* Background Notice if set */}
+            {(cover.portraitBgImage || cover.landscapeBgImage) && (
+              <div style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '6px', padding: '0.5rem 0.75rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.8rem', color: '#166534' }}>
+                <span style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  🎨 กำหนดภาพพื้นหลัง A4:
+                  {cover.portraitBgImage && <span>แนวตั้ง (มี Header/Footer) ✓</span>}
+                  {cover.portraitBgImage && cover.landscapeBgImage && <span>|</span>}
+                  {cover.landscapeBgImage && <span>แนวนอน (มี Header/Footer) ✓</span>}
+                </span>
+                <span style={{ fontSize: '0.75rem', color: '#15803D' }}>
+                  (ระบบจะวางเป็นลายน้ำพื้นหลังเต็มหน้ากระดาษ Word .docx)
+                </span>
+              </div>
+            )}
+
             {/* Document Header Code */}
             <div style={{ textAlign: 'right', fontSize: '0.85rem', color: 'var(--slate-400)', marginBottom: '1.5rem' }}>
               รหัสเอกสาร: {cover.projectCode}

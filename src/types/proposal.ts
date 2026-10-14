@@ -1,6 +1,9 @@
 export interface CoverConfig {
-  coverImage?: string; // base64
-  backCoverImage?: string; // base64
+  coverImage?: string; // base64 ภาพปกหน้า
+  backCoverImage?: string; // base64 ภาพปกหลัง
+  portraitBgImage?: string; // base64 ภาพพื้นหลัง A4 แนวตั้ง (มีข้อความ Header & Footer)
+  landscapeBgImage?: string; // base64 ภาพพื้นหลัง A4 แนวนอน (มีข้อความ Header & Footer)
+  hideDefaultHeaderFooter?: boolean; // ซ่อนข้อความ Header/Footer เริ่มต้นของระบบเมื่อใช้ภาพพื้นหลัง
   projectTitle: string;
   projectCode: string;
   clientAgency: string;
