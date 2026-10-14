@@ -742,32 +742,11 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
     })
   );
 
-  // Cover image
-  if (cover.coverImage) {
-    try {
-      const coverBytes = base64ToUint8Array(cover.coverImage);
-      part1Children.push(
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          spacing: { after: 200 },
-          children: [
-            new ImageRun({
-              data: coverBytes,
-              transformation: { width: 550, height: 260 },
-            } as any),
-          ],
-        })
-      );
-    } catch (e) {
-      console.warn('Failed to embed custom cover image', e);
-    }
-  }
-
-  // Cover Title
+  // Cover Title (หน้าหัวข้อโครงการ - กรณีมีรูปปกหน้า จะถูกแทรกเป็นหน้า A4 เต็มหน้าก่อนหน้านี้)
   part1Children.push(
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { before: cover.coverImage ? 200 : 700, after: 200 },
+      spacing: { before: 500, after: 200 },
       children: [
         new TextRun({
           text: 'เอกสารข้อเสนอด้านเทคนิค',
@@ -1946,107 +1925,181 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
     });
   }
 
-  // ปกหลัง
-  if (cover.includeBackCover) {
-    part6Children.push(new Paragraph({ children: [new PageBreak()] }));
-
-    if (cover.backCoverImage) {
-      try {
-        const backBytes = base64ToUint8Array(cover.backCoverImage);
-        part6Children.push(
+  // 1. หน้าปก A4 เต็มหน้า (แทรกก่อนหน้าหัวข้อโครงการ)
+  let frontCoverSection: ISectionOptions | null = null;
+  if (cover.coverImage) {
+    try {
+      const coverBytes = base64ToUint8Array(cover.coverImage);
+      frontCoverSection = {
+        properties: {
+          page: {
+            size: { orientation: PageOrientation.PORTRAIT },
+            margin: { top: 0, bottom: 0, left: 0, right: 0 },
+          },
+        },
+        headers: { default: new Header({ children: [] }) },
+        footers: { default: new Footer({ children: [] }) },
+        children: [
           new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing: { before: 800, after: 200 },
+            spacing: { before: 0, after: 0, line: 0 },
             children: [
               new ImageRun({
-                data: backBytes,
-                transformation: { width: 550, height: 350 },
+                data: coverBytes,
+                transformation: { width: 794, height: 1123 }, // A4 Portrait 794 x 1123 px at 96 DPI
+                floating: {
+                  horizontalPosition: {
+                    relative: HorizontalPositionRelativeFrom.PAGE,
+                    align: HorizontalPositionAlign.LEFT,
+                    offset: 0,
+                  },
+                  verticalPosition: {
+                    relative: VerticalPositionRelativeFrom.PAGE,
+                    align: VerticalPositionAlign.TOP,
+                    offset: 0,
+                  },
+                  wrap: {
+                    type: TextWrappingType.NONE,
+                  },
+                },
               } as any),
             ],
-          })
-        );
-      } catch (e) {
-        console.warn('Failed to embed custom back cover', e);
-      }
-    } else {
-      part6Children.push(
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          spacing: { before: 1800, after: 200 },
-          children: [
-            new TextRun({
-              text: 'บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด',
-              font: FONT_FAMILY,
-              size: 40,
-              bold: true,
-              color: COLOR_PRIMARY,
-            }),
-          ],
-        }),
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          spacing: { after: 150 },
-          children: [
-            new TextRun({
-              text: 'Prime Digital Consultant Co., Ltd.',
-              font: FONT_FAMILY,
-              size: 28,
-              bold: true,
-              color: 'B45309',
-            }),
-          ],
-        }),
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          spacing: { after: 100 },
-          children: [
-            new TextRun({
-              text: 'มุ่งมั่นสร้างสรรค์นวัตกรรมดิจิทัลภาครัฐ เพื่อประโยชน์สูงสุดของประชาชน',
-              font: FONT_FAMILY,
-              size: 28,
-              italics: true,
-              color: COLOR_MUTED,
-            }),
-          ],
-        }),
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          spacing: { before: 400 },
-          children: [
-            new TextRun({
-              text: 'โทรศัพท์: 02-XXX-XXXX | อีเมล: contact@primedigital.co.th | เว็บไซต์: www.primedigital.co.th',
-              font: FONT_FAMILY,
-              size: 24,
-              color: COLOR_MUTED,
-            }),
-          ],
-        })
-      );
+          }),
+        ],
+      };
+    } catch (e) {
+      console.warn('Failed to embed full-page front cover', e);
     }
   }
 
-  // Construct sections array dynamically
-  const docSections: ISectionOptions[] = [
-    // Section 1: Portrait (Cover, TOC, Section 1)
-    {
-      properties: {
-        page: {
-          size: { orientation: PageOrientation.PORTRAIT },
-          margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
+  // 2. ปกหลัง (ถ้ามีภาพปกหลัง จะทำเป็นหน้า A4 เต็มหน้าในหน้าสุดท้าย)
+  let backCoverSection: ISectionOptions | null = null;
+  if (cover.includeBackCover && cover.backCoverImage) {
+    try {
+      const backBytes = base64ToUint8Array(cover.backCoverImage);
+      backCoverSection = {
+        properties: {
+          page: {
+            size: { orientation: PageOrientation.PORTRAIT },
+            margin: { top: 0, bottom: 0, left: 0, right: 0 },
+          },
         },
-        titlePage: true, // First page (Front Cover) does not have letterhead background
+        headers: { default: new Header({ children: [] }) },
+        footers: { default: new Footer({ children: [] }) },
+        children: [
+          new Paragraph({
+            spacing: { before: 0, after: 0, line: 0 },
+            children: [
+              new ImageRun({
+                data: backBytes,
+                transformation: { width: 794, height: 1123 }, // A4 Portrait 794 x 1123 px at 96 DPI
+                floating: {
+                  horizontalPosition: {
+                    relative: HorizontalPositionRelativeFrom.PAGE,
+                    align: HorizontalPositionAlign.LEFT,
+                    offset: 0,
+                  },
+                  verticalPosition: {
+                    relative: VerticalPositionRelativeFrom.PAGE,
+                    align: VerticalPositionAlign.TOP,
+                    offset: 0,
+                  },
+                  wrap: {
+                    type: TextWrappingType.NONE,
+                  },
+                },
+              } as any),
+            ],
+          }),
+        ],
+      };
+    } catch (e) {
+      console.warn('Failed to embed full-page back cover', e);
+    }
+  } else if (cover.includeBackCover && !cover.backCoverImage) {
+    // ปกหลังเริ่มต้นแบบทางการของบริษัท
+    part6Children.push(new Paragraph({ children: [new PageBreak()] }));
+    part6Children.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 1800, after: 200 },
+        children: [
+          new TextRun({
+            text: 'บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด',
+            font: FONT_FAMILY,
+            size: 40,
+            bold: true,
+            color: COLOR_PRIMARY,
+          }),
+        ],
+      }),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 150 },
+        children: [
+          new TextRun({
+            text: 'Prime Digital Consultant Co., Ltd.',
+            font: FONT_FAMILY,
+            size: 28,
+            bold: true,
+            color: 'B45309',
+          }),
+        ],
+      }),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 100 },
+        children: [
+          new TextRun({
+            text: 'มุ่งมั่นสร้างสรรค์นวัตกรรมดิจิทัลภาครัฐ เพื่อประโยชน์สูงสุดของประชาชน',
+            font: FONT_FAMILY,
+            size: 28,
+            italics: true,
+            color: COLOR_MUTED,
+          }),
+        ],
+      }),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 400 },
+        children: [
+          new TextRun({
+            text: 'โทรศัพท์: 02-XXX-XXXX | อีเมล: contact@primedigital.co.th | เว็บไซต์: www.primedigital.co.th',
+            font: FONT_FAMILY,
+            size: 24,
+            color: COLOR_MUTED,
+          }),
+        ],
+      })
+    );
+  }
+
+  // Construct sections array dynamically
+  const docSections: ISectionOptions[] = [];
+
+  // Section 0: หน้าปก A4 เต็มหน้า (ถ้ามี - แทรกก่อนหน้าหัวข้อโครงการ)
+  if (frontCoverSection) {
+    docSections.push(frontCoverSection);
+  }
+
+  // Section 1: Portrait (หน้าหัวข้อโครงการและข้อมูลผู้ว่าจ้าง, สารบัญ, และ ส่วนที่ 1)
+  docSections.push({
+    properties: {
+      page: {
+        size: { orientation: PageOrientation.PORTRAIT },
+        margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
       },
-      headers: {
-        default: createCommonHeader(false),
-        first: new Header({ children: [] }),
-      },
-      footers: {
-        default: createCommonFooter(),
-        first: new Footer({ children: [] }),
-      },
-      children: part1Children,
+      titlePage: true, // First page (Title page) does not have letterhead background
     },
-  ];
+    headers: {
+      default: createCommonHeader(false),
+      first: new Header({ children: [] }),
+    },
+    footers: {
+      default: createCommonFooter(),
+      first: new Footer({ children: [] }),
+    },
+    children: part1Children,
+  });
 
   if (part2Children.length > 0) {
     docSections.push({
@@ -2130,6 +2183,11 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
       footers: { default: createCommonFooter() },
       children: part6Children,
     });
+  }
+
+  // Section สุดท้าย: ปกหลัง A4 เต็มหน้า (ถ้ามี)
+  if (backCoverSection) {
+    docSections.push(backCoverSection);
   }
 
   const doc = new Document({

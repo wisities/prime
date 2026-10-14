@@ -180,9 +180,9 @@ export const CoverEditor: React.FC<CoverEditorProps> = ({ cover, onChange }) => 
             <div className="card-title-group">
               <h2 style={{ fontSize: '1.05rem' }}>
                 <ImageIcon size={18} color="var(--primary-700)" />
-                ภาพปกหน้า (Front Cover Image)
+                ภาพหน้าปกขนาด A4 (ก่อนหน้าหัวข้อโครงการ)
               </h2>
-              <p>รองรับไฟล์รูปภาพ PNG, JPG หรือเว้นว่างเพื่อใช้ฟอร์แมตทางการมาตรฐาน</p>
+              <p>แทรกรูปภาพปกหน้าขนาด A4 เต็มหน้า เป็นหน้าแรกของเอกสาร ก่อนหน้าหัวข้อโครงการ</p>
             </div>
           </div>
 
@@ -234,10 +234,10 @@ export const CoverEditor: React.FC<CoverEditorProps> = ({ cover, onChange }) => 
             >
               <Upload size={32} color="var(--slate-400)" style={{ margin: '0 auto 0.5rem' }} />
               <div style={{ fontWeight: 500, color: 'var(--primary-800)', fontSize: '0.9rem' }}>
-                คลิกเพื่ออัปโหลดภาพปกหน้า
+                คลิกเพื่ออัปโหลดภาพปกหน้าขนาด A4
               </div>
               <div style={{ fontSize: '0.75rem', color: 'var(--slate-500)', marginTop: '0.25rem' }}>
-                (แนะนำขนาดอัตราส่วน 16:9 หรือแนวตั้ง A4)
+                (ขนาดมาตรฐาน A4: 210 × 297 มม. แนวตั้ง จะแสดงเต็มหน้าก่อนหน้าหัวข้อโครงการ)
               </div>
             </div>
           )}
@@ -249,9 +249,9 @@ export const CoverEditor: React.FC<CoverEditorProps> = ({ cover, onChange }) => 
             <div className="card-title-group">
               <h2 style={{ fontSize: '1.05rem' }}>
                 <ImageIcon size={18} color="var(--primary-700)" />
-                ภาพปกหลัง (Back Cover Image)
+                ภาพปกหลังขนาด A4 (หน้าสุดท้ายของเล่ม)
               </h2>
-              <p>หากไม่มีภาพ ระบบจะสร้างปกหลังตราสัญลักษณ์บริษัทและข้อมูลติดต่อให้อัตโนมัติ</p>
+              <p>แทรกรูปภาพปกหลังขนาด A4 เต็มหน้า ในหน้าสุดท้าย หรือเว้นว่างเพื่อใช้ปกหลังมาตรฐานบริษัท</p>
             </div>
           </div>
 
@@ -303,10 +303,10 @@ export const CoverEditor: React.FC<CoverEditorProps> = ({ cover, onChange }) => 
             >
               <Upload size={32} color="var(--slate-400)" style={{ margin: '0 auto 0.5rem' }} />
               <div style={{ fontWeight: 500, color: 'var(--primary-800)', fontSize: '0.9rem' }}>
-                คลิกเพื่ออัปโหลดภาพปกหลัง (ทางเลือก)
+                คลิกเพื่ออัปโหลดภาพปกหลังขนาด A4 (ทางเลือก)
               </div>
               <div style={{ fontSize: '0.75rem', color: 'var(--slate-500)', marginTop: '0.25rem' }}>
-                หรือใช้ปกหลังข้อความทางการของ Prime Digital Consultant
+                (ขนาดมาตรฐาน A4: 210 × 297 มม. แนวตั้ง จะแสดงเต็มหน้าในหน้าสุดท้ายของเล่ม)
               </div>
             </div>
           )}

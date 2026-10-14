@@ -216,23 +216,78 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
               </div>
             )}
 
+            {/* Front Cover A4 (แทรกก่อนหน้าหัวข้อโครงการ) */}
+            {cover.coverImage && (
+              <div style={{ marginBottom: '2.5rem' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '0.45rem 0.85rem',
+                    backgroundColor: '#EFF6FF',
+                    border: '1px solid #BFDBFE',
+                    borderRadius: '6px',
+                    marginBottom: '1rem',
+                    fontSize: '0.8rem',
+                    color: '#1D4ED8',
+                    fontWeight: 600,
+                  }}
+                >
+                  <span>📄 หน้าปกเอกสารขนาด A4 เต็มหน้า (แสดงก่อนหน้าหัวข้อโครงการ)</span>
+                  <span style={{ fontSize: '0.72rem', color: '#3B82F6', fontWeight: 'normal' }}>
+                    (A4 Portrait: 210 × 297 มม.)
+                  </span>
+                </div>
+                <div
+                  style={{
+                    textAlign: 'center',
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                    border: '1px solid var(--slate-300)',
+                    padding: '0.5rem',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <img
+                    src={cover.coverImage}
+                    alt="A4 Front Cover"
+                    style={{
+                      width: '100%',
+                      maxHeight: '640px',
+                      objectFit: 'contain',
+                      display: 'block',
+                      margin: '0 auto',
+                    }}
+                  />
+                </div>
+
+                {/* Page Break line */}
+                <div
+                  style={{
+                    margin: '2rem 0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    color: 'var(--slate-400)',
+                    fontSize: '0.8rem',
+                  }}
+                >
+                  <div style={{ flex: 1, borderTop: '1px dashed var(--slate-300)' }} />
+                  <span>ขึ้นหน้าถัดไป: หน้าหัวข้อโครงการและข้อมูลผู้ว่าจ้าง</span>
+                  <div style={{ flex: 1, borderTop: '1px dashed var(--slate-300)' }} />
+                </div>
+              </div>
+            )}
+
             {/* Document Header Code */}
             <div style={{ textAlign: 'right', fontSize: '0.85rem', color: 'var(--slate-400)', marginBottom: '1.5rem' }}>
               รหัสเอกสาร: {cover.projectCode}
             </div>
 
-            {/* Front Cover Box */}
+            {/* Front Cover Title Box (หน้าหัวข้อโครงการ) */}
             <div className="doc-cover-border" style={{ marginBottom: '3rem' }}>
-              {cover.coverImage && (
-                <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-                  <img
-                    src={cover.coverImage}
-                    alt="Cover"
-                    style={{ maxHeight: '180px', maxWidth: '100%', objectFit: 'contain' }}
-                  />
-                </div>
-              )}
-
               <h1 style={{ fontSize: '1.65rem', color: 'var(--primary-900)', fontWeight: 700, marginBottom: '0.75rem' }}>
                 เอกสารข้อเสนอด้านเทคนิค
               </h1>
@@ -1303,6 +1358,85 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
 
               return null;
             })}
+
+            {/* Back Cover Preview (ปกหลัง A4 เต็มหน้า) */}
+            {cover.includeBackCover && (
+              <div style={{ marginTop: '3rem', borderTop: '2px solid var(--primary-800)', paddingTop: '2rem' }}>
+                {cover.backCoverImage ? (
+                  <div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '0.45rem 0.85rem',
+                        backgroundColor: '#EFF6FF',
+                        border: '1px solid #BFDBFE',
+                        borderRadius: '6px',
+                        marginBottom: '1rem',
+                        fontSize: '0.8rem',
+                        color: '#1D4ED8',
+                        fontWeight: 600,
+                      }}
+                    >
+                      <span>📄 ปกหลังเอกสารขนาด A4 เต็มหน้า (หน้าสุดท้ายของเล่ม)</span>
+                      <span style={{ fontSize: '0.72rem', color: '#3B82F6', fontWeight: 'normal' }}>
+                        (A4 Portrait: 210 × 297 มม.)
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        textAlign: 'center',
+                        backgroundColor: '#FFFFFF',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                        border: '1px solid var(--slate-300)',
+                        padding: '0.5rem',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <img
+                        src={cover.backCoverImage}
+                        alt="A4 Back Cover"
+                        style={{
+                          width: '100%',
+                          maxHeight: '640px',
+                          objectFit: 'contain',
+                          display: 'block',
+                          margin: '0 auto',
+                        }}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      textAlign: 'center',
+                      padding: '4rem 2rem',
+                      backgroundColor: 'var(--slate-50)',
+                      borderRadius: '8px',
+                      border: '1px solid var(--slate-200)',
+                    }}
+                  >
+                    <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--primary-900)', marginBottom: '0.5rem' }}>
+                      บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด
+                    </div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--gold-600)', marginBottom: '1.5rem' }}>
+                      Prime Digital Consultant Co., Ltd.
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--slate-600)', fontStyle: 'italic', marginBottom: '2rem' }}>
+                      มุ่งมั่นสร้างสรรค์นวัตกรรมดิจิทัลภาครัฐ เพื่อประโยชน์สูงสุดของประชาชน
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--slate-500)' }}>
+                      โทรศัพท์: 02-XXX-XXXX | อีเมล: contact@primedigital.co.th | เว็บไซต์: www.primedigital.co.th
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--slate-400)', marginTop: '1rem' }}>
+                      [หน้าปกหลังเริ่มต้นปิดเล่มเอกสาร]
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
