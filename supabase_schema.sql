@@ -197,7 +197,30 @@ CREATE POLICY "Allow public insert/update/delete to master_company_profile"
     ON public.master_company_profile FOR ALL USING (true);
 
 -- ==============================================================================
--- 12. Migration Scripts (สำหรับฐานข้อมูลเดิมที่เคยรันตารางไว้แล้ว)
+-- 12. ตาราง allowed_users: จัดการรายชื่อบัญชี Google/Gmail ที่ได้รับสิทธิ์เข้าใช้งานระบบ
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.allowed_users (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    email TEXT NOT NULL UNIQUE,
+    name TEXT,
+    added_by TEXT DEFAULT 'Admin',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Index สำหรับค้นหาอีเมลผู้ได้รับสิทธิ์
+CREATE INDEX IF NOT EXISTS idx_allowed_users_email ON public.allowed_users(email);
+
+-- ตั้งค่าสิทธิ์ Row Level Security (RLS) สำหรับ allowed_users
+ALTER TABLE public.allowed_users ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public read access to allowed_users" 
+    ON public.allowed_users FOR SELECT USING (true);
+
+CREATE POLICY "Allow public insert/update/delete to allowed_users" 
+    ON public.allowed_users FOR ALL USING (true);
+
+-- ==============================================================================
+-- 13. Migration Scripts (สำหรับฐานข้อมูลเดิมที่เคยรันตารางไว้แล้ว)
 -- ==============================================================================
 -- รันคำสั่งด้านล่างนี้ใน Supabase SQL Editor หากเคยรันสคริปต์เวอร์ชันก่อนหน้า:
 
@@ -234,5 +257,27 @@ BEGIN
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public insert/update/delete to master_company_profile') THEN
         CREATE POLICY "Allow public insert/update/delete to master_company_profile" ON public.master_company_profile FOR ALL USING (true);
+    END IF;
+END $$;
+
+-- C. สร้างตาราง allowed_users (Whitelist ผู้มีสิทธิ์เข้าใช้งานระบบด้วย Google) หากยังไม่มี
+CREATE TABLE IF NOT EXISTS public.allowed_users (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    email TEXT NOT NULL UNIQUE,
+    name TEXT,
+    added_by TEXT DEFAULT 'Admin',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_allowed_users_email ON public.allowed_users(email);
+ALTER TABLE public.allowed_users ENABLE ROW LEVEL SECURITY;
+
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public read access to allowed_users') THEN
+        CREATE POLICY "Allow public read access to allowed_users" ON public.allowed_users FOR SELECT USING (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public insert/update/delete to allowed_users') THEN
+        CREATE POLICY "Allow public insert/update/delete to allowed_users" ON public.allowed_users FOR ALL USING (true);
     END IF;
 END $$;

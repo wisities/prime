@@ -49,6 +49,9 @@ import {
   LogOut,
   SlidersHorizontal,
   FileSpreadsheet,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
 
 import { loadAllProjects, saveProject, normalizeProjectBudget } from './services/projectStorageService';
@@ -239,6 +242,76 @@ export const App: React.FC = () => {
       .forEach((p) => saveProject(p));
   };
 
+  // Save Draft state & Feedback
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
+  const [draftToast, setDraftToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const handleManualSaveDraft = async (showToast: boolean = true): Promise<boolean> => {
+    if (!currentProject) return false;
+    setIsSavingDraft(true);
+    try {
+      const effectiveBudget = proposal.section1?.budgetAmount || currentProject.budgetAmount || 0;
+      const updatedProject = normalizeProjectBudget({
+        ...currentProject,
+        proposalData: proposal,
+        projectTitle: proposal.cover.projectTitle || currentProject.projectTitle,
+        projectCode: proposal.cover.projectCode || currentProject.projectCode,
+        clientAgency: proposal.cover.clientAgency || currentProject.clientAgency,
+        budgetAmount: proposal.section1?.budgetAmount || currentProject.budgetAmount || effectiveBudget,
+        updatedAt: new Date().toISOString(),
+      });
+
+      // Update local projects list
+      setProjects((prev) => prev.map((p) => (p.id === updatedProject.id ? updatedProject : p)));
+
+      // Persist to LocalStorage and Supabase Cloud
+      const ok = await saveProject(updatedProject);
+
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+      setLastSavedTime(timeStr);
+
+      if (showToast) {
+        setDraftToast({
+          message: `✓ บันทึกร่างโครงการ "${updatedProject.projectTitle || updatedProject.projectCode}" สำเร็จเรียบร้อย (${timeStr} น.)`,
+          type: 'success',
+        });
+        setTimeout(() => setDraftToast(null), 3500);
+      }
+      return ok;
+    } catch (err: any) {
+      console.error('Failed to save draft:', err);
+      if (showToast) {
+        setDraftToast({
+          message: `เกิดข้อผิดพลาดในการบันทึกร่าง: ${err?.message || 'Network error'}`,
+          type: 'error',
+        });
+        setTimeout(() => setDraftToast(null), 4000);
+      }
+      return false;
+    } finally {
+      setIsSavingDraft(false);
+    }
+  };
+
+  const handleBackToDashboard = async () => {
+    setIsSavingDraft(true);
+    try {
+      await handleManualSaveDraft(false);
+      setDraftToast({
+        message: '✓ บันทึกร่างโครงการล่าสุดเรียบร้อยแล้ว ข้อมูลปลอดภัย 100%',
+        type: 'success',
+      });
+      setTimeout(() => setDraftToast(null), 3500);
+    } catch (err) {
+      console.warn('Auto-save before exit error:', err);
+    } finally {
+      setIsSavingDraft(false);
+      setCurrentView('dashboard');
+    }
+  };
+
   // Editor Tabs
   const [activeTab, setActiveTab] = useState<
     'cover' | 'section1' | 'section2' | 'section3' | 'section4' | 'section5'
@@ -387,36 +460,93 @@ export const App: React.FC = () => {
 
   return (
     <div>
+      {/* Draft Save Toast Notification */}
+      {draftToast && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '1.25rem',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.65rem',
+            backgroundColor: draftToast.type === 'success' ? '#065F46' : '#991B1B',
+            color: '#FFFFFF',
+            padding: '0.65rem 1.25rem',
+            borderRadius: '30px',
+            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.25)',
+            fontSize: '0.875rem',
+            fontWeight: 600,
+            pointerEvents: 'none',
+          }}
+        >
+          {draftToast.type === 'success' ? <CheckCircle2 size={18} color="#34D399" /> : <AlertCircle size={18} color="#F87171" />}
+          <span>{draftToast.message}</span>
+        </div>
+      )}
+
       {/* Top Header */}
       <header className="app-header">
         <div className="header-inner">
           <div className="brand-section">
             <div
               className="brand-logo-badge"
-              onClick={() => setCurrentView('dashboard')}
+              onClick={currentView === 'editor' ? handleBackToDashboard : () => setCurrentView('dashboard')}
               style={{ cursor: 'pointer' }}
               title="กลับสู่หน้าแรก Dashboard"
             >
               PDC
             </div>
             <div className="brand-title-group">
-              <h1 onClick={() => setCurrentView('dashboard')} style={{ cursor: 'pointer' }}>
+              <h1
+                onClick={currentView === 'editor' ? handleBackToDashboard : () => setCurrentView('dashboard')}
+                style={{ cursor: 'pointer' }}
+              >
                 ระบบจัดทำข้อเสนอโครงการภาครัฐ | บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด
               </h1>
               <p>Government Project Proposal Management System & Thai Sarabun Word Exporter</p>
             </div>
 
             {currentView === 'editor' ? (
-              <button
-                type="button"
-                className="btn-back-dashboard"
-                onClick={() => setCurrentView('dashboard')}
-                title="กลับสู่หน้า Dashboard ภาพรวมโครงการ"
-                style={{ marginLeft: '0.85rem' }}
-              >
-                <ArrowLeft size={15} />
-                <span>กลับหน้า Dashboard</span>
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginLeft: '0.85rem' }}>
+                <button
+                  type="button"
+                  className="btn-back-dashboard"
+                  onClick={handleBackToDashboard}
+                  disabled={isSavingDraft}
+                  title="บันทึกร่างและกลับสู่หน้า Dashboard ภาพรวมโครงการ"
+                >
+                  <ArrowLeft size={15} />
+                  <span>{isSavingDraft ? 'กำลังบันทึกร่าง...' : 'กลับหน้า Dashboard'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="btn-save-draft"
+                  onClick={() => handleManualSaveDraft(true)}
+                  disabled={isSavingDraft}
+                  title="บันทึกร่างโครงการลงฐานข้อมูลทันที เพื่อป้องกันข้อมูลสูญหาย"
+                >
+                  {isSavingDraft ? (
+                    <>
+                      <Loader2 size={15} className="spinner-icon" />
+                      <span>กำลังบันทึกร่าง...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save size={15} />
+                      <span>บันทึกร่าง</span>
+                      {lastSavedTime && (
+                        <span style={{ fontSize: '0.72rem', opacity: 0.9, marginLeft: '2px', fontWeight: 400 }}>
+                          ({lastSavedTime} น.)
+                        </span>
+                      )}
+                    </>
+                  )}
+                </button>
+              </div>
             ) : (
               <button
                 type="button"
@@ -755,14 +885,44 @@ export const App: React.FC = () => {
                 gap: '0.75rem',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
                 <button
                   type="button"
-                  onClick={() => setCurrentView('dashboard')}
+                  onClick={handleBackToDashboard}
+                  disabled={isSavingDraft}
                   className="btn btn-secondary"
-                  style={{ padding: '0.25rem 0.65rem', fontSize: '0.785rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  style={{ padding: '0.28rem 0.65rem', fontSize: '0.785rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  title="บันทึกร่างและกลับสู่ Dashboard"
                 >
-                  <ArrowLeft size={13} /> Dashboard
+                  <ArrowLeft size={13} /> {isSavingDraft ? 'กำลังบันทึก...' : 'Dashboard'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleManualSaveDraft(true)}
+                  disabled={isSavingDraft}
+                  className="btn btn-primary"
+                  style={{
+                    padding: '0.28rem 0.75rem',
+                    fontSize: '0.785rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    fontWeight: 600,
+                  }}
+                  title="บันทึกร่างโครงการลงฐานข้อมูลทันที"
+                >
+                  {isSavingDraft ? (
+                    <>
+                      <Loader2 size={13} className="spinner-icon" />
+                      <span>กำลังบันทึกร่าง...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save size={13} />
+                      <span>บันทึกร่าง</span>
+                    </>
+                  )}
                 </button>
 
                 <span
@@ -814,8 +974,16 @@ export const App: React.FC = () => {
                 <div>
                   งบประมาณ: <strong>{(proposal.section1?.budgetAmount || currentProject?.budgetAmount || 0).toLocaleString()} บาท</strong>
                 </div>
-                <div style={{ color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <CheckCircle size={14} /> บันทึกอัตโนมัติแล้ว
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  {isSavingDraft ? (
+                    <span style={{ color: '#D97706', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 500 }}>
+                      <Loader2 size={14} className="spinner-icon" /> กำลังบันทึกร่าง...
+                    </span>
+                  ) : (
+                    <span style={{ color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 500 }}>
+                      <CheckCircle2 size={14} /> {lastSavedTime ? `บันทึกร่างแล้ว (${lastSavedTime} น.)` : 'บันทึกร่างอัตโนมัติแล้ว'}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

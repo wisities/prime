@@ -2483,14 +2483,49 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                         </div>
                       )}
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ color: 'var(--slate-600)' }}>ตาราง bidding_projects:</span>
-                        <span style={{ fontWeight: 600, color: diagResult.tableExists ? '#10B981' : '#EF4444' }}>
-                          {diagResult.tableExists ? '✅ พร้อมใช้งาน' : '❌ ไม่พบตาราง (ต้องรัน SQL)'}
-                        </span>
-                      </div>
+                      {diagResult.tables && diagResult.tables.length > 0 ? (
+                        <div style={{ marginTop: '0.4rem', borderTop: '1px solid var(--slate-200)', paddingTop: '0.6rem' }}>
+                          <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--slate-700)', marginBottom: '0.4rem' }}>
+                            สถานะตารางข้อมูลใน SQL ({diagResult.tables.length} ตาราง):
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                            {diagResult.tables.map((tbl) => (
+                              <div
+                                key={tbl.name}
+                                style={{
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center',
+                                  fontSize: '0.785rem',
+                                  padding: '0.25rem 0.5rem',
+                                  backgroundColor: tbl.exists ? '#F0FDF4' : '#FEF2F2',
+                                  borderRadius: '5px',
+                                  border: `1px solid ${tbl.exists ? '#BBF7D0' : '#FECACA'}`,
+                                }}
+                              >
+                                <span style={{ color: tbl.exists ? '#166534' : '#991B1B', fontWeight: 500 }}>
+                                  {tbl.exists ? '✅' : '❌'} <code>{tbl.name}</code>
+                                  <span style={{ color: 'var(--slate-500)', marginLeft: '6px', fontSize: '0.75rem' }}>
+                                    {tbl.label.split('(')[0].trim()}
+                                  </span>
+                                </span>
+                                <span style={{ fontWeight: 600, color: tbl.exists ? '#15803D' : '#DC2626' }}>
+                                  {tbl.exists ? `${tbl.count} รายการ` : 'ยังไม่มีตาราง (ต้องรัน SQL)'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: 'var(--slate-600)' }}>ตาราง bidding_projects:</span>
+                          <span style={{ fontWeight: 600, color: diagResult.tableExists ? '#10B981' : '#EF4444' }}>
+                            {diagResult.tableExists ? '✅ พร้อมใช้งาน' : '❌ ไม่พบตาราง (ต้องรัน SQL)'}
+                          </span>
+                        </div>
+                      )}
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.35rem' }}>
                         <span style={{ color: 'var(--slate-600)' }}>Storage project-attachments:</span>
                         <span style={{ fontWeight: 600, color: diagResult.storageExists ? '#10B981' : '#F59E0B' }}>
                           {diagResult.storageExists ? '✅ พร้อมใช้งาน' : '⚠️ ยังไม่พบ Bucket (สร้างอัตโนมัติจาก SQL)'}

@@ -503,6 +503,15 @@ export async function uploadAttachmentFile(
   };
 }
 
+export interface TableAuditStatus {
+  name: string;
+  label: string;
+  exists: boolean;
+  count: number;
+  status: 'ok' | 'missing' | 'error';
+  detail?: string;
+}
+
 export interface SupabaseTestResult {
   isConfigured: boolean;
   connected: boolean;
@@ -512,14 +521,17 @@ export interface SupabaseTestResult {
   projectCount: number;
   message: string;
   errorDetail?: string;
+  tables?: TableAuditStatus[];
+  allTablesReady?: boolean;
 }
 
 /**
- * ฟังก์ชันสำหรับทดสอบการเชื่อมต่อกับ Supabase และตรวจสอบโครงสร้างตาราง
+ * ฟังก์ชันสำหรับทดสอบการเชื่อมต่อกับ Supabase และตรวจสอบโครงสร้างตารางทุกตาราง
  */
 export async function testSupabaseConnection(): Promise<SupabaseTestResult> {
   const configured = isSupabaseConfigured();
-  if (!configured || !supabase) {
+  const client = supabase;
+  if (!configured || !client) {
     return {
       isConfigured: false,
       connected: false,
@@ -532,40 +544,73 @@ export async function testSupabaseConnection(): Promise<SupabaseTestResult> {
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 
+  const tableDefinitions = [
+    { name: 'bidding_projects', label: 'โครงการและข้อเสนอ (bidding_projects)' },
+    { name: 'project_attachments', label: 'ไฟล์แนบและ TOR (project_attachments)' },
+    { name: 'master_team_library', label: 'คลังบุคลากรกลาง (master_team_library)' },
+    { name: 'master_projects_library', label: 'คลังผลงานย้อนหลัง (master_projects_library)' },
+    { name: 'master_bom_catalog', label: 'คลังถอดแบบ BOM (master_bom_catalog)' },
+    { name: 'master_company_profile', label: 'ข้อมูลบริษัทกลาง (master_company_profile)' },
+    { name: 'allowed_users', label: 'ผู้มีสิทธิ์ใช้งาน Google (allowed_users)' },
+  ];
+
   try {
-    // 1. ทดสอบการเชื่อมต่อตาราง bidding_projects
-    const { data, count, error } = await supabase
-      .from('bidding_projects')
-      .select('id', { count: 'exact' });
+    // ตรวจสอบทุกตารางพร้อมกันแบบ Parallel
+    const auditedTables: TableAuditStatus[] = await Promise.all(
+      tableDefinitions.map(async (def) => {
+        try {
+          const { count, error } = await client
+            .from(def.name)
+            .select('*', { count: 'exact', head: true });
 
-    if (error) {
-      const isMissingTable =
-        error.code === '42P01' ||
-        error.message?.includes('relation') ||
-        error.message?.includes('does not exist');
+          if (error) {
+            const isMissing =
+              error.code === '42P01' ||
+              error.message?.includes('relation') ||
+              error.message?.includes('does not exist');
 
-      return {
-        isConfigured: true,
-        connected: false,
-        url: supabaseUrl,
-        tableExists: false,
-        storageExists: false,
-        projectCount: 0,
-        message: isMissingTable
-          ? 'เชื่อมต่อ Supabase ได้แล้ว แต่ยังไม่พบตาราง "bidding_projects" กรุณารันไฟล์ supabase_schema.sql ใน SQL Editor ของ Supabase'
-          : `เกิดข้อผิดพลาดในการเชื่อมต่อฐานข้อมูล: ${error.message}`,
-        errorDetail: error.message,
-      };
-    }
+            return {
+              name: def.name,
+              label: def.label,
+              exists: !isMissing,
+              count: 0,
+              status: isMissing ? 'missing' : 'error',
+              detail: error.message,
+            };
+          }
 
-    // 2. ทดสอบ Storage bucket 'project-attachments'
+          return {
+            name: def.name,
+            label: def.label,
+            exists: true,
+            count: count ?? 0,
+            status: 'ok',
+          };
+        } catch (tableErr: any) {
+          return {
+            name: def.name,
+            label: def.label,
+            exists: false,
+            count: 0,
+            status: 'error',
+            detail: tableErr?.message || 'Check failed',
+          };
+        }
+      })
+    );
+
+    const mainTable = auditedTables.find((t) => t.name === 'bidding_projects');
+    const tableExists = Boolean(mainTable?.exists && mainTable.status === 'ok');
+    const allTablesReady = auditedTables.every((t) => t.exists && t.status === 'ok');
+    const projectCount = mainTable?.count ?? 0;
+
+    // ตรวจสอบ Storage bucket 'project-attachments'
     let storageExists = false;
     try {
-      const { error: listErr } = await supabase.storage
+      const { error: listErr } = await client.storage
         .from('project-attachments')
         .list('', { limit: 1 });
 
-      // หากเข้าถึงได้ หรือ error ไม่ใช่ Bucket not found แปลว่า Bucket มีอยู่จริงและพร้อมใช้งาน
       if (!listErr || !listErr.message?.toLowerCase().includes('not found')) {
         storageExists = true;
       }
@@ -573,7 +618,25 @@ export async function testSupabaseConnection(): Promise<SupabaseTestResult> {
       storageExists = true;
     }
 
-    const countNum = count ?? (data ? data.length : 0);
+    if (!tableExists) {
+      return {
+        isConfigured: true,
+        connected: false,
+        url: supabaseUrl,
+        tableExists: false,
+        storageExists,
+        projectCount: 0,
+        tables: auditedTables,
+        allTablesReady: false,
+        message: 'เชื่อมต่อ Supabase ได้แล้ว แต่ยังไม่พบตาราง "bidding_projects" กรุณารันไฟล์ supabase_schema.sql ใน SQL Editor ของ Supabase',
+        errorDetail: mainTable?.detail,
+      };
+    }
+
+    const missingTables = auditedTables.filter((t) => !t.exists);
+    const successMsg = allTablesReady
+      ? `เชื่อมต่อ Supabase Cloud สำเร็จ 100%! โครงสร้างตารางครบทั้ง 7 ตาราง และพบข้อมูลโครงการทั้งหมด ${projectCount} โครงการ`
+      : `เชื่อมต่อตารางโครงการได้แล้ว แต่ยังมีบางตารางยังไม่ได้สร้าง (${missingTables.map((t) => t.name).join(', ')}) กรุณารัน supabase_schema.sql เพิ่มเติม`;
 
     return {
       isConfigured: true,
@@ -581,8 +644,10 @@ export async function testSupabaseConnection(): Promise<SupabaseTestResult> {
       url: supabaseUrl,
       tableExists: true,
       storageExists,
-      projectCount: countNum,
-      message: `เชื่อมต่อ Supabase Cloud สำเร็จ 100%! พบข้อมูลโครงการทั้งหมด ${countNum} โครงการ`,
+      projectCount,
+      tables: auditedTables,
+      allTablesReady,
+      message: successMsg,
     };
   } catch (err: any) {
     return {
