@@ -42,51 +42,121 @@ function base64ToUint8Array(base64: string): Uint8Array {
   return bytes;
 }
 
-function getImageDimensionsFromBytes(bytes: Uint8Array): { width: number; height: number } | null {
-  try {
-    // PNG format (bytes 16-23 contain width & height in big-endian)
-    if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 && bytes.length >= 24) {
-      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-      return { width: view.getUint32(16), height: view.getUint32(20) };
-    }
-    // JPEG format (scan for SOF markers 0xC0, 0xC1, 0xC2)
-    if (bytes[0] === 0xff && bytes[1] === 0xd8) {
-      let offset = 2;
-      const len = bytes.length;
-      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-      while (offset < len) {
-        if (bytes[offset] !== 0xff) break;
-        const marker = bytes[offset + 1];
-        if (marker === 0xc0 || marker === 0xc1 || marker === 0xc2) {
-          return { height: view.getUint16(offset + 5), width: view.getUint16(offset + 7) };
-        }
-        offset += 2 + view.getUint16(offset + 2);
-      }
-    }
-  } catch (e) {
-    // ignore parsing errors
-  }
-  return null;
-}
-
 const FONT_FAMILY = 'TH Sarabun New';
 const COLOR_PRIMARY = '0F2744'; // Navy
 const COLOR_SECONDARY = '1E3A8A';
 const COLOR_TEXT = '1E293B';
 const COLOR_MUTED = '64748B';
 
+// Helper function to extract natural image dimensions from byte array (PNG, JPEG, GIF, WEBP)
+function getImageDimensionsFromBytes(bytes: Uint8Array): { width: number; height: number } | null {
+  if (!bytes || bytes.length < 16) return null;
+
+  // 1. PNG check: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  ) {
+    if (bytes.length >= 24) {
+      const width = ((bytes[16] << 24) >>> 0) + (bytes[17] << 16) + (bytes[18] << 8) + bytes[19];
+      const height = ((bytes[20] << 24) >>> 0) + (bytes[21] << 16) + (bytes[22] << 8) + bytes[23];
+      if (width > 0 && height > 0) return { width, height };
+    }
+  }
+
+  // 2. GIF check: GIF87a or GIF89a
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) {
+    if (bytes.length >= 10) {
+      const width = bytes[6] | (bytes[7] << 8);
+      const height = bytes[8] | (bytes[9] << 8);
+      if (width > 0 && height > 0) return { width, height };
+    }
+  }
+
+  // 3. JPEG check: FF D8
+  if (bytes[0] === 0xff && bytes[1] === 0xd8) {
+    let offset = 2;
+    while (offset < bytes.length - 8) {
+      if (bytes[offset] !== 0xff) {
+        offset++;
+        continue;
+      }
+      const marker = bytes[offset + 1];
+      if (marker === 0xc0 || marker === 0xc1 || marker === 0xc2) {
+        const height = (bytes[offset + 5] << 8) | bytes[offset + 6];
+        const width = (bytes[offset + 7] << 8) | bytes[offset + 8];
+        if (width > 0 && height > 0) return { width, height };
+        break;
+      }
+      if (offset + 3 >= bytes.length) break;
+      const length = (bytes[offset + 2] << 8) | bytes[offset + 3];
+      offset += 2 + length;
+    }
+  }
+
+  // 4. WEBP check: RIFF....WEBP
+  if (
+    bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+    bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
+  ) {
+    if (bytes[12] === 0x56 && bytes[13] === 0x50 && bytes[14] === 0x38 && bytes[15] === 0x20 && bytes.length >= 30) {
+      const width = (bytes[26] | (bytes[27] << 8)) & 0x3fff;
+      const height = (bytes[28] | (bytes[29] << 8)) & 0x3fff;
+      if (width > 0 && height > 0) return { width, height };
+    }
+    if (bytes[12] === 0x56 && bytes[13] === 0x50 && bytes[14] === 0x38 && bytes[15] === 0x4c && bytes.length >= 25) {
+      const b1 = bytes[21];
+      const b2 = bytes[22];
+      const b3 = bytes[23];
+      const b4 = bytes[24];
+      const width = 1 + (((b2 & 0x3f) << 8) | b1);
+      const height = 1 + (((b4 & 0x0f) << 10) | (b3 << 2) | ((b2 & 0xc0) >> 6));
+      if (width > 0 && height > 0) return { width, height };
+    }
+    if (bytes[12] === 0x56 && bytes[13] === 0x50 && bytes[14] === 0x38 && bytes[15] === 0x58 && bytes.length >= 30) {
+      const width = 1 + (bytes[24] | (bytes[25] << 8) | (bytes[26] << 16));
+      const height = 1 + (bytes[27] | (bytes[28] << 8) | (bytes[29] << 16));
+      if (width > 0 && height > 0) return { width, height };
+    }
+  }
+
+  return null;
+}
+
+// คำนวณความสูงตามสัดส่วนดั้งเดิมของไฟล์ภาพ (รักษาความกว้าง 6 หรือ 3 นิ้วโดยไม่บีบหรือยืดภาพ)
+function getImageProportionalHeight(bytes: Uint8Array, targetWidth: number, defaultHeight: number): number {
+  try {
+    const dims = getImageDimensionsFromBytes(bytes);
+    if (dims && dims.width > 0 && dims.height > 0) {
+      const calculatedHeight = Math.round((targetWidth / dims.width) * dims.height);
+      // จำกัดความสูงสูงสุดไม่เกิน 750 pt เพื่อป้องกันภาพล้นหน้า A4
+      return Math.min(Math.max(calculatedHeight, 30), 750);
+    }
+  } catch (err) {
+    console.warn('Error reading natural image dimensions:', err);
+  }
+  return defaultHeight;
+}
+
 // Helper function to render unlimited 6-inch single and 3-inch paired images to docx
 function renderImageBlocksToDocx(
   blocks?: ReportImageBlock[],
-  defaultPrefix: string = 'ภาพที่'
+  _defaultPrefix: string = 'ภาพที่'
 ): (Paragraph | Table)[] {
   if (!blocks || !Array.isArray(blocks) || blocks.length === 0) return [];
   const elements: (Paragraph | Table)[] = [];
 
-  blocks.forEach((block, bIdx) => {
+  blocks.forEach((block) => {
     if (block.type === 'single' && block.url) {
       try {
         const imgBytes = base64ToUint8Array(block.url);
+        const singleHeight = getImageProportionalHeight(imgBytes, 576, 320); // กว้าง 6 นิ้ว (576 px) ปล่อยสูงตามสัดส่วนเดิม
         elements.push(
           new Paragraph({
             alignment: AlignmentType.CENTER,
@@ -94,24 +164,31 @@ function renderImageBlocksToDocx(
             children: [
               new ImageRun({
                 data: imgBytes,
-                transformation: { width: 576, height: 260 }, // กว้าง 6 นิ้ว (576 px) กึ่งกลาง
+                transformation: { width: 576, height: singleHeight },
               } as any),
-            ],
-          }),
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing: { after: 140 },
-            children: [
-              new TextRun({
-                text: block.caption || `${defaultPrefix}-${bIdx + 1} ภาพแสดงรายละเอียดการดำเนินงาน`,
-                font: FONT_FAMILY,
-                size: 26,
-                italics: true,
-                color: COLOR_MUTED,
-              }),
             ],
           })
         );
+
+        // แคปชันของรูปภาพประกอบ: ถ้าไม่ได้เพิ่มข้อความให้ ให้ว่างไว้เลย
+        const captionText = (block.caption || '').trim();
+        if (captionText) {
+          elements.push(
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 140 },
+              children: [
+                new TextRun({
+                  text: captionText,
+                  font: FONT_FAMILY,
+                  size: 26,
+                  italics: true,
+                  color: COLOR_MUTED,
+                }),
+              ],
+            })
+          );
+        }
       } catch (e) {
         console.error('Failed to embed single image', e);
       }
@@ -122,6 +199,7 @@ function renderImageBlocksToDocx(
 
         if (block.leftUrl) {
           const leftBytes = base64ToUint8Array(block.leftUrl);
+          const leftHeight = getImageProportionalHeight(leftBytes, 288, 160); // กว้าง 3 นิ้ว (288 px) ปล่อยสูงตามสัดส่วนเดิม
           leftCellChildren.push(
             new Paragraph({
               alignment: AlignmentType.CENTER,
@@ -129,29 +207,37 @@ function renderImageBlocksToDocx(
               children: [
                 new ImageRun({
                   data: leftBytes,
-                  transformation: { width: 288, height: 160 }, // กว้าง 3 นิ้ว (288 px)
+                  transformation: { width: 288, height: leftHeight },
                 } as any),
-              ],
-            }),
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              children: [
-                new TextRun({
-                  text: block.leftCaption || 'ภาพประกอบ (กว้าง 3 นิ้ว)',
-                  font: FONT_FAMILY,
-                  size: 24,
-                  italics: true,
-                  color: COLOR_MUTED,
-                }),
               ],
             })
           );
+
+          // แคปชันภาพซ้าย: ถ้าไม่ได้เพิ่มข้อความให้ ให้ว่างไว้เลย
+          const leftCap = (block.leftCaption || '').trim();
+          if (leftCap) {
+            leftCellChildren.push(
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [
+                  new TextRun({
+                    text: leftCap,
+                    font: FONT_FAMILY,
+                    size: 24,
+                    italics: true,
+                    color: COLOR_MUTED,
+                  }),
+                ],
+              })
+            );
+          }
         } else {
           leftCellChildren.push(new Paragraph({ children: [] }));
         }
 
         if (block.rightUrl) {
           const rightBytes = base64ToUint8Array(block.rightUrl);
+          const rightHeight = getImageProportionalHeight(rightBytes, 288, 160); // กว้าง 3 นิ้ว (288 px) ปล่อยสูงตามสัดส่วนเดิม
           rightCellChildren.push(
             new Paragraph({
               alignment: AlignmentType.CENTER,
@@ -159,23 +245,30 @@ function renderImageBlocksToDocx(
               children: [
                 new ImageRun({
                   data: rightBytes,
-                  transformation: { width: 288, height: 160 }, // กว้าง 3 นิ้ว (288 px)
+                  transformation: { width: 288, height: rightHeight },
                 } as any),
-              ],
-            }),
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              children: [
-                new TextRun({
-                  text: block.rightCaption || 'ภาพประกอบ (กว้าง 3 นิ้ว)',
-                  font: FONT_FAMILY,
-                  size: 24,
-                  italics: true,
-                  color: COLOR_MUTED,
-                }),
               ],
             })
           );
+
+          // แคปชันภาพขวา: ถ้าไม่ได้เพิ่มข้อความให้ ให้ว่างไว้เลย
+          const rightCap = (block.rightCaption || '').trim();
+          if (rightCap) {
+            rightCellChildren.push(
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [
+                  new TextRun({
+                    text: rightCap,
+                    font: FONT_FAMILY,
+                    size: 24,
+                    italics: true,
+                    color: COLOR_MUTED,
+                  }),
+                ],
+              })
+            );
+          }
         } else {
           rightCellChildren.push(new Paragraph({ children: [] }));
         }
@@ -208,9 +301,13 @@ function renderImageBlocksToDocx(
           ],
         });
 
-        elements.push(twoColTable);
+        elements.push(
+          new Paragraph({ spacing: { before: 140, after: 60 }, children: [] }),
+          twoColTable,
+          new Paragraph({ spacing: { after: 140 }, children: [] })
+        );
       } catch (e) {
-        console.error('Failed to embed two-column images', e);
+        console.error('Failed to embed pair images', e);
       }
     }
   });
@@ -499,6 +596,15 @@ function createCenteredClientLogo(logoBase64?: string, clientName?: string): Par
   if (logoBase64) {
     try {
       const logoBytes = base64ToUint8Array(logoBase64);
+      const dims = getImageDimensionsFromBytes(logoBytes);
+      let targetW = 140;
+      let targetH = 65;
+      if (dims && dims.width > 0 && dims.height > 0) {
+        // จำกัดขนาดไม่เกิน กว้าง 160pt สูง 70pt โดยรักษาสัดส่วนเดิมตามไฟล์ดั้งเดิม
+        const ratio = Math.min(160 / dims.width, 70 / dims.height, 1);
+        targetW = Math.max(Math.round(dims.width * ratio), 30);
+        targetH = Math.max(Math.round(dims.height * ratio), 20);
+      }
       elements.push(
         new Paragraph({
           alignment: AlignmentType.CENTER,
@@ -506,7 +612,7 @@ function createCenteredClientLogo(logoBase64?: string, clientName?: string): Par
           children: [
             new ImageRun({
               data: logoBytes,
-              transformation: { width: 140, height: 65 },
+              transformation: { width: targetW, height: targetH },
             } as any),
           ],
         })
@@ -1996,11 +2102,17 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
 
   // =========================================================================
   // SECTION 5A (PORTRAIT - แนวตั้ง): 5.1 ข้อมูลบริษัท, โลโก้, รูปสำนักงาน, 5.2 มาตรฐาน
-  // SECTION 5B (LANDSCAPE - แนวนอน): 5.3 ผลงานและประสบการณ์ที่เกี่ยวข้อง (ตารางสัญญาจ้าง)
+  // SECTION 5B (LANDSCAPE - แนวนอน): 5.3.1 ตารางรายชื่อโครงการอ้างอิงหลัก
+  // SECTION 5C (PORTRAIT - แนวตั้ง): รายละเอียดแต่ละโครงการอ้างอิงหลัก
+  // SECTION 5D (LANDSCAPE - แนวนอน): 5.3.2 ตารางรายชื่อโครงการผลงานเสริม
+  // SECTION 5E (PORTRAIT - แนวตั้ง): รายละเอียดแต่ละโครงการผลงานเสริม
   // SECTION 6 (PORTRAIT - แนวตั้ง): ภาคผนวก ก & ปกหลัง
   // =========================================================================
   const part5AChildren: (Paragraph | Table)[] = [];
-  const part5BChildren: (Paragraph | Table)[] = [];
+  const part5B_torTableChildren: (Paragraph | Table)[] = [];
+  const part5C_torDetailsChildren: (Paragraph | Table)[] = [];
+  const part5D_suppTableChildren: (Paragraph | Table)[] = [];
+  const part5E_suppDetailsChildren: (Paragraph | Table)[] = [];
   const part6Children: (Paragraph | Table)[] = [];
 
   const s5Config = docStructure.sections.find((s) => s.id === 'section5');
@@ -2031,8 +2143,13 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
     );
 
     const has53 = activeS5Headings.some((h) => h.id === 's5_tor_reference' || h.id === 's5_supplementary');
+    if (!is5AActive && has53) {
+      part5B_torTableChildren.push(
+        createSectionHeader('ส่วนที่ 5', 'ประวัติและประสบการณ์ของบริษัทที่เกี่ยวข้อง')
+      );
+    }
     if (has53) {
-      part5BChildren.push(
+      part5B_torTableChildren.push(
         createH2('5.3 ผลงานและประสบการณ์ที่เกี่ยวข้อง')
       );
     }
@@ -2113,7 +2230,8 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
           part5AChildren.push(createP(`✓ ${cert}`, { spaceAfter: 60, firstLineIndent: 450, align: AlignmentType.LEFT }));
         });
       } else if (h.id === 's5_tor_reference') {
-        part5BChildren.push(
+        // หัวข้อ 5.3.1 และ ตารางสรุปโครงการที่ใช้อ้างอิง จัดวางเป็นเอกสารแนวนอน (LANDSCAPE)
+        part5B_torTableChildren.push(
           new Paragraph({
             heading: HeadingLevel.HEADING_3,
             spacing: { before: 140, after: 80, line: 240, lineRule: LineRuleType.AUTO },
@@ -2130,7 +2248,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
           ...createBodyParagraphs(`บริษัทฯ ขอเสนอผลงานที่มีขอบเขตงานและลักษณะงานสอดคล้องกับข้อกำหนดของ TOR โดยเป็นผลงานที่แล้วเสร็จย้อนหลังไม่เกิน ${section5.maxYearsFilter} ปี พร้อมทั้งได้แนบสำเนาสัญญาจ้างและหนังสือรับรองผลงานไว้ในภาคผนวก ก ของข้อเสนอนี้อย่างครบถ้วน`)
         );
 
-        // 1) ตารางสรุปโครงการที่ใช้อ้างอิง (ลำดับ, ชื่อโครงการ, หน่วยงาน, ปี, มูลค่าสัญญา, หลักฐาน)
+        // 1) ตารางสรุปโครงการที่ใช้อ้างอิง (ลำดับ, ชื่อโครงการ, หน่วยงาน, ปี, มูลค่าสัญญา, หลักฐาน) - แนวนอน
         const torRefRows = [
           createHeaderRow([
             createHeaderCell('ลำดับ', 6),
@@ -2156,21 +2274,21 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
           );
         });
 
-        part5BChildren.push(
+        part5B_torTableChildren.push(
           new Table({
             width: { size: 100, type: WidthType.PERCENTAGE },
             rows: torRefRows,
           })
         );
 
-        // 2) รายละเอียดโครงการแต่ละโครงการตามตารางข้างต้น
+        // 2) รายละเอียดโครงการแต่ละโครงการตามตารางข้างต้น จัดวางเป็นเอกสารแนวตั้งปกติ (PORTRAIT)
         //    (ชื่อโครงการ -> โลโกหน่วยงาน ตรงกลางหน้า -> รายละเอียดโครงการ -> ภาพประกอบ)
         torReferenceProjects.forEach((proj, idx) => {
           // (ก) ชื่อโครงการ
-          part5BChildren.push(
+          part5C_torDetailsChildren.push(
             new Paragraph({
               heading: HeadingLevel.HEADING_3,
-              spacing: { before: 240, after: 80, line: 240, lineRule: LineRuleType.AUTO },
+              spacing: { before: idx === 0 ? 120 : 260, after: 80, line: 240, lineRule: LineRuleType.AUTO },
               children: [
                 new TextRun({
                   text: `5.3.1.${idx + 1} โครงการที่ ${idx + 1}: ${proj.projectName}`,
@@ -2184,10 +2302,10 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
           );
 
           // (ข) โลโกหน่วยงาน (ตรงกลางหน้า)
-          part5BChildren.push(...createCenteredClientLogo(proj.clientLogoUrl, proj.clientName));
+          part5C_torDetailsChildren.push(...createCenteredClientLogo(proj.clientLogoUrl, proj.clientName));
 
           // (ค) รายละเอียดโครงการ (ตารางคุณสมบัติ 2 คอลัมน์ และข้อความพรรณา/ตาราง/บูลเล็ต)
-          part5BChildren.push(
+          part5C_torDetailsChildren.push(
             createProjectDetailTable([
               { label: 'ชื่อโครงการ', value: proj.projectName },
               { label: 'หน่วยงานผู้ว่าจ้าง', value: proj.clientName },
@@ -2216,8 +2334,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
             ...renderMethodologyParagraphsAndTables(proj.description)
           );
 
-
-          // (ง) ภาพประกอบ
+          // (ง) ภาพประกอบ (กว้าง 6 นิ้ว หรือคู่ 3 นิ้ว ปล่อยความสูงตามสัดส่วนเดิม แคปชันว่างถ้าไม่ได้ระบุ)
           const blocksToRender: ReportImageBlock[] = [];
           if (proj.imageBlocks !== undefined) {
             blocksToRender.push(...proj.imageBlocks);
@@ -2226,23 +2343,23 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
               id: `img-${proj.id}`,
               type: 'single',
               url: proj.projectImageUrl,
-              caption: proj.projectImageCaption || `ภาพที่ 5-1.${idx + 1} ภาพหน้าจอระบบ/ผลงาน: ${proj.projectName}`,
+              caption: (proj.projectImageCaption || '').trim(),
             });
           }
 
           if (blocksToRender.length > 0) {
-            part5BChildren.push(
+            part5C_torDetailsChildren.push(
               ...renderImageBlocksToDocx(blocksToRender, `ภาพที่ 5-1.${idx + 1}`)
             );
           }
         });
       } else if (h.id === 's5_supplementary') {
         if (supplementaryProjects.length > 0) {
-          part5BChildren.push(
+          // ตารางรายชื่อโครงการผลงานเสริม จัดวางเป็นเอกสารแนวนอน (LANDSCAPE)
+          part5D_suppTableChildren.push(
             new Paragraph({
-              pageBreakBefore: true,
               heading: HeadingLevel.HEADING_3,
-              spacing: { before: 200, after: 80, line: 240, lineRule: LineRuleType.AUTO },
+              spacing: { before: 140, after: 80, line: 240, lineRule: LineRuleType.AUTO },
               children: [
                 new TextRun({
                   text: `${autoRenumber ? '5.3.2' : numPrefix} ผลงานและประสบการณ์เสริมที่สอดคล้องกับงานจ้างโครงการนี้ (Supplementary Experience)`,
@@ -2256,7 +2373,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
             ...createBodyParagraphs('ผลงานเพิ่มเติมที่มีกิจกรรม เทคโนโลยี หรือแนวทางการดำเนินงานที่สอดคล้องและเป็นประโยชน์ต่อโครงการจ้างนี้เพื่อประกอบการพิจารณาความพร้อมและความเชี่ยวชาญ')
           );
 
-          // 1) ตารางสรุปโครงการผลงานเสริม (ลำดับ, ชื่อโครงการ, หน่วยงาน, ปี, มูลค่าสัญญา, หลักฐาน / กิจกรรมที่สอดคล้อง)
+          // 1) ตารางสรุปโครงการผลงานเสริม (ลำดับ, ชื่อโครงการ, หน่วยงาน, ปี, มูลค่าสัญญา, หลักฐาน / กิจกรรมที่สอดคล้อง) - แนวนอน
           const suppRows = [
             createHeaderRow([
               createHeaderCell('ลำดับ', 6),
@@ -2282,21 +2399,20 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
             );
           });
 
-          part5BChildren.push(
+          part5D_suppTableChildren.push(
             new Table({
               width: { size: 100, type: WidthType.PERCENTAGE },
               rows: suppRows,
             })
           );
 
-          // 2) รายละเอียดโครงการแต่ละโครงการผลงานเสริม (นำเสนอเหมือนกัน)
-          //    (ชื่อโครงการ -> โลโกหน่วยงาน ตรงกลางหน้า -> รายละเอียดโครงการ -> ภาพประกอบ)
+          // 2) รายละเอียดโครงการแต่ละโครงการผลงานเสริม จัดวางเป็นเอกสารแนวตั้งปกติ (PORTRAIT)
           supplementaryProjects.forEach((proj, idx) => {
             // (ก) ชื่อโครงการ
-            part5BChildren.push(
+            part5E_suppDetailsChildren.push(
               new Paragraph({
                 heading: HeadingLevel.HEADING_3,
-                spacing: { before: 240, after: 80, line: 240, lineRule: LineRuleType.AUTO },
+                spacing: { before: idx === 0 ? 120 : 260, after: 80, line: 240, lineRule: LineRuleType.AUTO },
                 children: [
                   new TextRun({
                     text: `5.3.2.${idx + 1} โครงการเสริมที่ ${idx + 1}: ${proj.projectName}`,
@@ -2310,10 +2426,10 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
             );
 
             // (ข) โลโกหน่วยงาน (ตรงกลางหน้า)
-            part5BChildren.push(...createCenteredClientLogo(proj.clientLogoUrl, proj.clientName));
+            part5E_suppDetailsChildren.push(...createCenteredClientLogo(proj.clientLogoUrl, proj.clientName));
 
             // (ค) รายละเอียดโครงการ (ตารางคุณสมบัติ 2 คอลัมน์ และข้อความพรรณา/ตาราง/บูลเล็ต)
-            part5BChildren.push(
+            part5E_suppDetailsChildren.push(
               createProjectDetailTable([
                 { label: 'ชื่อโครงการ', value: proj.projectName },
                 { label: 'หน่วยงานผู้ว่าจ้าง', value: proj.clientName },
@@ -2343,8 +2459,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
               ...renderMethodologyParagraphsAndTables(proj.description)
             );
 
-
-            // (ง) ภาพประกอบ
+            // (ง) ภาพประกอบ (กว้าง 6 นิ้ว หรือคู่ 3 นิ้ว ปล่อยความสูงตามสัดส่วนเดิม แคปชันว่างถ้าไม่ได้ระบุ)
             const blocksToRender: ReportImageBlock[] = [];
             if (proj.imageBlocks !== undefined) {
               blocksToRender.push(...proj.imageBlocks);
@@ -2353,12 +2468,12 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
                 id: `img-${proj.id}`,
                 type: 'single',
                 url: proj.projectImageUrl,
-                caption: proj.projectImageCaption || `ภาพที่ 5-2.${idx + 1} ภาพผลงานเสริม: ${proj.projectName}`,
+                caption: (proj.projectImageCaption || '').trim(),
               });
             }
 
             if (blocksToRender.length > 0) {
-              part5BChildren.push(
+              part5E_suppDetailsChildren.push(
                 ...renderImageBlocksToDocx(blocksToRender, `ภาพที่ 5-2.${idx + 1}`)
               );
             }
@@ -2658,17 +2773,63 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
     });
   }
 
-  if (part5BChildren.length > 0) {
+  // 5.3.1 ตารางรายชื่อโครงการอ้างอิงหลัก (แนวนอน)
+  if (part5B_torTableChildren.length > 0) {
     docSections.push({
       properties: {
         page: {
           size: { orientation: PageOrientation.LANDSCAPE },
-          margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
+          margin: { top: 1200, bottom: 1200, left: 1200, right: 1200 },
         },
       },
       headers: { default: createCommonHeader(true) },
       footers: { default: createCommonFooter() },
-      children: part5BChildren,
+      children: part5B_torTableChildren,
+    });
+  }
+
+  // รายละเอียดแต่ละโครงการอ้างอิงหลัก (แนวตั้งปกติ)
+  if (part5C_torDetailsChildren.length > 0) {
+    docSections.push({
+      properties: {
+        page: {
+          size: { orientation: PageOrientation.PORTRAIT },
+          margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
+        },
+      },
+      headers: { default: createCommonHeader(false) },
+      footers: { default: createCommonFooter() },
+      children: part5C_torDetailsChildren,
+    });
+  }
+
+  // 5.3.2 ตารางรายชื่อโครงการผลงานเสริม (แนวนอน)
+  if (part5D_suppTableChildren.length > 0) {
+    docSections.push({
+      properties: {
+        page: {
+          size: { orientation: PageOrientation.LANDSCAPE },
+          margin: { top: 1200, bottom: 1200, left: 1200, right: 1200 },
+        },
+      },
+      headers: { default: createCommonHeader(true) },
+      footers: { default: createCommonFooter() },
+      children: part5D_suppTableChildren,
+    });
+  }
+
+  // รายละเอียดแต่ละโครงการผลงานเสริม (แนวตั้งปกติ)
+  if (part5E_suppDetailsChildren.length > 0) {
+    docSections.push({
+      properties: {
+        page: {
+          size: { orientation: PageOrientation.PORTRAIT },
+          margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
+        },
+      },
+      headers: { default: createCommonHeader(false) },
+      footers: { default: createCommonFooter() },
+      children: part5E_suppDetailsChildren,
     });
   }
 

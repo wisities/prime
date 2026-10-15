@@ -31,17 +31,12 @@ export const ReportImageManager: React.FC<ReportImageManagerProps> = ({
   const fileInputsRef = useRef<{ [key: string]: HTMLInputElement | null }>({});
 
   const handleAddSingle = () => {
-    const nextIdx = imageBlocks.length + 1;
-    const defaultCaption = `${defaultCaptionPrefix} ${nextIdx} ภาพแสดงรายละเอียดการดำเนินงาน`;
-    const newBlock = createEmptySingleImageBlock(defaultCaption);
+    const newBlock = createEmptySingleImageBlock('');
     onChange([...imageBlocks, newBlock]);
   };
 
   const handleAddPair = () => {
-    const nextIdx = imageBlocks.length + 1;
-    const leftCaption = `${defaultCaptionPrefix} ${nextIdx}-ก ภาพประกอบด้านซ้าย (3 นิ้ว)`;
-    const rightCaption = `${defaultCaptionPrefix} ${nextIdx}-ข ภาพประกอบด้านขวา (3 นิ้ว)`;
-    const newBlock = createEmptyPairImageBlock(leftCaption, rightCaption);
+    const newBlock = createEmptyPairImageBlock('', '');
     onChange([...imageBlocks, newBlock]);
   };
 
@@ -376,13 +371,13 @@ export const ReportImageManager: React.FC<ReportImageManagerProps> = ({
 
                           <div style={{ width: '100%', marginTop: '0.35rem' }}>
                             <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--slate-700, #334155)', display: 'block', marginBottom: '0.25rem' }}>
-                              คำบรรยายใต้ภาพ (กว้าง 6 นิ้ว จัดกึ่งกลางใน Word):
+                              คำบรรยายใต้ภาพ (กว้าง 6 นิ้ว จัดกึ่งกลางใน Word - เว้นว่างได้):
                             </label>
                             <input
                               type="text"
                               className="form-input"
                               style={{ fontSize: '0.8rem', padding: '0.35rem 0.65rem' }}
-                              placeholder="เช่น ภาพที่ 3.1-1 แผนผังสถาปัตยกรรมระบบ..."
+                              placeholder="คำบรรยายใต้ภาพ (เว้นว่างไว้ได้หากไม่ต้องการใส่)..."
                               value={block.caption || ''}
                               onChange={(e) => handleBlockChange(block.id, { caption: e.target.value })}
                             />
@@ -502,7 +497,7 @@ export const ReportImageManager: React.FC<ReportImageManagerProps> = ({
                                 type="text"
                                 className="form-input"
                                 style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
-                                placeholder="คำบรรยายภาพซ้าย"
+                                placeholder="คำบรรยายภาพซ้าย (เว้นว่างได้)"
                                 value={block.leftCaption || ''}
                                 onChange={(e) => handleBlockChange(block.id, { leftCaption: e.target.value })}
                               />
@@ -592,7 +587,7 @@ export const ReportImageManager: React.FC<ReportImageManagerProps> = ({
                                 type="text"
                                 className="form-input"
                                 style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
-                                placeholder="คำบรรยายภาพขวา"
+                                placeholder="คำบรรยายภาพขวา (เว้นว่างได้)"
                                 value={block.rightCaption || ''}
                                 onChange={(e) => handleBlockChange(block.id, { rightCaption: e.target.value })}
                               />

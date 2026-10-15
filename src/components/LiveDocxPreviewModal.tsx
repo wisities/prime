@@ -50,16 +50,18 @@ const renderImageBlocksPreview = (blocks?: ReportImageBlock[], defaultPrefix: st
                   display: 'block',
                 }}
               />
-              <div
-                style={{
-                  fontSize: '0.8rem',
-                  color: 'var(--slate-600)',
-                  fontStyle: 'italic',
-                  marginTop: '0.35rem',
-                }}
-              >
-                {block.caption || `${defaultPrefix}-${bIdx + 1} ภาพประกอบ (กว้าง 6 นิ้ว กึ่งกลาง)`}
-              </div>
+              {block.caption && block.caption.trim() !== '' && (
+                <div
+                  style={{
+                    fontSize: '0.8rem',
+                    color: 'var(--slate-600)',
+                    fontStyle: 'italic',
+                    marginTop: '0.35rem',
+                  }}
+                >
+                  {block.caption}
+                </div>
+              )}
             </div>
           );
         }
@@ -86,9 +88,11 @@ const renderImageBlocksPreview = (blocks?: ReportImageBlock[], defaultPrefix: st
                       alt="ภาพซ้าย 3 นิ้ว"
                       style={{ maxWidth: '100%', maxHeight: '160px', objectFit: 'contain', borderRadius: '4px' }}
                     />
-                    <div style={{ fontSize: '0.75rem', color: 'var(--slate-600)', fontStyle: 'italic', marginTop: '0.25rem' }}>
-                      {block.leftCaption || 'ภาพประกอบ (กว้าง 3 นิ้ว)'}
-                    </div>
+                    {block.leftCaption && block.leftCaption.trim() !== '' && (
+                      <div style={{ fontSize: '0.75rem', color: 'var(--slate-600)', fontStyle: 'italic', marginTop: '0.25rem' }}>
+                        {block.leftCaption}
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div style={{ color: 'var(--slate-400)', fontSize: '0.75rem', padding: '1rem' }}>- คอลัมน์ซ้ายว่าง -</div>
@@ -102,9 +106,11 @@ const renderImageBlocksPreview = (blocks?: ReportImageBlock[], defaultPrefix: st
                       alt="ภาพขวา 3 นิ้ว"
                       style={{ maxWidth: '100%', maxHeight: '160px', objectFit: 'contain', borderRadius: '4px' }}
                     />
-                    <div style={{ fontSize: '0.75rem', color: 'var(--slate-600)', fontStyle: 'italic', marginTop: '0.25rem' }}>
-                      {block.rightCaption || 'ภาพประกอบ (กว้าง 3 นิ้ว)'}
-                    </div>
+                    {block.rightCaption && block.rightCaption.trim() !== '' && (
+                      <div style={{ fontSize: '0.75rem', color: 'var(--slate-600)', fontStyle: 'italic', marginTop: '0.25rem' }}>
+                        {block.rightCaption}
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div style={{ color: 'var(--slate-400)', fontSize: '0.75rem', padding: '1rem' }}>- คอลัมน์ขวาว่าง -</div>
@@ -1365,7 +1371,7 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                           <div key={h.id} style={{ marginBottom: '1.5rem' }}>
                             <div style={{ backgroundColor: 'var(--slate-50)', padding: '0.6rem 0.75rem', border: '1px solid var(--slate-300)', borderRadius: '6px', textAlign: 'center', marginBottom: '0.75rem' }}>
                               <span style={{ fontSize: '0.8rem', color: 'var(--primary-800)', fontWeight: 600 }}>
-                                [ส่วนที่ 5.3: ตารางผลงานและประสบการณ์ (5.3.1 และ 5.3.2) ถูกจัดวางในหน้าแนวนอน (Landscape) พร้อม Repeat Header Row ข้ามหน้า]
+                                [หัวข้อ 5.3.1: ตารางรายชื่อโครงการจัดวางในหน้าแนวนอน (Landscape) ส่วนรายละเอียดแต่ละโครงการจัดวางในหน้าแนวตั้งปกติ (Portrait)]
                               </span>
                             </div>
                             <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginTop: '0.5rem', marginBottom: '0.5rem', color: 'var(--primary-900)' }}>
@@ -1408,11 +1414,11 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                             {/* 2) รายละเอียดโครงการแต่ละโครงการตามตารางข้างต้น */}
                             {section5.pastProjects
                               .filter((p) => p.isSelected && (p.projectType || 'tor_reference') === 'tor_reference' && (2568 - p.completionYearBE <= section5.maxYearsFilter))
-                              .map((p, pIdx) => {
+                              .map((p) => {
                                 const blocks = p.imageBlocks !== undefined
                                   ? p.imageBlocks
                                   : p.projectImageUrl
-                                  ? [{ id: `img-${p.id}`, type: 'single' as const, url: p.projectImageUrl, caption: p.projectImageCaption || `ภาพที่ 5-1.${pIdx + 1} ภาพหน้าจอระบบ/ผลงาน: ${p.projectName}` }]
+                                  ? [{ id: `img-${p.id}`, type: 'single' as const, url: p.projectImageUrl, caption: (p.projectImageCaption || '').trim() }]
                                   : [];
 
                                 return (
@@ -1564,11 +1570,11 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                             {/* 2) รายละเอียดโครงการแต่ละโครงการผลงานเสริม */}
                             {section5.pastProjects
                               .filter((p) => p.isSelected && p.projectType === 'supplementary')
-                              .map((p, pIdx) => {
+                              .map((p) => {
                                 const blocks = p.imageBlocks !== undefined
                                   ? p.imageBlocks
                                   : p.projectImageUrl
-                                  ? [{ id: `img-${p.id}`, type: 'single' as const, url: p.projectImageUrl, caption: p.projectImageCaption || `ภาพที่ 5-2.${pIdx + 1} ภาพผลงานเสริม: ${p.projectName}` }]
+                                  ? [{ id: `img-${p.id}`, type: 'single' as const, url: p.projectImageUrl, caption: (p.projectImageCaption || '').trim() }]
                                   : [];
 
                                 return (

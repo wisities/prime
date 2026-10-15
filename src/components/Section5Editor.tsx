@@ -1143,7 +1143,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                             id: `img-${p.id}`,
                             type: 'single',
                             url: p.projectImageUrl,
-                            caption: p.projectImageCaption || `ภาพหน้าจอระบบ/ผลงาน: ${p.projectName}`,
+                            caption: (p.projectImageCaption || '').trim(),
                           },
                         ]
                       : []
