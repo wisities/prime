@@ -1414,7 +1414,7 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                             {/* 2) รายละเอียดโครงการแต่ละโครงการตามตารางข้างต้น */}
                             {section5.pastProjects
                               .filter((p) => p.isSelected && (p.projectType || 'tor_reference') === 'tor_reference' && (2568 - p.completionYearBE <= section5.maxYearsFilter))
-                              .map((p) => {
+                              .map((p, pIdx) => {
                                 const blocks = p.imageBlocks !== undefined
                                   ? p.imageBlocks
                                   : p.projectImageUrl
@@ -1570,7 +1570,7 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                             {/* 2) รายละเอียดโครงการแต่ละโครงการผลงานเสริม */}
                             {section5.pastProjects
                               .filter((p) => p.isSelected && p.projectType === 'supplementary')
-                              .map((p) => {
+                              .map((p, pIdx) => {
                                 const blocks = p.imageBlocks !== undefined
                                   ? p.imageBlocks
                                   : p.projectImageUrl
