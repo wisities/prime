@@ -32,6 +32,7 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
 }) => {
   const [showLibraryModal, setShowLibraryModal] = useState(false);
   const [teamLibrary, setTeamLibrary] = useState<TeamMember[]>(getMasterTeamLibrary());
+  const [selectedLibraryIds, setSelectedLibraryIds] = useState<string[]>([]);
   const [isLoadingCloud, setIsLoadingCloud] = useState(false);
   const fileInputTeamRef = React.useRef<HTMLInputElement>(null);
 
@@ -76,7 +77,67 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
 
   const handleOpenLibrary = () => {
     setTeamLibrary(getMasterTeamLibrary());
+    setSelectedLibraryIds([]);
     setShowLibraryModal(true);
+  };
+
+  const handleToggleTeamLibrarySelect = (id: string) => {
+    setSelectedLibraryIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllTeamLibrary = () => {
+    if (selectedLibraryIds.length === teamLibrary.length) {
+      setSelectedLibraryIds([]);
+    } else {
+      setSelectedLibraryIds(teamLibrary.map((m) => m.id));
+    }
+  };
+
+  const handleImportSelectedTeamFromLibrary = () => {
+    if (selectedLibraryIds.length === 0) {
+      alert('กรุณาทำเครื่องหมายเลือกบุคลากรที่ต้องการนำเข้าอย่างน้อย 1 ท่าน');
+      return;
+    }
+
+    const selectedMembersToImport = teamLibrary.filter((m) =>
+      selectedLibraryIds.includes(m.id)
+    );
+
+    const existingNames = new Set(section4.teamMembers.map((m) => m.name.trim()));
+    const newItems: TeamMember[] = [];
+    let duplicateCount = 0;
+
+    selectedMembersToImport.forEach((member, idx) => {
+      if (existingNames.has(member.name.trim())) {
+        duplicateCount++;
+      } else {
+        const uniqueId = `member-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`;
+        newItems.push({
+          ...member,
+          id: uniqueId,
+        });
+      }
+    });
+
+    if (newItems.length > 0) {
+      onChange({
+        ...section4,
+        teamMembers: [...section4.teamMembers, ...newItems],
+      });
+    }
+
+    setShowLibraryModal(false);
+    setSelectedLibraryIds([]);
+
+    if (duplicateCount > 0 && newItems.length > 0) {
+      alert(`นำเข้าบุคลากรสำเร็จ ${newItems.length} ท่าน (ข้าม ${duplicateCount} ท่านที่มีชื่อซ้ำในโครงการนี้แล้ว)`);
+    } else if (duplicateCount > 0 && newItems.length === 0) {
+      alert(`บุคลากรทั้งหมดที่เลือก (${duplicateCount} ท่าน) มีอยู่ในโครงการนี้แล้ว`);
+    } else {
+      alert(`นำเข้าบุคลากร ${newItems.length} ท่าน เข้าสู่โครงการนี้เรียบร้อยแล้ว`);
+    }
   };
 
   const handleDeleteFromLibrary = (id: string, name: string) => {
@@ -331,10 +392,86 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
           </div>
         )}
 
+        {/* Master Library Reassurance Banner */}
+        <div
+          style={{
+            margin: '0.75rem 0 1rem',
+            padding: '0.65rem 1rem',
+            backgroundColor: '#F8FAFC',
+            border: '1px solid #E2E8F0',
+            borderRadius: '6px',
+            fontSize: '0.825rem',
+            color: '#475569',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <span style={{ fontSize: '1rem' }}>💡</span>
+          <span>
+            <strong>ข้อมูลบุคลากรในโครงการนี้เป็นอิสระ:</strong> ท่านสามารถแก้ไขตำแหน่ง หน้าที่ความรับผิดชอบ และผลงานเด่นเฉพาะโครงการนี้ได้ตามต้องการ โดยไม่กระทบกับข้อมูลหลักในคลังบุคลากรกลาง
+          </span>
+        </div>
+
         {/* Team Members List */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
-          {section4.teamMembers.map((member, idx) => (
+          {section4.teamMembers.length === 0 ? (
             <div
+              style={{
+                textAlign: 'center',
+                padding: '3rem 1.5rem',
+                backgroundColor: '#F8FAFC',
+                borderRadius: '10px',
+                border: '2px dashed #CBD5E1',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '0.75rem',
+              }}
+            >
+              <div
+                style={{
+                  width: '56px',
+                  height: '56px',
+                  borderRadius: '50%',
+                  backgroundColor: '#EFF6FF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#2563EB',
+                }}
+              >
+                <Users size={28} />
+              </div>
+              <div style={{ fontWeight: 700, fontSize: '1.05rem', color: '#1E293B' }}>
+                ยังไม่มีรายชื่อบุคลากรในโครงการนี้
+              </div>
+              <div style={{ fontSize: '0.875rem', color: '#64748B', maxWidth: '520px', lineHeight: 1.5 }}>
+                ท่านสามารถเลือกบุคลากรจาก <strong>"คลังบุคลากรกลาง"</strong> มาปรับบทบาท/หน้าที่ให้ตรงกับโครงการนี้ หรือเพิ่มบุคลากรใหม่เฉพาะโครงการนี้ได้
+                (การปรับแต่งบทบาทจะไม่ส่งผลต่อข้อมูลต้นฉบับในคลังกลาง)
+              </div>
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                <button
+                  type="button"
+                  onClick={handleOpenLibrary}
+                  className="btn btn-primary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Library size={16} /> เลือกบุคลากรจากคลังกลาง
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddMember}
+                  className="btn btn-outline"
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#FFFFFF' }}
+                >
+                  <Plus size={16} /> + เพิ่มบุคลากรเฉพาะโครงการนี้
+                </button>
+              </div>
+            </div>
+          ) : (
+            section4.teamMembers.map((member, idx) => (
+              <div
               key={member.id}
               style={{
                 border: '1px solid var(--slate-200)',
@@ -659,7 +796,29 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
                 </div>
               </div>
             </div>
-          ))}
+          ))
+        )}
+
+          {section4.teamMembers.length > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem', marginTop: '0.5rem' }}>
+              <button
+                type="button"
+                onClick={handleOpenLibrary}
+                className="btn btn-outline"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#FFFFFF' }}
+              >
+                <Library size={15} /> + เลือกบุคลากรจากคลังกลางเพิ่ม
+              </button>
+              <button
+                type="button"
+                onClick={handleAddMember}
+                className="btn btn-primary"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Plus size={15} /> + เพิ่มบุคลากรใหม่เฉพาะโครงการนี้
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1056,6 +1215,43 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
               </div>
             )}
 
+            {/* Multi-Selection Control Bar */}
+            {teamLibrary.length > 0 && (
+              <div
+                style={{
+                  padding: '0.65rem 1rem',
+                  backgroundColor: '#F8FAFC',
+                  borderBottom: '1px solid #E2E8F0',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '0.5rem',
+                }}
+              >
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, color: '#1E293B' }}>
+                  <input
+                    type="checkbox"
+                    checked={teamLibrary.length > 0 && selectedLibraryIds.length === teamLibrary.length}
+                    onChange={handleSelectAllTeamLibrary}
+                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                  />
+                  <span>เลือกทั้งหมด ({selectedLibraryIds.length}/{teamLibrary.length} ท่าน)</span>
+                </label>
+
+                {selectedLibraryIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleImportSelectedTeamFromLibrary}
+                    className="btn btn-primary"
+                    style={{ fontSize: '0.825rem', padding: '0.35rem 0.85rem', display: 'flex', alignItems: 'center', gap: '5px' }}
+                  >
+                    <Check size={14} /> + นำเข้าบุคลากรที่เลือก ({selectedLibraryIds.length} ท่าน) เข้าโครงการนี้
+                  </button>
+                )}
+              </div>
+            )}
+
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', maxHeight: '65vh', overflowY: 'auto' }}>
               {teamLibrary.length === 0 ? (
                 <div
@@ -1087,28 +1283,53 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
                 teamLibrary.map((item) => (
                   <div
                     key={item.id}
+                    onClick={() => handleToggleTeamLibrarySelect(item.id)}
                     style={{
-                      border: '1px solid var(--slate-200)',
+                      border: selectedLibraryIds.includes(item.id) ? '1.5px solid var(--primary-600)' : '1px solid var(--slate-200)',
                       borderRadius: '8px',
                       padding: '0.85rem 1rem',
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
-                      backgroundColor: '#FFFFFF',
+                      backgroundColor: selectedLibraryIds.includes(item.id) ? '#F0F9FF' : '#FFFFFF',
                       gap: '0.75rem',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
                     }}
                   >
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, color: 'var(--slate-900)' }}>{item.name}</div>
-                      <div style={{ fontSize: '0.825rem', color: 'var(--primary-700)' }}>
-                        {item.proposedRole} • ประสบการณ์ {item.experienceYears} ปี
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--slate-500)', marginTop: '2px' }}>
-                        {item.certifications}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedLibraryIds.includes(item.id)}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          handleToggleTeamLibrarySelect(item.id);
+                        }}
+                        style={{ width: '17px', height: '17px', cursor: 'pointer', flexShrink: 0 }}
+                      />
+                      {item.photoUrl ? (
+                        <img
+                          src={item.photoUrl}
+                          alt={item.name}
+                          style={{ width: '38px', height: '46px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #CBD5E1', flexShrink: 0 }}
+                        />
+                      ) : (
+                        <div style={{ width: '38px', height: '46px', backgroundColor: '#F1F5F9', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8', flexShrink: 0 }}>
+                          <User size={18} />
+                        </div>
+                      )}
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, color: 'var(--slate-900)' }}>{item.name}</div>
+                        <div style={{ fontSize: '0.825rem', color: 'var(--primary-700)' }}>
+                          {item.proposedRole} • ประสบการณ์ {item.experienceYears} ปี
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--slate-500)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {item.certifications || item.education}
+                        </div>
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
                       <button
                         type="button"
                         onClick={() => handleAddFromLibrary(item)}
@@ -1140,6 +1361,42 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
                 ))
               )}
             </div>
+
+            {selectedLibraryIds.length > 0 && (
+              <div
+                className="modal-footer"
+                style={{
+                  padding: '0.85rem 1.25rem',
+                  backgroundColor: '#FFFFFF',
+                  borderTop: '1px solid #E2E8F0',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <div style={{ fontSize: '0.85rem', color: '#0369A1', fontWeight: 600 }}>
+                  เลือกแล้ว {selectedLibraryIds.length} จาก {teamLibrary.length} ท่าน
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedLibraryIds([])}
+                    className="btn btn-outline"
+                    style={{ fontSize: '0.825rem', padding: '0.4rem 0.85rem' }}
+                  >
+                    ล้างการเลือก
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleImportSelectedTeamFromLibrary}
+                    className="btn btn-primary"
+                    style={{ fontSize: '0.825rem', padding: '0.4rem 1rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <Check size={15} /> นำเข้าบุคลากรที่เลือก ({selectedLibraryIds.length} ท่าน)
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

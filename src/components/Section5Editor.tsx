@@ -851,9 +851,85 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
           </div>
         )}
 
+        {/* Master Library Reassurance Banner */}
+        <div
+          style={{
+            margin: '0.75rem 0 1rem',
+            padding: '0.65rem 1rem',
+            backgroundColor: '#F8FAFC',
+            border: '1px solid #E2E8F0',
+            borderRadius: '6px',
+            fontSize: '0.825rem',
+            color: '#475569',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <span style={{ fontSize: '1rem' }}>💡</span>
+          <span>
+            <strong>ข้อมูลผลงานในโครงการนี้เป็นอิสระ:</strong> ท่านสามารถแก้ไขข้อความ เลือกเป็นผลงานอ้างอิงตาม TOR หรือโครงการอื่นๆ และปรับโน้ตความสอดคล้องเฉพาะโครงการนี้ได้อิสระ โดยไม่กระทบข้อมูลหลักในคลังผลงานกลาง
+          </span>
+        </div>
+
         {/* Projects List */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          {section5.pastProjects.map((p, idx) => {
+          {section5.pastProjects.length === 0 ? (
+            <div
+              style={{
+                textAlign: 'center',
+                padding: '3rem 1.5rem',
+                backgroundColor: '#F8FAFC',
+                borderRadius: '10px',
+                border: '2px dashed #CBD5E1',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '0.75rem',
+              }}
+            >
+              <div
+                style={{
+                  width: '56px',
+                  height: '56px',
+                  borderRadius: '50%',
+                  backgroundColor: '#EFF6FF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#2563EB',
+                }}
+              >
+                <Building2 size={28} />
+              </div>
+              <div style={{ fontWeight: 700, fontSize: '1.05rem', color: '#1E293B' }}>
+                ยังไม่มีรายการผลงานในโครงการนี้
+              </div>
+              <div style={{ fontSize: '0.875rem', color: '#64748B', maxWidth: '520px', lineHeight: 1.5 }}>
+                เริ่มต้นโดยการเลือกผลงานที่เคยบันทึกไว้ใน <strong>"คลังผลงานกลาง"</strong> มาปรับใช้ หรือกดเพิ่มผลงานใหม่เฉพาะโครงการนี้ได้ทันที
+                (การปรับแต่งข้อความในโครงการนี้จะไม่ส่งผลกระทบต่อข้อมูลหลักในคลังกลาง)
+              </div>
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                <button
+                  type="button"
+                  onClick={handleOpenLibrary}
+                  className="btn btn-primary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Library size={16} /> เลือกผลงานจากคลังกลาง
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddProject}
+                  className="btn btn-outline"
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#FFFFFF' }}
+                >
+                  <Plus size={16} /> + เพิ่มผลงานเฉพาะโครงการนี้
+                </button>
+              </div>
+            </div>
+          ) : (
+            section5.pastProjects.map((p, idx) => {
             const isTorRef = (p.projectType || 'tor_reference') === 'tor_reference';
             const isTooOld = isTorRef && p.completionYearBE < minAllowedYear;
             const isCollapsed = !!collapsedProjects[p.id];
@@ -1438,10 +1514,12 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                 )}
               </div>
             );
-          })}
-        </div>
+          })
+        )}
+      </div>
 
-        {/* Bottom Action Bar for adding new projects */}
+      {/* Bottom Action Bar for adding new projects */}
+      {section5.pastProjects.length > 0 && (
         <div
           style={{
             marginTop: '1.25rem',
@@ -1490,7 +1568,8 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
             <Library size={16} /> ดึงจากคลังผลงานกลาง
           </button>
         </div>
-      </div>
+      )}
+    </div>
 
       {/* Master Library Selection Modal */}
       {showLibraryModal && (

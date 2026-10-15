@@ -20,6 +20,7 @@ import { LoginPage } from './components/LoginPage';
 import { AccessDeniedPage } from './components/AccessDeniedPage';
 import { UserManagementModal } from './components/UserManagementModal';
 import { GeminiSettingsModal } from './components/GeminiSettingsModal';
+import { MasterLibraryManagementModal } from './components/MasterLibraryManagementModal';
 import { isGeminiAvailable } from './services/geminiService';
 import { checkEmailPermission, signOut } from './services/authService';
 import { supabase, isSupabaseConfigured } from './services/supabaseClient';
@@ -52,6 +53,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
+  Library,
 } from 'lucide-react';
 
 import { loadAllProjects, saveProject, normalizeProjectBudget } from './services/projectStorageService';
@@ -90,6 +92,7 @@ export const App: React.FC = () => {
   const [authStatus, setAuthStatus] = useState<'loading' | 'unauthenticated' | 'unauthorized' | 'authorized'>('loading');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showUserMgmtModal, setShowUserMgmtModal] = useState<boolean>(false);
+  const [showMasterLibraryModal, setShowMasterLibraryModal] = useState<boolean>(false);
 
   // Check Supabase Auth Session and Allowed Users permission
   useEffect(() => {
@@ -711,6 +714,26 @@ export const App: React.FC = () => {
               />
             </button>
 
+            {/* Master Libraries Modal Button */}
+            <button
+              type="button"
+              onClick={() => setShowMasterLibraryModal(true)}
+              className="btn btn-secondary"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                backgroundColor: 'rgba(99, 102, 241, 0.25)',
+                color: '#EEF2FF',
+                borderColor: 'rgba(129, 140, 248, 0.5)',
+                fontWeight: 600,
+              }}
+              title="เปิดคลังข้อมูลกลาง: จัดการผลงานโครงการ บุคลากร และข้อมูลบริษัท"
+            >
+              <Library size={15} color="#A5B4FC" />
+              <span>คลังข้อมูลกลาง</span>
+            </button>
+
             {/* User Access Control / Whitelist Button */}
             <button
               type="button"
@@ -804,6 +827,7 @@ export const App: React.FC = () => {
           onOpenTorImporterForProject={handleOpenTorImporterForProject}
           onResetProjectsToDefault={handleResetProjectsToDefault}
           onOpenUserManagement={() => setShowUserMgmtModal(true)}
+          onOpenMasterLibraries={() => setShowMasterLibraryModal(true)}
         />
       ) : (
         /* PROPOSAL EDITOR VIEW */
@@ -1134,6 +1158,11 @@ export const App: React.FC = () => {
         isOpen={showGeminiModal}
         onClose={() => setShowGeminiModal(false)}
         onKeyUpdated={(has) => setHasGeminiKey(has)}
+      />
+
+      <MasterLibraryManagementModal
+        isOpen={showMasterLibraryModal}
+        onClose={() => setShowMasterLibraryModal(false)}
       />
     </div>
   );

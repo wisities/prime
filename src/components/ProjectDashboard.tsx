@@ -12,6 +12,7 @@ import {
   getAttachmentFromIDB,
 } from '../services/projectStorageService';
 import { extractProjectMetadataFromFile, parseTorTextRules } from '../services/torDocReader';
+import { MasterLibraryManagementModal } from './MasterLibraryManagementModal';
 import {
   FileText,
   ExternalLink,
@@ -47,6 +48,7 @@ import {
   ChevronUp,
   Maximize2,
   Minimize2,
+  Library,
 } from 'lucide-react';
 
 export interface ClauseCompletionInfo {
@@ -154,6 +156,7 @@ interface ProjectDashboardProps {
   onOpenTorImporterForProject: (projectId: string, attachmentId?: string) => void;
   onResetProjectsToDefault: () => void;
   onOpenUserManagement?: () => void;
+  onOpenMasterLibraries?: () => void;
 }
 
 export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
@@ -164,11 +167,15 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   onOpenTorImporterForProject,
   onResetProjectsToDefault,
   onOpenUserManagement,
+  onOpenMasterLibraries,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | ProposalStatus>('all');
   const [sortBy, setSortBy] = useState<'deadline' | 'announcement' | 'budget'>('deadline');
   
+  // Master Library Modal State
+  const [showMasterLibrariesModal, setShowMasterLibrariesModal] = useState(false);
+
   // Project Edit/Create Modal State
   const [editingProject, setEditingProject] = useState<BiddingProject | null>(null);
   const [isCreatingNew, setIsCreatingNew] = useState(false);
@@ -948,6 +955,26 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             title="สำรองข้อมูลทุกโครงการเป็นไฟล์ JSON"
           >
             <Save size={16} /> สำรองข้อมูล (JSON)
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary hero-btn"
+            onClick={() => {
+              if (onOpenMasterLibraries) {
+                onOpenMasterLibraries();
+              } else {
+                setShowMasterLibrariesModal(true);
+              }
+            }}
+            title="จัดการคลังผลงานโครงการ คลังบุคลากร และข้อมูลบริษัทกลาง"
+            style={{
+              backgroundColor: 'rgba(99, 102, 241, 0.22)',
+              borderColor: 'rgba(129, 140, 248, 0.45)',
+              color: '#EEF2FF',
+              fontWeight: 600,
+            }}
+          >
+            <Library size={16} color="#A5B4FC" /> จัดการคลังข้อมูลกลาง
           </button>
           {onOpenUserManagement && (
             <button
@@ -2593,6 +2620,12 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
           </div>
         </div>
       )}
+
+      {/* Master Libraries Modal */}
+      <MasterLibraryManagementModal
+        isOpen={showMasterLibrariesModal}
+        onClose={() => setShowMasterLibrariesModal(false)}
+      />
     </div>
   );
 };
