@@ -16,6 +16,8 @@ import {
   resetMasterCompanyProfile,
   MASTER_COMPANY_UPDATED_EVENT,
   initMasterLibraryRealtime,
+  exportMasterProjectsToJson,
+  importMasterProjectsFromJson,
 } from '../services/masterLibraryService';
 import { isSupabaseConfigured } from '../services/supabaseClient';
 import { Building2, Plus, Trash2, Library, Filter, Calendar, AlertTriangle, CheckCircle, Upload, Image, FileText, Paperclip, FileCheck, BookmarkCheck, RotateCcw, ArrowUp, ArrowDown, BookmarkPlus, Check, Database, Save, Download, List, Table as TableIcon } from 'lucide-react';
@@ -33,7 +35,27 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
   const [masterCompany, setMasterCompany] = useState<MasterCompanyProfile>(getMasterCompanyProfile());
   const [companyToast, setCompanyToast] = useState<string | null>(null);
   const [isLoadingCloud, setIsLoadingCloud] = useState(false);
+  const fileInputProjectsRef = React.useRef<HTMLInputElement>(null);
   const currentYearBE = 2568;
+
+  const handleImportProjectsFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const res = importMasterProjectsFromJson(text);
+      if (res.success) {
+        const fresh = getMasterProjectsLibrary();
+        setProjectsLibrary(fresh);
+        alert(`นำเข้าและผสานผลงานโครงการสำเร็จ! ปัจจุบันคลังกลางมีทั้งหมด ${res.count} รายการ`);
+      } else {
+        alert(`เกิดข้อผิดพลาดในการนำเข้า: ${res.error}`);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
 
   useEffect(() => {
     fetchMasterProjectsLibraryFromCloud().then((items) => {
@@ -68,10 +90,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
   }, []);
 
   const handleOpenLibrary = () => {
-    setIsLoadingCloud(true);
-    fetchMasterProjectsLibraryFromCloud()
-      .then((items) => setProjectsLibrary(items))
-      .finally(() => setIsLoadingCloud(false));
+    setProjectsLibrary(getMasterProjectsLibrary());
     setShowLibraryModal(true);
   };
 
@@ -221,13 +240,12 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
     };
     saveMasterCompanyProfile(profileToSave);
     setMasterCompany(profileToSave);
-    setCompanyToast('บันทึกข้อมูลบริษัทเข้าสู่คลังกลางและซิงก์ Cloud สำเร็จ! โครงการอื่นๆ สามารถดึงไปใช้ได้ทันที');
+    setCompanyToast('บันทึกข้อมูลบริษัทเข้าสู่คลังกลางในเครื่อง (IndexedDB) สำเร็จ! โครงการอื่นๆ สามารถดึงไปใช้ได้ทันที');
     setTimeout(() => setCompanyToast(null), 3500);
   };
 
   const handleLoadFromMasterCompany = async () => {
     if (confirm('ต้องการดึงข้อมูลบริษัทจากคลังกลางมาแทนที่ข้อมูลปัจจุบันของโครงการนี้หรือไม่? (ผลงานโครงการเดิมในเล่มจะไม่ได้รับผลกระทบ)')) {
-      setIsLoadingCloud(true);
       try {
         const fresh = await fetchMasterCompanyProfileFromCloud();
         setMasterCompany(fresh);
@@ -239,14 +257,13 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
         setCompanyToast('ดึงข้อมูลบริษัทจากคลังกลางและนำมาปรับใช้ในโครงการนี้เรียบร้อยแล้ว');
         setTimeout(() => setCompanyToast(null), 3500);
       } finally {
-        setIsLoadingCloud(false);
       }
     }
   };
 
   const handleSaveMasterCompanyInModal = () => {
     saveMasterCompanyProfile(masterCompany);
-    setCompanyToast('บันทึกการเปลี่ยนแปลงข้อมูลบริษัทกลางขึ้น Cloud เรียบร้อยแล้ว');
+    setCompanyToast('บันทึกการเปลี่ยนแปลงข้อมูลบริษัทกลางในเครื่อง (IndexedDB) เรียบร้อยแล้ว');
     setTimeout(() => setCompanyToast(null), 3500);
   };
 
@@ -1167,7 +1184,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
       {showLibraryModal && (
         <div className="modal-overlay" onClick={() => setShowLibraryModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '820px' }}>
-            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--primary-900)', margin: 0 }}>
@@ -1175,29 +1192,47 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                       ? 'คลังข้อมูลผลงานโครงการกลาง (Prime Digital Past Track Records)'
                       : 'คลังข้อมูลและประวัติบริษัทกลาง (Master Company Profile)'}
                   </h3>
-                  {isSupabaseConfigured() ? (
-                    <span style={{ fontSize: '0.72rem', backgroundColor: '#ECFDF5', color: '#047857', padding: '2px 8px', borderRadius: '12px', border: '1px solid #A7F3D0', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
-                      <Database size={11} /> Cloud Database
-                    </span>
-                  ) : (
-                    <span style={{ fontSize: '0.72rem', backgroundColor: '#F1F5F9', color: '#64748B', padding: '2px 8px', borderRadius: '12px', border: '1px solid #CBD5E1', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 500 }}>
-                      💾 แคชในเครื่อง
-                    </span>
-                  )}
-                  {isLoadingCloud && (
-                    <span style={{ fontSize: '0.72rem', color: '#2563EB', fontWeight: 500 }}>
-                      กำลังซิงค์...
-                    </span>
-                  )}
+                  <span style={{ fontSize: '0.72rem', backgroundColor: '#ECFDF5', color: '#047857', padding: '2px 8px', borderRadius: '12px', border: '1px solid #A7F3D0', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                    💾 บันทึกในเครื่องปลอดภัย (IndexedDB ไม่จำกัดขนาด)
+                  </span>
                 </div>
                 <div style={{ fontSize: '0.8rem', color: 'var(--slate-500)', marginTop: '2px' }}>
                   {libraryTab === 'projects'
-                    ? `มีทั้งหมด ${projectsLibrary.length} โครงการ (เชื่อมต่อฐานข้อมูลกลาง ใช้ร่วมกันได้ทุกโครงการและทุกคน)`
-                    : 'ข้อมูลนิติบุคคลและประวัติองค์กรระดับคลังกลาง (เชื่อมต่อตาราง master_company_profile บน Cloud)'}
+                    ? `มีทั้งหมด ${projectsLibrary.length} โครงการ (บันทึกในเครื่องปลอดภัย ไม่สูญหาย สามารถส่งออก/นำเข้าไฟล์ .json เพื่อแลกเปลี่ยนข้อมูลในทีม)`
+                    : 'ข้อมูลนิติบุคคลและประวัติองค์กรระดับคลังกลาง (บันทึกในเครื่องปลอดภัย)'}
                 </div>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <input
+                  ref={fileInputProjectsRef}
+                  type="file"
+                  accept=".json"
+                  style={{ display: 'none' }}
+                  onChange={handleImportProjectsFile}
+                />
+                {libraryTab === 'projects' && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={exportMasterProjectsToJson}
+                      className="btn btn-outline"
+                      style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem', color: '#047857', borderColor: '#6EE7B7', backgroundColor: '#ECFDF5', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
+                      title="ส่งออกไฟล์ .json ของคลังผลงานทั้งหมด เพื่อสำรองข้อมูลหรือแชร์ให้ทีม"
+                    >
+                      <Download size={13} /> ส่งออกคลัง (.json)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => fileInputProjectsRef.current?.click()}
+                      className="btn btn-outline"
+                      style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem', color: '#1D4ED8', borderColor: '#93C5FD', backgroundColor: '#EFF6FF', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
+                      title="นำเข้าไฟล์ .json ที่ได้รับจากเพื่อนร่วมงาน (ผสานโครงการใหม่อัตโนมัติ ข้อมูลเดิมไม่สูญหาย)"
+                    >
+                      <Upload size={13} /> นำเข้าคลัง (.json)
+                    </button>
+                  </>
+                )}
                 {libraryTab === 'projects' ? (
                   projectsLibrary.length > 0 ? (
                     <button
@@ -1449,7 +1484,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                       🏢 ข้อมูลบริษัทกลาง (Master Company Profile)
                     </div>
                     <div style={{ fontSize: '0.78rem', color: '#15803D', marginTop: '2px' }}>
-                      เชื่อมต่อตาราง <code>master_company_profile</code> บน Cloud เพื่อให้ทุกโครงการและทุกคนในทีมใช้ข้อมูลเดียวกัน
+                      บันทึกในเครื่องปลอดภัย (IndexedDB) เพื่อให้ทุกโครงการดึงข้อมูลชุดเดียวกันไปใช้ได้ทันที
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
@@ -1467,7 +1502,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                       className="btn btn-outline"
                       style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem', color: '#0369A1', borderColor: '#7DD3FC', backgroundColor: '#FFFFFF', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px' }}
                     >
-                      <Save size={13} /> บันทึกขึ้น Cloud
+                      <Save size={13} /> บันทึกเข้าคลังกลาง
                     </button>
                   </div>
                 </div>

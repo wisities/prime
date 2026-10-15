@@ -1,6 +1,7 @@
 import { BiddingProject, ProjectAttachment } from '../types/proposal';
 import { DEFAULT_BIDDING_PROJECTS } from '../data/defaultData';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
+import { idbSet, idbGet, idbGetAll, idbDelete, IDB_STORES } from './localDatabase';
 
 const LOCAL_STORAGE_KEY = 'prime_bidding_projects_v2';
 
@@ -217,6 +218,27 @@ export async function loadAllProjects(): Promise<{
     }
   }
 
+  // 1. ตรวจสอบและโหลดจาก IndexedDB ก่อนเพื่อความสมบูรณ์ 100% ไม่จำกัดขนาด
+  try {
+    const idbProjects = await idbGetAll<BiddingProject>(IDB_STORES.BIDDING_PROJECTS);
+    if (idbProjects && Array.isArray(idbProjects) && idbProjects.length > 0) {
+      const normalizedList = idbProjects.map(normalizeProjectBudget);
+      for (const p of normalizedList) {
+        if (p.attachments) {
+          for (const a of p.attachments) {
+            if (!a.dataUrl || a.dataUrl.startsWith('idb://')) {
+              const idbUrl = await getAttachmentFromIDB(a.id);
+              if (idbUrl) a.dataUrl = idbUrl;
+            }
+          }
+        }
+      }
+      return { projects: normalizedList, source: 'local' };
+    }
+  } catch (e) {
+    console.warn('IndexedDB read error:', e);
+  }
+
   // โหลดจาก LocalStorage (Fallback)
   try {
     const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -247,12 +269,20 @@ export async function loadAllProjects(): Promise<{
 
 /**
  * บันทึกหรืออัปเดตโครงการลงฐานข้อมูล
+ * - บันทึกโครงการฉบับเต็มลง IndexedDB ถาวร (100% ไม่จำกัดขนาด ไม่สูญหาย)
  * - บันทึกไฟล์แนบลง IndexedDB ถาวร (ไม่จำกัดจำนวนไฟล์ ไม่จำกัดขนาด)
  * - บันทึกโครงสร้างโครงการลง LocalStorage (sanitize dataUrl ป้องกันโควตาเต็ม)
  * - ซิงค์โครงการและอัปโหลดไฟล์ขึ้น Supabase Cloud & Supabase Storage
  */
 export async function saveProject(rawProject: BiddingProject): Promise<boolean> {
   const project = normalizeProjectBudget(rawProject);
+
+  // 1. บันทึกลง IndexedDB ถาวร (ปลอดภัย 100% ข้อมูลรูปภาพ/ตารางไม่หาย)
+  try {
+    await idbSet(IDB_STORES.BIDDING_PROJECTS, project.id, project);
+  } catch (e) {
+    console.warn('IndexedDB project save error:', e);
+  }
 
   // บันทึกไฟล์แนบทุกไฟล์ลงใน IndexedDB ถาวร
   if (project.attachments && project.attachments.length > 0) {
@@ -263,7 +293,7 @@ export async function saveProject(rawProject: BiddingProject): Promise<boolean> 
     }
   }
 
-  // 1. บันทึกลง LocalStorage เสมอเพื่อความเร็วและความปลอดภัย (ตัด base64 ขนาดใหญ่ออก)
+  // 2. บันทึกลง LocalStorage เสมอเพื่อความเร็วและความปลอดภัย (ตัด base64 ขนาดใหญ่ออก)
   try {
     const sanitizedProject: BiddingProject = {
       ...project,
@@ -403,6 +433,13 @@ export async function saveProject(rawProject: BiddingProject): Promise<boolean> 
  * ลบโครงการออกจากระบบ
  */
 export async function deleteProject(projectId: string): Promise<boolean> {
+  // ลบจาก IndexedDB
+  try {
+    await idbDelete(IDB_STORES.BIDDING_PROJECTS, projectId);
+  } catch (e) {
+    console.warn('IndexedDB delete error:', e);
+  }
+
   // ลบจาก LocalStorage
   try {
     const saved = localStorage.getItem(LOCAL_STORAGE_KEY);

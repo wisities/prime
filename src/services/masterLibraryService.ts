@@ -1,17 +1,51 @@
 import { TeamMember, PastProject, MasterCompanyProfile } from '../types/proposal';
 import { MasterBomItem } from '../types/bom';
 import { MASTER_TEAM_LIBRARY, MASTER_PROJECTS_LIBRARY, MASTER_BOM_LIBRARY, DEFAULT_MASTER_COMPANY_PROFILE } from '../data/defaultData';
-import { supabase, isSupabaseConfigured } from './supabaseClient';
+import { idbGet, idbSet, IDB_STORES } from './localDatabase';
 
 const TEAM_LIBRARY_KEY = 'prime_master_team_library';
 const PROJECTS_LIBRARY_KEY = 'prime_master_projects_library';
 const BOM_LIBRARY_KEY = 'prime_master_bom_catalog';
 const COMPANY_PROFILE_KEY = 'prime_master_company_profile';
 
+// In-memory runtime caches (always synchronous, hydrated from IndexedDB)
+let cachedProjects: PastProject[] | null = null;
+let cachedTeam: TeamMember[] | null = null;
+let cachedBom: MasterBomItem[] | null = null;
+let cachedCompany: MasterCompanyProfile[] | MasterCompanyProfile | null = null;
+
 export const MASTER_TEAM_UPDATED_EVENT = 'prime_master_team_updated';
 export const MASTER_PROJECTS_UPDATED_EVENT = 'prime_master_projects_updated';
 export const MASTER_BOM_UPDATED_EVENT = 'prime_master_bom_updated';
 export const MASTER_COMPANY_UPDATED_EVENT = 'prime_master_company_updated';
+
+// Hydrate from IndexedDB on startup
+if (typeof window !== 'undefined') {
+  idbGet<PastProject[]>(IDB_STORES.MASTER_PROJECTS, 'current').then((fromIDB) => {
+    if (fromIDB && Array.isArray(fromIDB) && fromIDB.length > 0) {
+      cachedProjects = fromIDB;
+      dispatchProjectsUpdatedEvent(fromIDB);
+    }
+  });
+  idbGet<TeamMember[]>(IDB_STORES.MASTER_TEAM, 'current').then((fromIDB) => {
+    if (fromIDB && Array.isArray(fromIDB) && fromIDB.length > 0) {
+      cachedTeam = fromIDB;
+      dispatchTeamUpdatedEvent(fromIDB);
+    }
+  });
+  idbGet<MasterBomItem[]>(IDB_STORES.MASTER_BOM, 'current').then((fromIDB) => {
+    if (fromIDB && Array.isArray(fromIDB) && fromIDB.length > 0) {
+      cachedBom = fromIDB;
+      dispatchBomUpdatedEvent(fromIDB);
+    }
+  });
+  idbGet<MasterCompanyProfile>(IDB_STORES.MASTER_COMPANY, 'current').then((fromIDB) => {
+    if (fromIDB && fromIDB.companyName) {
+      cachedCompany = fromIDB;
+      dispatchCompanyUpdatedEvent(fromIDB);
+    }
+  });
+}
 
 // Helper to broadcast custom events to window
 function dispatchTeamUpdatedEvent(items: TeamMember[]) {
@@ -264,163 +298,47 @@ function cloudRowToCompanyProfile(row: any): MasterCompanyProfile {
 // Asynchronous Cloud Sync Helpers
 // ==============================================================================
 
-async function syncTeamMembersToCloud(items: TeamMember[]): Promise<void> {
-  if (!isSupabaseConfigured() || !supabase || items.length === 0) return;
-  try {
-    const rows = items.map(teamMemberToCloudRow);
-    const { error } = await supabase.from('master_team_library').upsert(rows, { onConflict: 'id' });
-    if (error) {
-      console.warn('Failed to upsert team members to Supabase:', error);
-    }
-  } catch (err) {
-    console.warn('Error in syncTeamMembersToCloud:', err);
-  }
-}
-
-async function deleteTeamMemberFromCloud(id: string): Promise<void> {
-  if (!isSupabaseConfigured() || !supabase) return;
-  try {
-    const { error } = await supabase.from('master_team_library').delete().eq('id', id);
-    if (error) {
-      console.warn('Failed to delete team member from Supabase:', error);
-    }
-  } catch (err) {
-    console.warn('Error in deleteTeamMemberFromCloud:', err);
-  }
-}
-
-async function clearAllTeamMembersFromCloud(): Promise<void> {
-  if (!isSupabaseConfigured() || !supabase) return;
-  try {
-    const { error } = await supabase.from('master_team_library').delete().neq('id', '');
-    if (error) {
-      console.warn('Failed to clear team library in Supabase:', error);
-    }
-  } catch (err) {
-    console.warn('Error in clearAllTeamMembersFromCloud:', err);
-  }
-}
-
-async function syncProjectsToCloud(items: PastProject[]): Promise<void> {
-  if (!isSupabaseConfigured() || !supabase || items.length === 0) return;
-  try {
-    const rows = items.map(pastProjectToCloudRow);
-    const { error } = await supabase.from('master_projects_library').upsert(rows, { onConflict: 'id' });
-    if (error) {
-      console.warn('Failed to upsert projects to Supabase:', error);
-    }
-  } catch (err) {
-    console.warn('Error in syncProjectsToCloud:', err);
-  }
-}
-
-async function deleteProjectFromCloud(id: string): Promise<void> {
-  if (!isSupabaseConfigured() || !supabase) return;
-  try {
-    const { error } = await supabase.from('master_projects_library').delete().eq('id', id);
-    if (error) {
-      console.warn('Failed to delete project from Supabase:', error);
-    }
-  } catch (err) {
-    console.warn('Error in deleteProjectFromCloud:', err);
-  }
-}
-
-async function clearAllProjectsFromCloud(): Promise<void> {
-  if (!isSupabaseConfigured() || !supabase) return;
-  try {
-    const { error } = await supabase.from('master_projects_library').delete().neq('id', '');
-    if (error) {
-      console.warn('Failed to clear projects library in Supabase:', error);
-    }
-  } catch (err) {
-    console.warn('Error in clearAllProjectsFromCloud:', err);
-  }
-}
-
-async function syncBomItemsToCloud(items: MasterBomItem[]): Promise<void> {
-  if (!isSupabaseConfigured() || !supabase || items.length === 0) return;
-  try {
-    const rows = items.map(masterBomItemToCloudRow);
-    const { error } = await supabase.from('master_bom_catalog').upsert(rows, { onConflict: 'id' });
-    if (error) {
-      console.warn('Failed to upsert BOM items to Supabase:', error);
-    }
-  } catch (err) {
-    console.warn('Error in syncBomItemsToCloud:', err);
-  }
-}
-
-async function deleteBomItemFromCloud(id: string): Promise<void> {
-  if (!isSupabaseConfigured() || !supabase) return;
-  try {
-    const { error } = await supabase.from('master_bom_catalog').delete().eq('id', id);
-    if (error) {
-      console.warn('Failed to delete BOM item from Supabase:', error);
-    }
-  } catch (err) {
-    console.warn('Error in deleteBomItemFromCloud:', err);
-  }
-}
-
-async function syncCompanyProfileToCloud(profile: MasterCompanyProfile): Promise<void> {
-  if (!isSupabaseConfigured() || !supabase) return;
-  try {
-    const row = companyProfileToCloudRow(profile);
-    const { error } = await supabase.from('master_company_profile').upsert(row, { onConflict: 'id' });
-    if (error) {
-      console.warn('Failed to upsert company profile to Supabase:', error);
-    }
-  } catch (err) {
-    console.warn('Error in syncCompanyProfileToCloud:', err);
-  }
-}
-
-async function clearAllBomItemsFromCloud(): Promise<void> {
-  if (!isSupabaseConfigured() || !supabase) return;
-  try {
-    const { error } = await supabase.from('master_bom_catalog').delete().neq('id', '');
-    if (error) {
-      console.warn('Failed to clear BOM catalog in Supabase:', error);
-    }
-  } catch (err) {
-    console.warn('Error in clearAllBomItemsFromCloud:', err);
-  }
-}
-
 // ==============================================================================
-// Synchronous Local Helpers
+// Local-First Persistence Helpers (IndexedDB Unlimited + Safe LocalStorage)
 // ==============================================================================
 
 function saveLocalTeamLibrary(items: TeamMember[]): void {
+  cachedTeam = items;
+  idbSet(IDB_STORES.MASTER_TEAM, 'current', items).catch(() => {});
   try {
     localStorage.setItem(TEAM_LIBRARY_KEY, JSON.stringify(items));
   } catch (e) {
-    console.error('Failed to save team library to localStorage:', e);
+    // Quota safe: IndexedDB stores the full data
   }
 }
 
 function saveLocalProjectsLibrary(items: PastProject[]): void {
+  cachedProjects = items;
+  idbSet(IDB_STORES.MASTER_PROJECTS, 'current', items).catch(() => {});
   try {
     localStorage.setItem(PROJECTS_LIBRARY_KEY, JSON.stringify(items));
   } catch (e) {
-    console.error('Failed to save projects library to localStorage:', e);
+    // Quota safe: IndexedDB stores the full data including high-res image blocks
   }
 }
 
 function saveLocalBomLibrary(items: MasterBomItem[]): void {
+  cachedBom = items;
+  idbSet(IDB_STORES.MASTER_BOM, 'current', items).catch(() => {});
   try {
     localStorage.setItem(BOM_LIBRARY_KEY, JSON.stringify(items));
   } catch (e) {
-    console.error('Failed to save BOM library to localStorage:', e);
+    // Quota safe
   }
 }
 
 function saveLocalCompanyProfile(profile: MasterCompanyProfile): void {
+  cachedCompany = profile;
+  idbSet(IDB_STORES.MASTER_COMPANY, 'current', profile).catch(() => {});
   try {
     localStorage.setItem(COMPANY_PROFILE_KEY, JSON.stringify(profile));
   } catch (e) {
-    console.error('Failed to save company profile to localStorage:', e);
+    // Quota safe
   }
 }
 
@@ -428,112 +346,57 @@ function saveLocalCompanyProfile(profile: MasterCompanyProfile): void {
 // Public API: Team Library (Section 4)
 // ==============================================================================
 
-/**
- * Gets master team members from localStorage cache or falls back to default samples.
- * Always synchronous for instant zero-latency UI rendering.
- */
 export function getMasterTeamLibrary(): TeamMember[] {
+  if (cachedTeam && cachedTeam.length > 0) return cachedTeam;
   try {
     const raw = localStorage.getItem(TEAM_LIBRARY_KEY);
     if (raw !== null) {
-      return JSON.parse(raw);
+      cachedTeam = JSON.parse(raw);
+      return cachedTeam!;
     }
-  } catch (e) {
-    console.error('Failed to load team library from localStorage:', e);
-  }
-  return [...MASTER_TEAM_LIBRARY];
+  } catch (e) {}
+  cachedTeam = [...MASTER_TEAM_LIBRARY];
+  return cachedTeam;
 }
 
-/**
- * Fetches latest master team library from Supabase PostgreSQL database.
- * If cloud table is empty, auto-seeds with existing local/default data.
- * Updates local cache and notifies subscribers.
- */
 export async function fetchMasterTeamLibraryFromCloud(): Promise<TeamMember[]> {
-  if (!isSupabaseConfigured() || !supabase) {
-    return getMasterTeamLibrary();
+  const fromIDB = await idbGet<TeamMember[]>(IDB_STORES.MASTER_TEAM, 'current');
+  if (fromIDB && Array.isArray(fromIDB) && fromIDB.length > 0) {
+    cachedTeam = fromIDB;
+    return fromIDB;
   }
-
-  try {
-    const { data, error } = await supabase
-      .from('master_team_library')
-      .select('*')
-      .order('created_at', { ascending: true });
-
-    if (error) {
-      console.warn('Supabase fetchMasterTeamLibrary error, fallback to local:', error);
-      return getMasterTeamLibrary();
-    }
-
-    if (data && data.length > 0) {
-      const mapped = data.map(cloudRowToTeamMember);
-      saveLocalTeamLibrary(mapped);
-      dispatchTeamUpdatedEvent(mapped);
-      return mapped;
-    } else {
-      // Cloud table is empty, seed with local or default
-      const current = getMasterTeamLibrary();
-      if (current.length > 0) {
-        await syncTeamMembersToCloud(current);
-      }
-      return current;
-    }
-  } catch (err) {
-    console.warn('Network error in fetchMasterTeamLibraryFromCloud, fallback to local:', err);
-    return getMasterTeamLibrary();
-  }
+  return getMasterTeamLibrary();
 }
 
-/**
- * Saves master team members list to localStorage and asynchronously syncs to Supabase Cloud.
- */
 export function saveMasterTeamLibrary(items: TeamMember[]): void {
   saveLocalTeamLibrary(items);
   dispatchTeamUpdatedEvent(items);
-  syncTeamMembersToCloud(items);
 }
 
-/**
- * Deletes a single team member from local cache and Supabase Cloud.
- */
 export function deleteMasterTeamMember(id: string): TeamMember[] {
   const current = getMasterTeamLibrary();
   const updated = current.filter((m) => m.id !== id);
   saveLocalTeamLibrary(updated);
   dispatchTeamUpdatedEvent(updated);
-  deleteTeamMemberFromCloud(id);
   return updated;
 }
 
-/**
- * Clears all team members from local cache and Supabase Cloud.
- */
 export function clearAllMasterTeamMembers(): TeamMember[] {
   saveLocalTeamLibrary([]);
   dispatchTeamUpdatedEvent([]);
-  clearAllTeamMembersFromCloud();
   return [];
 }
 
-/**
- * Resets master team members back to the initial default mock list in local cache and Cloud.
- */
 export function resetMasterTeamLibrary(): TeamMember[] {
   try {
     localStorage.removeItem(TEAM_LIBRARY_KEY);
-  } catch (e) {
-    console.error('Failed to reset team library:', e);
-  }
+  } catch (e) {}
   const defaults = [...MASTER_TEAM_LIBRARY];
   saveLocalTeamLibrary(defaults);
   dispatchTeamUpdatedEvent(defaults);
-  syncTeamMembersToCloud(defaults);
   return defaults;
 }
 
-/**
- * Saves or updates a single team member in the master library (both local and Cloud).
- */
 export function saveMemberToMasterLibrary(member: TeamMember): TeamMember[] {
   const current = getMasterTeamLibrary();
   const existingIdx = current.findIndex((m) => m.id === member.id || m.name.trim() === member.name.trim());
@@ -551,36 +414,24 @@ export function saveMemberToMasterLibrary(member: TeamMember): TeamMember[] {
 
   saveLocalTeamLibrary(updated);
   dispatchTeamUpdatedEvent(updated);
-  syncTeamMembersToCloud([updatedMember]);
   return updated;
 }
 
-/**
- * Saves multiple team members to the master library (upsert in both local and Cloud).
- */
 export function saveMultipleMembersToMasterLibrary(members: TeamMember[]): TeamMember[] {
   const current = [...getMasterTeamLibrary()];
-  const toSync: TeamMember[] = [];
 
   for (const m of members) {
     if (!m.name || m.name.trim() === '' || m.name.includes('(ระบุชื่อ-นามสกุล)')) continue;
     const existingIdx = current.findIndex((item) => item.id === m.id || item.name.trim() === m.name.trim());
     if (existingIdx >= 0) {
-      const merged = { ...m, id: current[existingIdx].id };
-      current[existingIdx] = merged;
-      toSync.push(merged);
+      current[existingIdx] = { ...m, id: current[existingIdx].id };
     } else {
-      const newMember = { ...m, id: `lib-team-${Date.now()}-${Math.random().toString(36).substr(2, 4)}` };
-      current.push(newMember);
-      toSync.push(newMember);
+      current.push({ ...m, id: `lib-team-${Date.now()}-${Math.random().toString(36).substr(2, 4)}` });
     }
   }
 
   saveLocalTeamLibrary(current);
   dispatchTeamUpdatedEvent(current);
-  if (toSync.length > 0) {
-    syncTeamMembersToCloud(toSync);
-  }
   return current;
 }
 
@@ -588,112 +439,57 @@ export function saveMultipleMembersToMasterLibrary(members: TeamMember[]): TeamM
 // Public API: Past Projects Library (Section 5)
 // ==============================================================================
 
-/**
- * Gets master projects from localStorage cache or falls back to default samples.
- * Always synchronous for instant zero-latency UI rendering.
- */
 export function getMasterProjectsLibrary(): PastProject[] {
+  if (cachedProjects && cachedProjects.length > 0) return cachedProjects;
   try {
     const raw = localStorage.getItem(PROJECTS_LIBRARY_KEY);
     if (raw !== null) {
-      return JSON.parse(raw);
+      cachedProjects = JSON.parse(raw);
+      return cachedProjects!;
     }
-  } catch (e) {
-    console.error('Failed to load projects library from localStorage:', e);
-  }
-  return [...MASTER_PROJECTS_LIBRARY];
+  } catch (e) {}
+  cachedProjects = [...MASTER_PROJECTS_LIBRARY];
+  return cachedProjects;
 }
 
-/**
- * Fetches latest master projects library from Supabase PostgreSQL database.
- * If cloud table is empty, auto-seeds with existing local/default data.
- * Updates local cache and notifies subscribers.
- */
 export async function fetchMasterProjectsLibraryFromCloud(): Promise<PastProject[]> {
-  if (!isSupabaseConfigured() || !supabase) {
-    return getMasterProjectsLibrary();
+  const fromIDB = await idbGet<PastProject[]>(IDB_STORES.MASTER_PROJECTS, 'current');
+  if (fromIDB && Array.isArray(fromIDB) && fromIDB.length > 0) {
+    cachedProjects = fromIDB;
+    return fromIDB;
   }
-
-  try {
-    const { data, error } = await supabase
-      .from('master_projects_library')
-      .select('*')
-      .order('created_at', { ascending: true });
-
-    if (error) {
-      console.warn('Supabase fetchMasterProjectsLibrary error, fallback to local:', error);
-      return getMasterProjectsLibrary();
-    }
-
-    if (data && data.length > 0) {
-      const mapped = data.map(cloudRowToPastProject);
-      saveLocalProjectsLibrary(mapped);
-      dispatchProjectsUpdatedEvent(mapped);
-      return mapped;
-    } else {
-      // Cloud table is empty, seed with local or default
-      const current = getMasterProjectsLibrary();
-      if (current.length > 0) {
-        await syncProjectsToCloud(current);
-      }
-      return current;
-    }
-  } catch (err) {
-    console.warn('Network error in fetchMasterProjectsLibraryFromCloud, fallback to local:', err);
-    return getMasterProjectsLibrary();
-  }
+  return getMasterProjectsLibrary();
 }
 
-/**
- * Saves master projects list to localStorage and asynchronously syncs to Supabase Cloud.
- */
 export function saveMasterProjectsLibrary(items: PastProject[]): void {
   saveLocalProjectsLibrary(items);
   dispatchProjectsUpdatedEvent(items);
-  syncProjectsToCloud(items);
 }
 
-/**
- * Deletes a single project from local cache and Supabase Cloud.
- */
 export function deleteMasterProject(id: string): PastProject[] {
   const current = getMasterProjectsLibrary();
   const updated = current.filter((p) => p.id !== id);
   saveLocalProjectsLibrary(updated);
   dispatchProjectsUpdatedEvent(updated);
-  deleteProjectFromCloud(id);
   return updated;
 }
 
-/**
- * Clears all projects from local cache and Supabase Cloud.
- */
 export function clearAllMasterProjects(): PastProject[] {
   saveLocalProjectsLibrary([]);
   dispatchProjectsUpdatedEvent([]);
-  clearAllProjectsFromCloud();
   return [];
 }
 
-/**
- * Resets master projects back to the initial default mock list in local cache and Cloud.
- */
 export function resetMasterProjectsLibrary(): PastProject[] {
   try {
     localStorage.removeItem(PROJECTS_LIBRARY_KEY);
-  } catch (e) {
-    console.error('Failed to reset projects library:', e);
-  }
+  } catch (e) {}
   const defaults = [...MASTER_PROJECTS_LIBRARY];
   saveLocalProjectsLibrary(defaults);
   dispatchProjectsUpdatedEvent(defaults);
-  syncProjectsToCloud(defaults);
   return defaults;
 }
 
-/**
- * Saves or updates a single project in the master library (both local and Cloud).
- */
 export function saveProjectToMasterLibrary(project: PastProject): PastProject[] {
   const current = getMasterProjectsLibrary();
   const existingIdx = current.findIndex((p) => p.id === project.id || p.projectName.trim() === project.projectName.trim());
@@ -711,36 +507,24 @@ export function saveProjectToMasterLibrary(project: PastProject): PastProject[] 
 
   saveLocalProjectsLibrary(updated);
   dispatchProjectsUpdatedEvent(updated);
-  syncProjectsToCloud([updatedProject]);
   return updated;
 }
 
-/**
- * Saves multiple projects to the master library (upsert in both local and Cloud).
- */
 export function saveMultipleProjectsToMasterLibrary(projects: PastProject[]): PastProject[] {
   const current = [...getMasterProjectsLibrary()];
-  const toSync: PastProject[] = [];
 
   for (const p of projects) {
     if (!p.projectName || p.projectName.trim() === '') continue;
     const existingIdx = current.findIndex((item) => item.id === p.id || item.projectName.trim() === p.projectName.trim());
     if (existingIdx >= 0) {
-      const merged = { ...p, id: current[existingIdx].id };
-      current[existingIdx] = merged;
-      toSync.push(merged);
+      current[existingIdx] = { ...p, id: current[existingIdx].id };
     } else {
-      const newProj = { ...p, id: `lib-proj-${Date.now()}-${Math.random().toString(36).substr(2, 4)}` };
-      current.push(newProj);
-      toSync.push(newProj);
+      current.push({ ...p, id: `lib-proj-${Date.now()}-${Math.random().toString(36).substr(2, 4)}` });
     }
   }
 
   saveLocalProjectsLibrary(current);
   dispatchProjectsUpdatedEvent(current);
-  if (toSync.length > 0) {
-    syncProjectsToCloud(toSync);
-  }
   return current;
 }
 
@@ -748,67 +532,31 @@ export function saveMultipleProjectsToMasterLibrary(projects: PastProject[]): Pa
 // Public API: BOM & Cost Catalog Library
 // ==============================================================================
 
-/**
- * Gets master BOM items from localStorage cache or falls back to default samples.
- * Always synchronous for instant zero-latency UI rendering.
- */
 export function getMasterBomLibrary(): MasterBomItem[] {
+  if (cachedBom && cachedBom.length > 0) return cachedBom;
   try {
     const raw = localStorage.getItem(BOM_LIBRARY_KEY);
     if (raw !== null) {
-      return JSON.parse(raw);
+      cachedBom = JSON.parse(raw);
+      return cachedBom!;
     }
-  } catch (e) {
-    console.error('Failed to parse BOM library from localStorage:', e);
-  }
-  return [...MASTER_BOM_LIBRARY];
+  } catch (e) {}
+  cachedBom = [...MASTER_BOM_LIBRARY];
+  return cachedBom;
 }
 
-/**
- * Fetches latest master BOM library from Supabase PostgreSQL database.
- * If Supabase is offline/unconfigured, falls back cleanly to local cached list.
- */
 export async function fetchMasterBomLibraryFromCloud(): Promise<MasterBomItem[]> {
-  if (!isSupabaseConfigured() || !supabase) {
-    return getMasterBomLibrary();
+  const fromIDB = await idbGet<MasterBomItem[]>(IDB_STORES.MASTER_BOM, 'current');
+  if (fromIDB && Array.isArray(fromIDB) && fromIDB.length > 0) {
+    cachedBom = fromIDB;
+    return fromIDB;
   }
-
-  try {
-    const { data, error } = await supabase
-      .from('master_bom_catalog')
-      .select('*')
-      .order('category', { ascending: true })
-      .order('title', { ascending: true });
-
-    if (error) {
-      console.warn('Supabase fetchMasterBomLibrary error, fallback to local:', error);
-      return getMasterBomLibrary();
-    }
-
-    if (data && data.length > 0) {
-      const items = data.map(cloudRowToMasterBomItem);
-      saveLocalBomLibrary(items);
-      dispatchBomUpdatedEvent(items);
-      return items;
-    } else {
-      // Cloud is empty, seed defaults
-      const current = getMasterBomLibrary();
-      syncBomItemsToCloud(current);
-      return current;
-    }
-  } catch (err) {
-    console.warn('Network error in fetchMasterBomLibraryFromCloud, fallback to local:', err);
-    return getMasterBomLibrary();
-  }
+  return getMasterBomLibrary();
 }
 
-/**
- * Saves master BOM items list to localStorage and asynchronously syncs to Supabase Cloud.
- */
 export function saveMasterBomLibrary(items: MasterBomItem[]): void {
   saveLocalBomLibrary(items);
   dispatchBomUpdatedEvent(items);
-  syncBomItemsToCloud(items);
 }
 
 export function deleteMasterBomItem(id: string): MasterBomItem[] {
@@ -816,24 +564,22 @@ export function deleteMasterBomItem(id: string): MasterBomItem[] {
   const updated = current.filter((m) => m.id !== id);
   saveLocalBomLibrary(updated);
   dispatchBomUpdatedEvent(updated);
-  deleteBomItemFromCloud(id);
   return updated;
 }
 
 export function clearAllMasterBomItems(): MasterBomItem[] {
-  const empty: MasterBomItem[] = [];
-  saveLocalBomLibrary(empty);
-  dispatchBomUpdatedEvent(empty);
-  clearAllBomItemsFromCloud();
-  return empty;
+  saveLocalBomLibrary([]);
+  dispatchBomUpdatedEvent([]);
+  return [];
 }
 
 export function resetMasterBomLibrary(): MasterBomItem[] {
-  localStorage.removeItem(BOM_LIBRARY_KEY);
+  try {
+    localStorage.removeItem(BOM_LIBRARY_KEY);
+  } catch (e) {}
   const defaults = [...MASTER_BOM_LIBRARY];
   saveLocalBomLibrary(defaults);
   dispatchBomUpdatedEvent(defaults);
-  syncBomItemsToCloud(defaults);
   return defaults;
 }
 
@@ -855,13 +601,11 @@ export function saveItemToMasterBomLibrary(item: MasterBomItem): MasterBomItem[]
 
   saveLocalBomLibrary(current);
   dispatchBomUpdatedEvent(current);
-  syncBomItemsToCloud([updatedItem]);
   return current;
 }
 
 export function saveMultipleItemsToMasterBomLibrary(items: MasterBomItem[]): MasterBomItem[] {
   const current = [...getMasterBomLibrary()];
-  const toSync: MasterBomItem[] = [];
 
   for (const it of items) {
     if (!it.title || it.title.trim() === '') continue;
@@ -869,24 +613,17 @@ export function saveMultipleItemsToMasterBomLibrary(items: MasterBomItem[]): Mas
       (b) => b.id === it.id || (b.title.trim() === it.title.trim() && b.category === it.category)
     );
     if (existingIdx >= 0) {
-      const merged = { ...current[existingIdx], ...it };
-      current[existingIdx] = merged;
-      toSync.push(merged);
+      current[existingIdx] = { ...current[existingIdx], ...it };
     } else {
-      const newItem = {
+      current.push({
         ...it,
         id: it.id && !it.id.startsWith('bom-') ? it.id : `lib-bom-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      };
-      current.push(newItem);
-      toSync.push(newItem);
+      });
     }
   }
 
   saveLocalBomLibrary(current);
   dispatchBomUpdatedEvent(current);
-  if (toSync.length > 0) {
-    syncBomItemsToCloud(toSync);
-  }
   return current;
 }
 
@@ -894,145 +631,145 @@ export function saveMultipleItemsToMasterBomLibrary(items: MasterBomItem[]): Mas
 // Public API: Company Profile Library (Section 5)
 // ==============================================================================
 
-/**
- * Gets master company profile from localStorage cache or falls back to default settings.
- * Always synchronous for instant zero-latency UI rendering.
- */
 export function getMasterCompanyProfile(): MasterCompanyProfile {
+  if (cachedCompany && (cachedCompany as MasterCompanyProfile).companyName) {
+    return cachedCompany as MasterCompanyProfile;
+  }
   try {
     const raw = localStorage.getItem(COMPANY_PROFILE_KEY);
     if (raw !== null) {
-      return JSON.parse(raw);
+      cachedCompany = JSON.parse(raw);
+      return cachedCompany as MasterCompanyProfile;
     }
-  } catch (e) {
-    console.error('Failed to load company profile from localStorage:', e);
-  }
-  return { ...DEFAULT_MASTER_COMPANY_PROFILE };
+  } catch (e) {}
+  cachedCompany = { ...DEFAULT_MASTER_COMPANY_PROFILE };
+  return cachedCompany as MasterCompanyProfile;
 }
 
-/**
- * Fetches latest master company profile from Supabase PostgreSQL database.
- * If Supabase is offline/unconfigured, falls back cleanly to local cached profile.
- */
 export async function fetchMasterCompanyProfileFromCloud(): Promise<MasterCompanyProfile> {
-  if (!isSupabaseConfigured() || !supabase) {
-    return getMasterCompanyProfile();
+  const fromIDB = await idbGet<MasterCompanyProfile>(IDB_STORES.MASTER_COMPANY, 'current');
+  if (fromIDB && fromIDB.companyName) {
+    cachedCompany = fromIDB;
+    return fromIDB;
   }
-
-  try {
-    const { data, error } = await supabase
-      .from('master_company_profile')
-      .select('*')
-      .eq('id', 'default_company')
-      .maybeSingle();
-
-    if (error) {
-      console.warn('Supabase fetchMasterCompanyProfile error, fallback to local:', error);
-      return getMasterCompanyProfile();
-    }
-
-    if (data) {
-      const profile = cloudRowToCompanyProfile(data);
-      saveLocalCompanyProfile(profile);
-      dispatchCompanyUpdatedEvent(profile);
-      return profile;
-    } else {
-      // Cloud is empty, seed defaults
-      const current = getMasterCompanyProfile();
-      await syncCompanyProfileToCloud(current);
-      return current;
-    }
-  } catch (err) {
-    console.warn('Network error in fetchMasterCompanyProfileFromCloud, fallback to local:', err);
-    return getMasterCompanyProfile();
-  }
+  return getMasterCompanyProfile();
 }
 
-/**
- * Saves master company profile to localStorage and asynchronously syncs to Supabase Cloud.
- */
 export function saveMasterCompanyProfile(profile: MasterCompanyProfile): void {
   saveLocalCompanyProfile(profile);
   dispatchCompanyUpdatedEvent(profile);
-  syncCompanyProfileToCloud(profile);
 }
 
-/**
- * Resets master company profile back to default template.
- */
 export function resetMasterCompanyProfile(): MasterCompanyProfile {
   try {
     localStorage.removeItem(COMPANY_PROFILE_KEY);
-  } catch (e) {
-    console.error('Failed to reset company profile:', e);
-  }
+  } catch (e) {}
   const defaults = { ...DEFAULT_MASTER_COMPANY_PROFILE };
   saveLocalCompanyProfile(defaults);
   dispatchCompanyUpdatedEvent(defaults);
-  syncCompanyProfileToCloud(defaults);
   return defaults;
 }
 
 // ==============================================================================
-// Real-time Supabase Subscription
+// Local-First JSON Export & Import (100% Offline & File Sharing)
 // ==============================================================================
 
-/**
- * Subscribes to real-time changes in Supabase Cloud for Master Library tables.
- * Returns an cleanup unsubscribe function.
- */
-export function initMasterLibraryRealtime(
-  onTeamChange?: (items: TeamMember[]) => void,
-  onProjectsChange?: (items: PastProject[]) => void,
-  onBomChange?: (items: MasterBomItem[]) => void,
-  onCompanyChange?: (profile: MasterCompanyProfile) => void
-): () => void {
-  if (!isSupabaseConfigured() || !supabase) {
-    return () => {};
-  }
+export function exportMasterProjectsToJson(): void {
+  const projects = getMasterProjectsLibrary();
+  const jsonStr = JSON.stringify(projects, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Prime_Master_Projects_${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
+export function importMasterProjectsFromJson(jsonString: string): { success: boolean; count: number; error?: string } {
   try {
-    const channel = supabase
-      .channel('master_library_realtime_sync')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'master_team_library' },
-        async () => {
-          const fresh = await fetchMasterTeamLibraryFromCloud();
-          if (onTeamChange) onTeamChange(fresh);
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'master_projects_library' },
-        async () => {
-          const fresh = await fetchMasterProjectsLibraryFromCloud();
-          if (onProjectsChange) onProjectsChange(fresh);
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'master_bom_catalog' },
-        async () => {
-          const fresh = await fetchMasterBomLibraryFromCloud();
-          if (onBomChange) onBomChange(fresh);
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'master_company_profile' },
-        async () => {
-          const fresh = await fetchMasterCompanyProfileFromCloud();
-          if (onCompanyChange) onCompanyChange(fresh);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase?.removeChannel(channel);
-    };
-  } catch (err) {
-    console.warn('Realtime subscription error for master library:', err);
-    return () => {};
+    const parsed = JSON.parse(jsonString);
+    if (Array.isArray(parsed) && parsed.length > 0 && (parsed[0].projectName || parsed[0].id)) {
+      const updated = saveMultipleProjectsToMasterLibrary(parsed);
+      return { success: true, count: updated.length };
+    }
+    return { success: false, count: 0, error: 'รูปแบบไฟล์ไม่ตรงกับรายการผลงานโครงการ' };
+  } catch (err: any) {
+    return { success: false, count: 0, error: err?.message || 'เกิดข้อผิดพลาดในการอ่านไฟล์ JSON' };
   }
+}
+
+export function exportMasterTeamToJson(): void {
+  const team = getMasterTeamLibrary();
+  const jsonStr = JSON.stringify(team, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Prime_Master_Team_${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function importMasterTeamFromJson(jsonString: string): { success: boolean; count: number; error?: string } {
+  try {
+    const parsed = JSON.parse(jsonString);
+    if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].name) {
+      const updated = saveMultipleMembersToMasterLibrary(parsed);
+      return { success: true, count: updated.length };
+    }
+    return { success: false, count: 0, error: 'รูปแบบไฟล์ไม่ตรงกับรายการบุคลากร' };
+  } catch (err: any) {
+    return { success: false, count: 0, error: err?.message || 'เกิดข้อผิดพลาดในการอ่านไฟล์ JSON' };
+  }
+}
+
+export function exportAllMasterDataToJson(): void {
+  const allData = {
+    exportDate: new Date().toISOString(),
+    version: '2.0',
+    masterProjects: getMasterProjectsLibrary(),
+    masterTeam: getMasterTeamLibrary(),
+    masterBom: getMasterBomLibrary(),
+    masterCompany: getMasterCompanyProfile(),
+  };
+  const jsonStr = JSON.stringify(allData, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Prime_Master_All_Catalog_Backup_${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function importAllMasterDataFromJson(jsonString: string): { success: boolean; error?: string } {
+  try {
+    const parsed = JSON.parse(jsonString);
+    if (parsed.masterProjects && Array.isArray(parsed.masterProjects)) {
+      saveMultipleProjectsToMasterLibrary(parsed.masterProjects);
+    }
+    if (parsed.masterTeam && Array.isArray(parsed.masterTeam)) {
+      saveMultipleMembersToMasterLibrary(parsed.masterTeam);
+    }
+    if (parsed.masterBom && Array.isArray(parsed.masterBom)) {
+      saveMultipleItemsToMasterBomLibrary(parsed.masterBom);
+    }
+    if (parsed.masterCompany && typeof parsed.masterCompany === 'object') {
+      saveMasterCompanyProfile(parsed.masterCompany);
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'เกิดข้อผิดพลาดในการอ่านไฟล์' };
+  }
+}
+
+// Realtime sync disabled (100% Local Storage)
+export function initMasterLibraryRealtime(
+  _onTeamChange?: (items: TeamMember[]) => void,
+  _onProjectsChange?: (items: PastProject[]) => void,
+  _onBomChange?: (items: MasterBomItem[]) => void,
+  _onCompanyChange?: (profile: MasterCompanyProfile) => void
+): () => void {
+  return () => {};
 }

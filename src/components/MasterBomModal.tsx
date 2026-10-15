@@ -345,47 +345,25 @@ export const MasterBomModal: React.FC<MasterBomModalProps> = ({
                 <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#0F2744', margin: 0 }}>
                   คลังรายการและอัตราค่าใช้จ่ายกลาง (Master Cost & BOM Catalog)
                 </h3>
-                {isSupabaseConfigured() ? (
-                  <span
-                    style={{
-                      fontSize: '0.72rem',
-                      backgroundColor: '#ECFDF5',
-                      color: '#047857',
-                      padding: '2px 8px',
-                      borderRadius: '12px',
-                      border: '1px solid #A7F3D0',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      fontWeight: 600,
-                    }}
-                  >
-                    <Database size={11} /> Cloud Synced
-                  </span>
-                ) : (
-                  <span
-                    style={{
-                      fontSize: '0.72rem',
-                      backgroundColor: '#F1F5F9',
-                      color: '#64748B',
-                      padding: '2px 8px',
-                      borderRadius: '12px',
-                      border: '1px solid #CBD5E1',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      fontWeight: 500,
-                    }}
-                  >
-                    💾 แคชในเครื่อง
-                  </span>
-                )}
-                {isLoadingCloud && (
-                  <span style={{ fontSize: '0.75rem', color: '#2563EB' }}>กำลังเชื่อมต่อ...</span>
-                )}
+                <span
+                  style={{
+                    fontSize: '0.72rem',
+                    backgroundColor: '#ECFDF5',
+                    color: '#047857',
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    border: '1px solid #A7F3D0',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontWeight: 600,
+                  }}
+                >
+                  💾 บันทึกในเครื่องปลอดภัย (IndexedDB)
+                </span>
               </div>
               <p style={{ fontSize: '0.825rem', color: '#64748B', margin: '2px 0 0 0' }}>
-                กำหนดเป็นข้อมูลกลางไว้ล่วงหน้า เลือกนำมาใช้และปรับปรุงปริมาณหรือราคาต่อหน่วยได้ทันทีก่อนนำเข้าโครงการ
+                กำหนดเป็นข้อมูลกลางไว้ล่วงหน้า (บันทึกในเครื่องปลอดภัย ไม่สูญหาย) เลือกนำมาใช้และปรับปรุงปริมาณหรือราคาต่อหน่วยได้ทันที
               </p>
             </div>
           </div>

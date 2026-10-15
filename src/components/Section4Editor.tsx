@@ -11,9 +11,11 @@ import {
   saveMultipleMembersToMasterLibrary,
   MASTER_TEAM_UPDATED_EVENT,
   initMasterLibraryRealtime,
+  exportMasterTeamToJson,
+  importMasterTeamFromJson,
 } from '../services/masterLibraryService';
 import { isSupabaseConfigured } from '../services/supabaseClient';
-import { Users, ShieldAlert, Plus, Trash2, Library, ChevronDown, ChevronUp, TableProperties, CheckCheck, Sparkles, RotateCcw, Clock, ArrowUp, ArrowDown, BookmarkPlus, BookmarkCheck, Check, Camera, Upload, User, Database } from 'lucide-react';
+import { Users, ShieldAlert, Plus, Trash2, Library, ChevronDown, ChevronUp, TableProperties, CheckCheck, Sparkles, RotateCcw, Clock, ArrowUp, ArrowDown, BookmarkPlus, BookmarkCheck, Check, Camera, Upload, User, Database, Download } from 'lucide-react';
 
 interface Section4EditorProps {
   section4: Section4TeamAndRisk;
@@ -31,6 +33,26 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
   const [showLibraryModal, setShowLibraryModal] = useState(false);
   const [teamLibrary, setTeamLibrary] = useState<TeamMember[]>(getMasterTeamLibrary());
   const [isLoadingCloud, setIsLoadingCloud] = useState(false);
+  const fileInputTeamRef = React.useRef<HTMLInputElement>(null);
+
+  const handleImportTeamFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const res = importMasterTeamFromJson(text);
+      if (res.success) {
+        const fresh = getMasterTeamLibrary();
+        setTeamLibrary(fresh);
+        alert(`นำเข้าและผสานรายชื่อบุคลากรสำเร็จ! ปัจจุบันคลังกลางมีทั้งหมด ${res.count} ท่าน`);
+      } else {
+        alert(`เกิดข้อผิดพลาดในการนำเข้า: ${res.error}`);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
 
   useEffect(() => {
     fetchMasterTeamLibraryFromCloud().then((items) => {
@@ -53,10 +75,7 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
   }, []);
 
   const handleOpenLibrary = () => {
-    setIsLoadingCloud(true);
-    fetchMasterTeamLibraryFromCloud()
-      .then((items) => setTeamLibrary(items))
-      .finally(() => setIsLoadingCloud(false));
+    setTeamLibrary(getMasterTeamLibrary());
     setShowLibraryModal(true);
   };
 
@@ -930,33 +949,47 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
       {showLibraryModal && (
         <div className="modal-overlay" onClick={() => setShowLibraryModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '780px' }}>
-            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--primary-900)', margin: 0 }}>
                     คลังข้อมูลบุคลากรกลาง (Prime Digital Talent Pool)
                   </h3>
-                  {isSupabaseConfigured() ? (
-                    <span style={{ fontSize: '0.72rem', backgroundColor: '#ECFDF5', color: '#047857', padding: '2px 8px', borderRadius: '12px', border: '1px solid #A7F3D0', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
-                      <Database size={11} /> Cloud Database
-                    </span>
-                  ) : (
-                    <span style={{ fontSize: '0.72rem', backgroundColor: '#F1F5F9', color: '#64748B', padding: '2px 8px', borderRadius: '12px', border: '1px solid #CBD5E1', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 500 }}>
-                      💾 แคชในเครื่อง
-                    </span>
-                  )}
-                  {isLoadingCloud && (
-                    <span style={{ fontSize: '0.72rem', color: '#2563EB', fontWeight: 500 }}>
-                      กำลังซิงค์...
-                    </span>
-                  )}
+                  <span style={{ fontSize: '0.72rem', backgroundColor: '#ECFDF5', color: '#047857', padding: '2px 8px', borderRadius: '12px', border: '1px solid #A7F3D0', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                    💾 บันทึกในเครื่องปลอดภัย (IndexedDB)
+                  </span>
                 </div>
                 <div style={{ fontSize: '0.8rem', color: 'var(--slate-500)', marginTop: '2px' }}>
-                  มีทั้งหมด {teamLibrary.length} รายการ (เชื่อมต่อฐานข้อมูลกลาง ใช้ร่วมกันได้ทุกโครงการและทุกคน)
+                  มีทั้งหมด {teamLibrary.length} รายการ (บันทึกในเครื่องปลอดภัย ไม่สูญหาย สามารถส่งออก/นำเข้าไฟล์ .json เพื่อแลกเปลี่ยนข้อมูลในทีม)
                 </div>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <input
+                  ref={fileInputTeamRef}
+                  type="file"
+                  accept=".json"
+                  style={{ display: 'none' }}
+                  onChange={handleImportTeamFile}
+                />
+                <button
+                  type="button"
+                  onClick={exportMasterTeamToJson}
+                  className="btn btn-outline"
+                  style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem', color: '#047857', borderColor: '#6EE7B7', backgroundColor: '#ECFDF5', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
+                  title="ส่งออกไฟล์ .json ของคลังบุคลากรทั้งหมด เพื่อสำรองข้อมูลหรือแชร์ให้ทีม"
+                >
+                  <Download size={13} /> ส่งออกคลัง (.json)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fileInputTeamRef.current?.click()}
+                  className="btn btn-outline"
+                  style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem', color: '#1D4ED8', borderColor: '#93C5FD', backgroundColor: '#EFF6FF', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
+                  title="นำเข้าไฟล์ .json ที่ได้รับจากเพื่อนร่วมงาน (ผสานรายชื่อใหม่อัตโนมัติ ข้อมูลเดิมไม่สูญหาย)"
+                >
+                  <Upload size={13} /> นำเข้าคลัง (.json)
+                </button>
                 {teamLibrary.length > 0 ? (
                   <button
                     type="button"
