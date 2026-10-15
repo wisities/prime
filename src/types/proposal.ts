@@ -155,8 +155,8 @@ export interface PastProject {
   description: string;
   category: string;
   isSelected: boolean;
-  projectType?: ProjectTrackType; // 'tor_reference' (ผลงานอ้างอิงหลักตาม TOR) หรือ 'supplementary' (ผลงานเสริมที่สอดคล้อง)
-  relevanceNote?: string; // โน้ตกำกับกิจกรรมใดที่สอดคล้องกับงานจ้างโครงการนี้ (สำหรับผลงานเสริม)
+  projectType?: ProjectTrackType; // 'tor_reference' (ผลงานอ้างอิงหลักตาม TOR) หรือ 'supplementary' (โครงการอื่นๆ ที่เกี่ยวข้อง)
+  relevanceNote?: string; // โน้ตกำกับกิจกรรมใดที่สอดคล้องกับงานจ้างโครงการนี้ (สำหรับโครงการอื่นๆ)
   certificateFileUrl?: string; // ภาพสำเนาสัญญาจ้าง หรือใบรับรองผลงาน (สำหรับแทรกในภาคผนวก)
   certificateFileName?: string;
   projectImageUrl?: string; // ภาพประกอบผลงาน / หน้าจอระบบ (legacy)

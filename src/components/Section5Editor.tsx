@@ -19,9 +19,36 @@ import {
   exportMasterProjectsToJson,
   importMasterProjectsFromJson,
 } from '../services/masterLibraryService';
-import { isSupabaseConfigured } from '../services/supabaseClient';
-import { Building2, Plus, Trash2, Library, Filter, Calendar, AlertTriangle, CheckCircle, Upload, Image, FileText, Paperclip, FileCheck, BookmarkCheck, RotateCcw, ArrowUp, ArrowDown, BookmarkPlus, Check, Database, Save, Download, List, Table as TableIcon, ChevronDown, ChevronUp, ChevronRight } from 'lucide-react';
+import { Building2, Plus, Trash2, Library, Filter, Calendar, AlertTriangle, CheckCircle, Upload, Image, FileText, Paperclip, FileCheck, BookmarkCheck, RotateCcw, ArrowUp, ArrowDown, ArrowUpDown, BookmarkPlus, Check, Database, Save, Download, List, Table as TableIcon, ChevronDown, ChevronUp, ChevronRight } from 'lucide-react';
 
+/**
+ * ฟังก์ชันจัดเรียงรายการผลงานโครงการตามเงื่อนไข:
+ * 1. แยกกลุ่มประเภทโครงการ: ผลงานอ้างอิงตาม TOR ('tor_reference') มาก่อน, ตามด้วยโครงการอื่นๆ ('supplementary')
+ * 2. ภายในแต่ละกลุ่ม: เรียงตามปีที่แล้วเสร็จ (completionYearBE) โดยใหม่สุดขึ้นก่อน (Descending)
+ * 3. หากปีเดียวกัน: ให้เอาโครงการที่มีมูลค่าสัญญา (contractValue) สูงกว่าขึ้นก่อน (Descending)
+ */
+export const sortPastProjects = (projects: PastProject[]): PastProject[] => {
+  return [...projects].sort((a, b) => {
+    // 1. แยกผลงานอ้างอิงตาม TOR ('tor_reference') และโครงการอื่นๆ ('supplementary')
+    const aType = a.projectType || 'tor_reference';
+    const bType = b.projectType || 'tor_reference';
+    if (aType !== bType) {
+      return aType === 'tor_reference' ? -1 : 1;
+    }
+
+    // 2. เรียงตามปี ใหม่สุดขึ้นก่อน (completionYearBE มากไปน้อย)
+    const aYear = Number(a.completionYearBE) || 0;
+    const bYear = Number(b.completionYearBE) || 0;
+    if (bYear !== aYear) {
+      return bYear - aYear;
+    }
+
+    // 3. หากปีเดียวกัน ให้เอาโครงการที่มูลค่าสูงกว่าขึ้นก่อน (contractValue มากไปน้อย)
+    const aVal = Number(a.contractValue) || 0;
+    const bVal = Number(b.contractValue) || 0;
+    return bVal - aVal;
+  });
+};
 
 interface Section5EditorProps {
   section5: Section5Company;
@@ -36,6 +63,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
   const [companyToast, setCompanyToast] = useState<string | null>(null);
   const [isLoadingCloud, setIsLoadingCloud] = useState(false);
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
+  const [selectedLibraryIds, setSelectedLibraryIds] = useState<string[]>([]);
   const fileInputProjectsRef = React.useRef<HTMLInputElement>(null);
   const currentYearBE = 2568;
 
@@ -108,6 +136,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
 
   const handleOpenLibrary = () => {
     setProjectsLibrary(getMasterProjectsLibrary());
+    setSelectedLibraryIds([]);
     setShowLibraryModal(true);
   };
 
@@ -193,6 +222,72 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
     });
   };
 
+  const handleToggleLibrarySelect = (id: string) => {
+    setSelectedLibraryIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllLibrary = () => {
+    if (selectedLibraryIds.length === projectsLibrary.length) {
+      setSelectedLibraryIds([]);
+    } else {
+      setSelectedLibraryIds(projectsLibrary.map((p) => p.id));
+    }
+  };
+
+  const handleImportSelectedFromLibrary = () => {
+    if (selectedLibraryIds.length === 0) {
+      alert('กรุณาทำเครื่องหมายเลือกโครงการที่ต้องการนำเข้าอย่างน้อย 1 รายการ');
+      return;
+    }
+
+    const selectedProjectsToImport = projectsLibrary.filter((p) =>
+      selectedLibraryIds.includes(p.id)
+    );
+
+    const existingNames = new Set(section5.pastProjects.map((p) => p.projectName.trim()));
+    const newItems: PastProject[] = [];
+    let duplicateCount = 0;
+
+    selectedProjectsToImport.forEach((proj, idx) => {
+      if (existingNames.has(proj.projectName.trim())) {
+        duplicateCount++;
+      } else {
+        const uniqueId = `proj-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`;
+        newItems.push({
+          ...proj,
+          id: uniqueId,
+          isSelected: true,
+        });
+      }
+    });
+
+    if (newItems.length === 0) {
+      alert(`โครงการที่เลือกทั้งหมด (${duplicateCount} โครงการ) มีอยู่ในเล่มข้อเสนอนี้แล้ว`);
+      return;
+    }
+
+    const combined = [...section5.pastProjects, ...newItems];
+    const sorted = sortPastProjects(combined);
+    onChange({ ...section5, pastProjects: sorted });
+
+    const newCollapsedMap = { ...collapsedProjects };
+    newItems.forEach((item) => {
+      newCollapsedMap[item.id] = false;
+    });
+    setCollapsedProjects(newCollapsedMap);
+
+    setSelectedLibraryIds([]);
+    setShowLibraryModal(false);
+
+    let msg = `นำเข้าผลงานสำเร็จ ${newItems.length} โครงการ (จัดเรียงแยกตาม TOR / โครงการอื่นๆ, ปีใหม่สุด และมูลค่าสัญญาเรียบร้อยแล้ว)`;
+    if (duplicateCount > 0) {
+      msg += `\n* ข้าม ${duplicateCount} โครงการที่มีอยู่แล้วในเล่ม`;
+    }
+    alert(msg);
+  };
+
   const handleAddFromLibrary = (project: PastProject) => {
     if (section5.pastProjects.some((p) => p.projectName === project.projectName)) {
       alert(`มีโครงการ "${project.projectName}" ในรายการแล้ว`);
@@ -200,9 +295,18 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
     }
     const newId = `proj-${Date.now()}`;
     const cloned = { ...project, id: newId, isSelected: true };
-    onChange({ ...section5, pastProjects: [...section5.pastProjects, cloned] });
+    const combined = [...section5.pastProjects, cloned];
+    const sorted = sortPastProjects(combined);
+    onChange({ ...section5, pastProjects: sorted });
     setCollapsedProjects((prev) => ({ ...prev, [newId]: false }));
     setShowLibraryModal(false);
+  };
+
+  const handleSortCurrentProjects = () => {
+    const sorted = sortPastProjects(section5.pastProjects);
+    onChange({ ...section5, pastProjects: sorted });
+    setSavedProjectToast('จัดเรียงโครงการสำเร็จ: แยกตาม TOR / โครงการอื่นๆ -> ปีล่าสุดขึ้นก่อน -> มูลค่าสูงสุดขึ้นก่อน');
+    setTimeout(() => setSavedProjectToast(null), 3000);
   };
 
   const handleMoveProject = (index: number, direction: 'up' | 'down') => {
@@ -588,7 +692,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
               ผลงานและประสบการณ์ที่เกี่ยวข้อง (Track Record with Year Limitation & Appendix)
             </h2>
             <p>
-              จำแนกผลงานอ้างอิงหลักตามเกณฑ์ TOR (ย้อนหลังไม่เกินกี่ปี และแนบสำเนาสัญญาในภาคผนวก) และผลงานเสริมที่สอดคล้อง
+              จำแนกผลงานอ้างอิงหลักตามเกณฑ์ TOR (ย้อนหลังไม่เกินกี่ปี และแนบสำเนาสัญญาในภาคผนวก) และโครงการอื่นๆ ที่เกี่ยวข้อง
             </p>
           </div>
 
@@ -669,7 +773,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                 fontWeight: 600,
               }}
             >
-              ผลงานเสริม: <strong>{supplementaryProjects.length}</strong> โครงการ
+              โครงการอื่นๆ: <strong>{supplementaryProjects.length}</strong> โครงการ
             </span>
             <span
               style={{
@@ -709,13 +813,22 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
           </div>
         )}
 
-        {/* Toolbar: Collapse / Expand All Buttons */}
+        {/* Toolbar: Collapse / Expand All Buttons & Auto-Sort */}
         {section5.pastProjects.length > 0 && (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '0.5rem' }}>
             <div style={{ fontSize: '0.825rem', color: 'var(--slate-600)', fontWeight: 500 }}>
               รายการผลงานทั้งหมด ({section5.pastProjects.length} โครงการ) — สามารถคลิกหัวการ์ดหรือลูกศรเพื่อยุบ/ขยายแต่ละโครงการได้
             </div>
-            <div style={{ display: 'flex', gap: '6px' }}>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={handleSortCurrentProjects}
+                className="btn btn-outline"
+                style={{ fontSize: '0.78rem', padding: '0.3rem 0.65rem', backgroundColor: '#FFFFFF', color: 'var(--primary-800)', borderColor: 'var(--primary-300)', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}
+                title="จัดเรียงโครงการ: แยกตาม TOR / โครงการอื่นๆ -> ปีล่าสุดขึ้นก่อน -> มูลค่าสัญญามากที่สุดขึ้นก่อน"
+              >
+                <ArrowUpDown size={13} /> จัดเรียงอัตโนมัติ (TOR/ปี/มูลค่า)
+              </button>
               <button
                 type="button"
                 onClick={collapseAllProjects}
@@ -879,7 +992,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                           color: !isTorRef ? '#FFFFFF' : 'var(--slate-600)',
                         }}
                       >
-                        ผลงานเสริม
+                        โครงการอื่นๆ
                       </button>
                     </div>
 
@@ -1255,7 +1368,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                     )}
                   </div>
                 ) : (
-                  /* 2. สำหรับผลงานเสริม: มีช่องให้เขียนโน้ตกำกับกิจกรรมใดที่สอดคล้อง ไม่จำเป็นต้องแนบสำเนาสัญญา */
+                  /* 2. สำหรับโครงการอื่นๆ: มีช่องให้เขียนโน้ตกำกับกิจกรรมใดที่สอดคล้อง ไม่จำเป็นต้องแนบสำเนาสัญญา */
                   <div
                     style={{
                       backgroundColor: '#F8FAFC',
@@ -1562,6 +1675,79 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                   </div>
                 )}
 
+                {/* Multi-Selection Control Bar */}
+                {projectsLibrary.length > 0 && (
+                  <div
+                    style={{
+                      padding: '0.65rem 1rem',
+                      backgroundColor: '#F8FAFC',
+                      borderBottom: '1px solid var(--slate-200)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: '0.75rem',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <label
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          cursor: 'pointer',
+                          fontSize: '0.85rem',
+                          fontWeight: 600,
+                          color: 'var(--slate-800)',
+                          userSelect: 'none',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedLibraryIds.length > 0 && selectedLibraryIds.length === projectsLibrary.length}
+                          onChange={handleSelectAllLibrary}
+                          style={{ width: '17px', height: '17px', cursor: 'pointer' }}
+                        />
+                        <span>เลือกทั้งหมด ({projectsLibrary.length} โครงการ)</span>
+                      </label>
+                      {selectedLibraryIds.length > 0 && (
+                        <span
+                          style={{
+                            backgroundColor: '#EFF6FF',
+                            color: '#1D4ED8',
+                            border: '1px solid #BFDBFE',
+                            padding: '2px 8px',
+                            borderRadius: '12px',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                          }}
+                        >
+                          เลือกแล้ว {selectedLibraryIds.length} โครงการ
+                        </span>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleImportSelectedFromLibrary}
+                      disabled={selectedLibraryIds.length === 0}
+                      className="btn btn-primary"
+                      style={{
+                        fontSize: '0.825rem',
+                        padding: '0.4rem 0.9rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: selectedLibraryIds.length > 0 ? '0 2px 4px rgba(30, 58, 138, 0.15)' : 'none',
+                        opacity: selectedLibraryIds.length === 0 ? 0.5 : 1,
+                        cursor: selectedLibraryIds.length === 0 ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      <Plus size={15} /> นำเข้าโครงการที่เลือก ({selectedLibraryIds.length}) เข้าเล่มนี้
+                    </button>
+                  </div>
+                )}
+
                 <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', maxHeight: '65vh', overflowY: 'auto' }}>
                   {projectsLibrary.length === 0 ? (
                     <div
@@ -1590,87 +1776,116 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                       </button>
                     </div>
                   ) : (
-                    projectsLibrary.map((item) => (
-                      <div
-                        key={item.id}
-                        style={{
-                          border: '1px solid var(--slate-200)',
-                          borderRadius: '8px',
-                          padding: '0.85rem 1rem',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          backgroundColor: '#FFFFFF',
-                          gap: '0.75rem',
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0, paddingRight: '0.5rem' }}>
-                          {item.clientLogoUrl && (
-                            <img
-                              src={item.clientLogoUrl}
-                              alt="Client Logo"
-                              style={{
-                                height: '42px',
-                                width: '48px',
-                                objectFit: 'contain',
-                                backgroundColor: '#FFFFFF',
-                                border: '1px solid var(--slate-300)',
-                                borderRadius: '4px',
-                                padding: '2px',
-                                flexShrink: 0,
-                              }}
+                    sortPastProjects(projectsLibrary).map((item) => {
+                      const isItemChecked = selectedLibraryIds.includes(item.id);
+                      const isTorRef = (item.projectType || 'tor_reference') === 'tor_reference';
+                      return (
+                        <div
+                          key={item.id}
+                          style={{
+                            border: `1.5px solid ${isItemChecked ? 'var(--primary-600)' : 'var(--slate-200)'}`,
+                            borderRadius: '8px',
+                            padding: '0.85rem 1rem',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            backgroundColor: isItemChecked ? '#F0F9FF' : '#FFFFFF',
+                            gap: '0.75rem',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0, paddingRight: '0.5rem' }}>
+                            <input
+                              type="checkbox"
+                              checked={isItemChecked}
+                              onChange={() => handleToggleLibrarySelect(item.id)}
+                              style={{ width: '18px', height: '18px', cursor: 'pointer', flexShrink: 0 }}
+                              title="เลือกโครงการนี้เพื่อนำเข้าพร้อมกัน"
                             />
-                          )}
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: 600, color: 'var(--slate-900)' }}>{item.projectName}</div>
-                            <div style={{ fontSize: '0.825rem', color: 'var(--primary-700)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                              <span>{item.clientName}</span>
-                              <span>|</span>
-                              <span>แล้วเสร็จปี พ.ศ. <strong>{item.completionYearBE}</strong></span>
-                              <span>|</span>
-                              <span>มูลค่า {item.contractValue.toLocaleString()} บาท</span>
-                              {item.imageBlocks && item.imageBlocks.length > 0 && (
-                                <span style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '1px 6px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 600 }}>
-                                  📷 {item.imageBlocks.length} บล็อกภาพ
+                            {item.clientLogoUrl && (
+                              <img
+                                src={item.clientLogoUrl}
+                                alt="Client Logo"
+                                style={{
+                                  height: '42px',
+                                  width: '48px',
+                                  objectFit: 'contain',
+                                  backgroundColor: '#FFFFFF',
+                                  border: '1px solid var(--slate-300)',
+                                  borderRadius: '4px',
+                                  padding: '2px',
+                                  flexShrink: 0,
+                                }}
+                              />
+                            )}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                <span
+                                  style={{
+                                    fontSize: '0.7rem',
+                                    padding: '2px 7px',
+                                    borderRadius: '4px',
+                                    fontWeight: 600,
+                                    backgroundColor: isTorRef ? '#EFF6FF' : '#F3F4F6',
+                                    color: isTorRef ? '#1D4ED8' : '#374151',
+                                    border: `1px solid ${isTorRef ? '#BFDBFE' : '#E5E7EB'}`,
+                                  }}
+                                >
+                                  {isTorRef ? 'ผลงานอ้างอิงตาม TOR' : 'โครงการอื่นๆ'}
                                 </span>
+                                <span style={{ fontWeight: 600, color: 'var(--slate-900)' }}>{item.projectName}</span>
+                              </div>
+                              <div style={{ fontSize: '0.825rem', color: 'var(--primary-700)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <span>{item.clientName || 'ไม่ระบุหน่วยงาน'}</span>
+                                <span>|</span>
+                                <span>แล้วเสร็จปี พ.ศ. <strong>{item.completionYearBE}</strong></span>
+                                <span>|</span>
+                                <span>มูลค่า {(item.contractValue || 0).toLocaleString()} บาท</span>
+                                {item.imageBlocks && item.imageBlocks.length > 0 && (
+                                  <span style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '1px 6px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 600 }}>
+                                    📷 {item.imageBlocks.length} บล็อกภาพ
+                                  </span>
+                                )}
+                              </div>
+                              {item.description && (
+                                <div style={{ fontSize: '0.75rem', color: 'var(--slate-500)', marginTop: '2px' }}>
+                                  {item.description}
+                                </div>
                               )}
                             </div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--slate-500)', marginTop: '2px' }}>
-                              {item.description}
-                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                            <button
+                              type="button"
+                              onClick={() => handleAddFromLibrary(item)}
+                              className="btn btn-outline"
+                              style={{ borderColor: 'var(--primary-600)', color: 'var(--primary-700)', whiteSpace: 'nowrap', fontSize: '0.825rem', padding: '0.4rem 0.8rem' }}
+                            >
+                              + เลือกเดี่ยว
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteFromLibrary(item.id, item.projectName)}
+                              className="btn btn-outline"
+                              style={{
+                                borderColor: '#FECACA',
+                                color: '#DC2626',
+                                backgroundColor: '#FEF2F2',
+                                padding: '0.4rem 0.55rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                              title="ลบออกจากคลังข้อมูลกลาง"
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           </div>
                         </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-                          <button
-                            type="button"
-                            onClick={() => handleAddFromLibrary(item)}
-                            className="btn btn-outline"
-                            style={{ borderColor: 'var(--primary-600)', color: 'var(--primary-700)', whiteSpace: 'nowrap', fontSize: '0.825rem', padding: '0.4rem 0.8rem' }}
-                          >
-                            + เลือกเข้าเล่มนี้
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteFromLibrary(item.id, item.projectName)}
-                            className="btn btn-outline"
-                            style={{
-                              borderColor: '#FECACA',
-                              color: '#DC2626',
-                              backgroundColor: '#FEF2F2',
-                              padding: '0.4rem 0.55rem',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                            }}
-                            title="ลบออกจากคลังข้อมูลกลาง"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </div>

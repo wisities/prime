@@ -2104,8 +2104,8 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
   // SECTION 5A (PORTRAIT - แนวตั้ง): 5.1 ข้อมูลบริษัท, โลโก้, รูปสำนักงาน, 5.2 มาตรฐาน
   // SECTION 5B (LANDSCAPE - แนวนอน): 5.3.1 ตารางรายชื่อโครงการอ้างอิงหลัก
   // SECTION 5C (PORTRAIT - แนวตั้ง): รายละเอียดแต่ละโครงการอ้างอิงหลัก
-  // SECTION 5D (LANDSCAPE - แนวนอน): 5.3.2 ตารางรายชื่อโครงการผลงานเสริม
-  // SECTION 5E (PORTRAIT - แนวตั้ง): รายละเอียดแต่ละโครงการผลงานเสริม
+  // SECTION 5D (LANDSCAPE - แนวนอน): 5.3.2 ตารางรายชื่อโครงการอื่นๆ
+  // SECTION 5E (PORTRAIT - แนวตั้ง): รายละเอียดแต่ละโครงการอื่นๆ
   // SECTION 6 (PORTRAIT - แนวตั้ง): ภาคผนวก ก & ปกหลัง
   // =========================================================================
   const part5AChildren: (Paragraph | Table)[] = [];
@@ -2355,14 +2355,14 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
         });
       } else if (h.id === 's5_supplementary') {
         if (supplementaryProjects.length > 0) {
-          // ตารางรายชื่อโครงการผลงานเสริม จัดวางเป็นเอกสารแนวนอน (LANDSCAPE)
+          // ตารางรายชื่อโครงการอื่นๆ จัดวางเป็นเอกสารแนวนอน (LANDSCAPE)
           part5D_suppTableChildren.push(
             new Paragraph({
               heading: HeadingLevel.HEADING_3,
               spacing: { before: 140, after: 80, line: 240, lineRule: LineRuleType.AUTO },
               children: [
                 new TextRun({
-                  text: `${autoRenumber ? '5.3.2' : numPrefix} ผลงานและประสบการณ์เสริมที่สอดคล้องกับงานจ้างโครงการนี้ (Supplementary Experience)`,
+                  text: `${autoRenumber ? '5.3.2' : numPrefix} ผลงานและประสบการณ์โครงการอื่นๆ ที่เกี่ยวข้อง (Other Relevant Projects)`,
                   font: FONT_FAMILY,
                   size: 30,
                   bold: true,
@@ -2373,7 +2373,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
             ...createBodyParagraphs('ผลงานเพิ่มเติมที่มีกิจกรรม เทคโนโลยี หรือแนวทางการดำเนินงานที่สอดคล้องและเป็นประโยชน์ต่อโครงการจ้างนี้เพื่อประกอบการพิจารณาความพร้อมและความเชี่ยวชาญ')
           );
 
-          // 1) ตารางสรุปโครงการผลงานเสริม (ลำดับ, ชื่อโครงการ, หน่วยงาน, ปี, มูลค่าสัญญา, หลักฐาน / กิจกรรมที่สอดคล้อง) - แนวนอน
+          // 1) ตารางสรุปโครงการอื่นๆ (ลำดับ, ชื่อโครงการ, หน่วยงาน, ปี, มูลค่าสัญญา, หลักฐาน / กิจกรรมที่สอดคล้อง) - แนวนอน
           const suppRows = [
             createHeaderRow([
               createHeaderCell('ลำดับ', 6),
@@ -2406,7 +2406,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
             })
           );
 
-          // 2) รายละเอียดโครงการแต่ละโครงการผลงานเสริม จัดวางเป็นเอกสารแนวตั้งปกติ (PORTRAIT)
+          // 2) รายละเอียดโครงการแต่ละโครงการอื่นๆ จัดวางเป็นเอกสารแนวตั้งปกติ (PORTRAIT)
           supplementaryProjects.forEach((proj, idx) => {
             // (ก) ชื่อโครงการ
             part5E_suppDetailsChildren.push(
@@ -2415,7 +2415,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
                 spacing: { before: idx === 0 ? 120 : 260, after: 80, line: 240, lineRule: LineRuleType.AUTO },
                 children: [
                   new TextRun({
-                    text: `5.3.2.${idx + 1} โครงการเสริมที่ ${idx + 1}: ${proj.projectName}`,
+                    text: `5.3.2.${idx + 1} โครงการอื่นๆ ที่ ${idx + 1}: ${proj.projectName}`,
                     font: FONT_FAMILY,
                     size: 30,
                     bold: true,
@@ -2803,7 +2803,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
     });
   }
 
-  // 5.3.2 ตารางรายชื่อโครงการผลงานเสริม (แนวนอน)
+  // 5.3.2 ตารางรายชื่อโครงการอื่นๆ (แนวนอน)
   if (part5D_suppTableChildren.length > 0) {
     docSections.push({
       properties: {
@@ -2818,7 +2818,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
     });
   }
 
-  // รายละเอียดแต่ละโครงการผลงานเสริม (แนวตั้งปกติ)
+  // รายละเอียดแต่ละโครงการอื่นๆ (แนวตั้งปกติ)
   if (part5E_suppDetailsChildren.length > 0) {
     docSections.push({
       properties: {

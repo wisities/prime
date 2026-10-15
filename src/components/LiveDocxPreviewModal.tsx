@@ -1531,13 +1531,13 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                               <div style={{ flex: 1, borderTop: '1px dashed var(--slate-300)' }} />
                             </div>
                             <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginTop: '0.5rem', marginBottom: '0.5rem', color: 'var(--primary-900)' }}>
-                              {numPrefix} ผลงานและประสบการณ์เสริมที่สอดคล้องกับงานจ้างโครงการนี้ (Supplementary Experience)
+                              {numPrefix} ผลงานและประสบการณ์โครงการอื่นๆ ที่เกี่ยวข้อง (Other Relevant Projects)
                             </h3>
                             <p style={{ fontSize: '0.825rem', color: 'var(--slate-600)', marginBottom: '0.75rem', lineHeight: 1.6 }}>
                               ผลงานเพิ่มเติมที่มีกิจกรรม เทคโนโลยี หรือแนวทางการดำเนินงานที่สอดคล้องและเป็นประโยชน์ต่อโครงการจ้างนี้เพื่อประกอบการพิจารณาความพร้อมและความเชี่ยวชาญ
                             </p>
 
-                            {/* 1) ตารางสรุปโครงการผลงานเสริม */}
+                            {/* 1) ตารางสรุปโครงการอื่นๆ */}
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem', marginBottom: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                               <thead>
                                 <tr style={{ backgroundColor: 'var(--slate-700)', color: 'white' }}>
@@ -1567,7 +1567,7 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                               </tbody>
                             </table>
 
-                            {/* 2) รายละเอียดโครงการแต่ละโครงการผลงานเสริม */}
+                            {/* 2) รายละเอียดโครงการแต่ละโครงการอื่นๆ */}
                             {section5.pastProjects
                               .filter((p) => p.isSelected && p.projectType === 'supplementary')
                               .map((p, pIdx) => {
@@ -1592,7 +1592,7 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                                     {/* (ก) ชื่อโครงการ */}
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '2px solid var(--slate-600)', paddingBottom: '0.5rem', marginBottom: '0.75rem' }}>
                                       <span style={{ backgroundColor: 'var(--slate-700)', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 700 }}>
-                                        5.3.2.{pIdx + 1} โครงการเสริมที่ {pIdx + 1}
+                                        5.3.2.{pIdx + 1} โครงการอื่นๆ ที่ {pIdx + 1}
                                       </span>
                                       <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: 'var(--primary-900)' }}>
                                         {p.projectName}

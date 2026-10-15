@@ -895,9 +895,9 @@ export const DEFAULT_DOCUMENT_STRUCTURE: DocumentStructureConfig = {
         },
         {
           id: 's5_supplementary',
-          title: 'ผลงานและประสบการณ์เสริมที่สอดคล้องกับงานจ้างโครงการนี้',
+          title: 'ผลงานและประสบการณ์โครงการอื่นๆ ที่เกี่ยวข้อง',
           originalCode: '5.3.2',
-          description: 'ตารางผลงานเสริมที่สอดคล้องและเป็นประโยชน์ต่อโครงการจ้าง',
+          description: 'ตารางผลงานและประสบการณ์โครงการอื่นๆ ที่เกี่ยวข้องและเป็นประโยชน์ต่อโครงการจ้าง',
           enabled: true,
           order: 4,
         },
