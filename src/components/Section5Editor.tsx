@@ -20,7 +20,7 @@ import {
   importMasterProjectsFromJson,
 } from '../services/masterLibraryService';
 import { isSupabaseConfigured } from '../services/supabaseClient';
-import { Building2, Plus, Trash2, Library, Filter, Calendar, AlertTriangle, CheckCircle, Upload, Image, FileText, Paperclip, FileCheck, BookmarkCheck, RotateCcw, ArrowUp, ArrowDown, BookmarkPlus, Check, Database, Save, Download, List, Table as TableIcon } from 'lucide-react';
+import { Building2, Plus, Trash2, Library, Filter, Calendar, AlertTriangle, CheckCircle, Upload, Image, FileText, Paperclip, FileCheck, BookmarkCheck, RotateCcw, ArrowUp, ArrowDown, BookmarkPlus, Check, Database, Save, Download, List, Table as TableIcon, ChevronDown, ChevronUp, ChevronRight } from 'lucide-react';
 
 
 interface Section5EditorProps {
@@ -35,8 +35,25 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
   const [masterCompany, setMasterCompany] = useState<MasterCompanyProfile>(getMasterCompanyProfile());
   const [companyToast, setCompanyToast] = useState<string | null>(null);
   const [isLoadingCloud, setIsLoadingCloud] = useState(false);
+  const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
   const fileInputProjectsRef = React.useRef<HTMLInputElement>(null);
   const currentYearBE = 2568;
+
+  const toggleProjectCollapse = (id: string) => {
+    setCollapsedProjects((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const collapseAllProjects = () => {
+    const map: Record<string, boolean> = {};
+    section5.pastProjects.forEach((p) => {
+      map[p.id] = true;
+    });
+    setCollapsedProjects(map);
+  };
+
+  const expandAllProjects = () => {
+    setCollapsedProjects({});
+  };
 
   const handleImportProjectsFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -150,21 +167,23 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
   };
 
   const handleAddProject = () => {
+    const newId = `proj-${Date.now()}`;
     const newProj: PastProject = {
-      id: `proj-${Date.now()}`,
-      projectName: 'โครงการพัฒนาและให้คำปรึกษาระบบสารสนเทศภาครัฐ',
-      clientName: 'หน่วยงานภาครัฐ / รัฐวิสาหกิจ',
-      contractValue: 5000000,
+      id: newId,
+      projectName: '',
+      clientName: '',
+      contractValue: 0,
       completionYearBE: currentYearBE,
-      periodDuration: '8 เดือน',
-      description: 'พัฒนาระบบเทคโนโลยีสารสนเทศตามขอบเขตงาน',
-      category: 'พัฒนาระบบคลาวด์และ e-Service',
+      periodDuration: '',
+      description: '',
+      category: '',
       isSelected: true,
       projectType: 'tor_reference',
       relevanceNote: '',
       imageBlocks: [],
     };
     onChange({ ...section5, pastProjects: [...section5.pastProjects, newProj] });
+    setCollapsedProjects((prev) => ({ ...prev, [newId]: false }));
   };
 
   const handleDeleteProject = (id: string) => {
@@ -179,8 +198,10 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
       alert(`มีโครงการ "${project.projectName}" ในรายการแล้ว`);
       return;
     }
-    const cloned = { ...project, id: `proj-${Date.now()}`, isSelected: true };
+    const newId = `proj-${Date.now()}`;
+    const cloned = { ...project, id: newId, isSelected: true };
     onChange({ ...section5, pastProjects: [...section5.pastProjects, cloned] });
+    setCollapsedProjects((prev) => ({ ...prev, [newId]: false }));
     setShowLibraryModal(false);
   };
 
@@ -688,11 +709,46 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
           </div>
         )}
 
+        {/* Toolbar: Collapse / Expand All Buttons */}
+        {section5.pastProjects.length > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <div style={{ fontSize: '0.825rem', color: 'var(--slate-600)', fontWeight: 500 }}>
+              รายการผลงานทั้งหมด ({section5.pastProjects.length} โครงการ) — สามารถคลิกหัวการ์ดหรือลูกศรเพื่อยุบ/ขยายแต่ละโครงการได้
+            </div>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button
+                type="button"
+                onClick={collapseAllProjects}
+                className="btn btn-outline"
+                style={{ fontSize: '0.78rem', padding: '0.3rem 0.65rem', backgroundColor: '#FFFFFF', color: 'var(--slate-700)', borderColor: 'var(--slate-300)', display: 'flex', alignItems: 'center', gap: '4px' }}
+                title="ยุบรายการผลงานทั้งหมดเหลือเฉพาะชื่อโครงการ"
+              >
+                <ChevronUp size={13} /> ยุบทุกโครงการ
+              </button>
+              <button
+                type="button"
+                onClick={expandAllProjects}
+                className="btn btn-outline"
+                style={{ fontSize: '0.78rem', padding: '0.3rem 0.65rem', backgroundColor: '#FFFFFF', color: 'var(--slate-700)', borderColor: 'var(--slate-300)', display: 'flex', alignItems: 'center', gap: '4px' }}
+                title="ขยายรายละเอียดผลงานทั้งหมด"
+              >
+                <ChevronDown size={13} /> ขยายทุกโครงการ
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Projects List */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {section5.pastProjects.map((p, idx) => {
             const isTorRef = (p.projectType || 'tor_reference') === 'tor_reference';
             const isTooOld = isTorRef && p.completionYearBE < minAllowedYear;
+            const isCollapsed = !!collapsedProjects[p.id];
+            const blocks = p.imageBlocks !== undefined
+              ? p.imageBlocks
+              : p.projectImageUrl
+              ? [{ id: `img-${p.id}`, type: 'single' as const, url: p.projectImageUrl, caption: (p.projectImageCaption || '').trim() }]
+              : [];
 
             return (
               <div
@@ -706,15 +762,34 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                       : 'var(--slate-300)'
                   }`,
                   borderRadius: '8px',
-                  padding: '1.25rem',
+                  padding: isCollapsed ? '0.75rem 1rem' : '1.25rem',
                   backgroundColor: isTooOld ? '#FEF2F2' : isTorRef ? '#FAFCFF' : '#FFFFFF',
                   opacity: p.isSelected ? 1 : 0.6,
                   boxShadow: isTorRef ? '0 1px 3px rgba(30, 58, 138, 0.06)' : 'none',
+                  transition: 'all 0.2s ease',
                 }}
               >
                 {/* Project Header Row */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: '320px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isCollapsed ? 0 : '0.85rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: '320px' }}>
+                    <button
+                      type="button"
+                      onClick={() => toggleProjectCollapse(p.id)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: '4px',
+                        cursor: 'pointer',
+                        color: 'var(--primary-700)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        borderRadius: '4px',
+                      }}
+                      title={isCollapsed ? 'ขยายรายละเอียดผลงาน' : 'ยุบย่อผลงาน'}
+                    >
+                      {isCollapsed ? <ChevronRight size={18} /> : <ChevronDown size={18} />}
+                    </button>
+
                     <input
                       type="checkbox"
                       checked={p.isSelected}
@@ -723,17 +798,57 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                       title="เลือกเพื่อนำไปใส่ในเล่มข้อเสนอ"
                     />
 
+                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--slate-400)', minWidth: '22px' }}>
+                      #{idx + 1}
+                    </span>
+
                     <input
                       type="text"
                       className="form-input"
-                      style={{ fontWeight: 600, flex: 1 }}
+                      style={{ fontWeight: 600, flex: 1, minWidth: '220px' }}
+                      placeholder="ระบุชื่อโครงการ..."
                       value={p.projectName}
                       onChange={(e) => handleProjectChange(p.id, 'projectName', e.target.value)}
                     />
+
+                    {isCollapsed && (
+                      <div
+                        onClick={() => toggleProjectCollapse(p.id)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontSize: '0.78rem',
+                          color: 'var(--slate-600)',
+                          cursor: 'pointer',
+                          flexWrap: 'wrap',
+                          marginLeft: '4px',
+                        }}
+                      >
+                        {p.clientName && (
+                          <span style={{ backgroundColor: 'var(--slate-100)', padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--slate-200)' }}>
+                            🏛️ {p.clientName}
+                          </span>
+                        )}
+                        <span style={{ backgroundColor: '#F8FAFC', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--slate-200)' }}>
+                          พ.ศ. {p.completionYearBE}
+                        </span>
+                        {p.contractValue > 0 && (
+                          <span style={{ backgroundColor: '#F0FDF4', color: '#166534', padding: '2px 6px', borderRadius: '4px', border: '1px solid #BBF7D0', fontWeight: 600 }}>
+                            {p.contractValue.toLocaleString()} บ.
+                          </span>
+                        )}
+                        {blocks.length > 0 && (
+                          <span style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '2px 6px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 600 }}>
+                            📷 {blocks.length} รูป
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Badges & Actions */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
                     {/* Project Track Selector */}
                     <div style={{ display: 'inline-flex', borderRadius: '6px', border: '1px solid var(--slate-300)', overflow: 'hidden' }}>
                       <button
@@ -749,7 +864,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                           color: isTorRef ? '#FFFFFF' : 'var(--slate-600)',
                         }}
                       >
-                        ผลงานอ้างอิงหลักตาม TOR
+                        ผลงานอ้างอิงตาม TOR
                       </button>
                       <button
                         type="button"
@@ -764,7 +879,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                           color: !isTorRef ? '#FFFFFF' : 'var(--slate-600)',
                         }}
                       >
-                        ผลงานเสริมที่สอดคล้อง
+                        ผลงานเสริม
                       </button>
                     </div>
 
@@ -841,8 +956,28 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                     >
                       <Trash2 size={14} />
                     </button>
+
+                    {/* Toggle expand/collapse button */}
+                    <button
+                      type="button"
+                      onClick={() => toggleProjectCollapse(p.id)}
+                      className="btn btn-outline"
+                      style={{
+                        padding: '0.35rem 0.55rem',
+                        fontSize: '0.75rem',
+                        color: 'var(--primary-700)',
+                        borderColor: 'var(--primary-300)',
+                        backgroundColor: isCollapsed ? '#EFF6FF' : '#FFFFFF',
+                      }}
+                      title={isCollapsed ? 'ขยายรายละเอียดโครงการ' : 'ยุบย่อโครงการ'}
+                    >
+                      {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                    </button>
                   </div>
                 </div>
+
+                {!isCollapsed && (
+                  <>
 
                 {/* Project Details Grid */}
                 <div className="grid-4" style={{ marginBottom: '0.75rem' }}>
@@ -1174,9 +1309,73 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                   }}
                   defaultCaptionPrefix={`ภาพผลงาน ${idx + 1}`}
                 />
+
+                    {/* Bottom collapse button */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.85rem', paddingTop: '0.65rem', borderTop: '1px dashed var(--slate-200)' }}>
+                      <button
+                        type="button"
+                        onClick={() => toggleProjectCollapse(p.id)}
+                        className="btn btn-outline"
+                        style={{ fontSize: '0.78rem', padding: '0.3rem 0.75rem', color: 'var(--slate-600)', display: 'flex', alignItems: 'center', gap: '5px' }}
+                      >
+                        <ChevronUp size={13} /> ยุบโครงการนี้ (เสร็จแล้ว)
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             );
           })}
+        </div>
+
+        {/* Bottom Action Bar for adding new projects */}
+        <div
+          style={{
+            marginTop: '1.25rem',
+            padding: '1.25rem',
+            backgroundColor: '#F8FAFC',
+            borderRadius: '8px',
+            border: '2px dashed #CBD5E1',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: '1rem',
+            flexWrap: 'wrap',
+          }}
+        >
+          <button
+            type="button"
+            onClick={handleAddProject}
+            className="btn btn-primary"
+            style={{
+              padding: '0.65rem 1.5rem',
+              fontSize: '0.95rem',
+              fontWeight: 600,
+              boxShadow: '0 2px 4px rgba(30, 58, 138, 0.15)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <Plus size={18} /> + เพิ่มผลงานโครงการใหม่ (ว่าง)
+          </button>
+          <button
+            type="button"
+            onClick={handleOpenLibrary}
+            className="btn btn-outline"
+            style={{
+              padding: '0.65rem 1.25rem',
+              fontSize: '0.9rem',
+              color: 'var(--primary-800)',
+              borderColor: 'var(--primary-600)',
+              backgroundColor: '#FFFFFF',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <Library size={16} /> ดึงจากคลังผลงานกลาง
+          </button>
         </div>
       </div>
 
