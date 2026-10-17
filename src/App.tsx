@@ -65,29 +65,43 @@ const PROJECTS_STORAGE_KEY = 'prime_bidding_projects_v2';
 
 function loadInitialProjects(): BiddingProject[] {
   try {
+    let list: BiddingProject[] = [];
     const saved = localStorage.getItem(PROJECTS_STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        const list = parsed.map(normalizeProjectBudget);
-        for (let i = 0; i < list.length; i++) {
-          try {
-            const single = localStorage.getItem(`prime_active_draft_${list[i].id}`);
-            if (single) {
-              const parsedSingle = JSON.parse(single);
-              if (parsedSingle && parsedSingle.proposalData) {
-                const singleTime = new Date(parsedSingle.updatedAt || 0).getTime();
-                const listTime = new Date(list[i].updatedAt || 0).getTime();
-                if (singleTime >= listTime) {
-                  list[i] = normalizeProjectBudget({ ...list[i], ...parsedSingle });
-                }
-              }
-            }
-          } catch {}
-        }
-        return list;
+        list = parsed.map(normalizeProjectBudget);
       }
     }
+
+    // สแกนหาร่างเฉพาะโครงการ prime_active_draft_* ทุกคีย์ใน LocalStorage เพื่อกู้คืนโครงการทั้งหมด
+    const projectMap = new Map<string, BiddingProject>(list.map((p) => [p.id, p]));
+    for (let k = 0; k < localStorage.length; k++) {
+      const key = localStorage.key(k);
+      if (key && key.startsWith('prime_active_draft_')) {
+        try {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const parsedProj = JSON.parse(raw);
+            if (parsedProj && parsedProj.id && parsedProj.proposalData) {
+              const existing = projectMap.get(parsedProj.id);
+              if (existing) {
+                const singleTime = new Date(parsedProj.updatedAt || 0).getTime();
+                const existTime = new Date(existing.updatedAt || 0).getTime();
+                if (singleTime >= existTime) {
+                  projectMap.set(parsedProj.id, normalizeProjectBudget({ ...existing, ...parsedProj }));
+                }
+              } else {
+                projectMap.set(parsedProj.id, normalizeProjectBudget(parsedProj));
+              }
+            }
+          }
+        } catch {}
+      }
+    }
+
+    const merged = Array.from(projectMap.values());
+    if (merged.length > 0) return merged;
   } catch (e) {
     console.warn('Could not read projects from localStorage', e);
   }
@@ -104,7 +118,14 @@ export const App: React.FC = () => {
   // Multi-project State
   const [projects, setProjects] = useState<BiddingProject[]>(loadInitialProjects);
   const [activeProjectId, setActiveProjectId] = useState<string>(() => {
-    return loadInitialProjects()[0]?.id || 'proj-001';
+    try {
+      const lastId = localStorage.getItem('prime_last_active_project_id');
+      const initial = loadInitialProjects();
+      if (lastId && initial.some((p) => p.id === lastId)) return lastId;
+      return initial[0]?.id || 'proj-001';
+    } catch {
+      return 'proj-001';
+    }
   });
 
   // Authentication & Access Control State (Option 2: โหมดเข้าสู่ระบบโดยตรง Auto-Authorized สำหรับทุกคนในทีม)
@@ -186,9 +207,17 @@ export const App: React.FC = () => {
       setProjects(loaded);
       setCloudStatus(source);
       if (loaded.length > 0) {
-        const nextId = (activeProjectId && loaded.some((p) => p.id === activeProjectId))
-          ? activeProjectId
-          : loaded[0].id;
+        let lastId = '';
+        try {
+          lastId = localStorage.getItem('prime_last_active_project_id') || '';
+        } catch {}
+
+        const nextId = (lastId && loaded.some((p) => p.id === lastId))
+          ? lastId
+          : ((activeProjectId && loaded.some((p) => p.id === activeProjectId))
+            ? activeProjectId
+            : loaded[0].id);
+
         setActiveProjectId(nextId);
         const target = loaded.find((p) => p.id === nextId) || loaded[0];
         if (target && target.proposalData) {
@@ -210,8 +239,14 @@ export const App: React.FC = () => {
   // Ref for debounced auto-save to cloud & indexedDB
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // When switching projects, load that project's proposalData with budget normalization
+  // When switching projects, load that project's proposalData with budget normalization and remember active project
   useEffect(() => {
+    if (activeProjectId) {
+      try {
+        localStorage.setItem('prime_last_active_project_id', activeProjectId);
+      } catch {}
+    }
+
     const target = projects.find((p) => p.id === activeProjectId);
     if (target && target.proposalData) {
       const normalized = normalizeProjectBudget(target);

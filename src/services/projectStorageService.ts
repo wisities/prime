@@ -183,56 +183,137 @@ export async function loadAllProjects(): Promise<{
           });
         }
 
-        // อ่านข้อมูลโครงการท้องถิ่นจาก IndexedDB ก่อนเพื่อรักษาเนื้อหาร่าง (เครื่องใครเครื่องมัน)
+        // 1. อ่านข้อมูลโครงการท้องถิ่นจาก IndexedDB ก่อนเพื่อรักษาเนื้อหาร่าง (เครื่องใครเครื่องมัน)
         let idbProjects: BiddingProject[] = [];
         try {
           idbProjects = (await idbGetAll<BiddingProject>(IDB_STORES.BIDDING_PROJECTS)) || [];
         } catch {}
-        const idbMap = new Map<string, BiddingProject>(idbProjects.map((p) => [p.id, p]));
 
-        const mapped: BiddingProject[] = cloudProjects.map((cp: any) => {
-          const localProj = idbMap.get(cp.id);
+        // 2. อ่านข้อมูลโครงการจาก LocalStorage เพื่อความครอบคลุม
+        let localProjectsFromStorage: BiddingProject[] = [];
+        try {
+          const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) localProjectsFromStorage = parsed;
+          }
+        } catch {}
+
+        // รวมโครงการในเครื่องเข้า Map โดยให้ IndexedDB มีความน่าเชื่อถือสูงสุด
+        const localMap = new Map<string, BiddingProject>();
+        for (const lp of localProjectsFromStorage) {
+          localMap.set(lp.id, lp);
+        }
+        for (const lp of idbProjects) {
+          localMap.set(lp.id, lp);
+        }
+
+        // ตรวจสอบคีย์ร่างเฉพาะ prime_active_draft_{id} และประวัติ Snapshots ทุกโครงการในเครื่อง
+        for (const [id, lp] of localMap.entries()) {
+          try {
+            const single = localStorage.getItem(`prime_active_draft_${id}`);
+            if (single) {
+              const parsedSingle = JSON.parse(single);
+              if (parsedSingle && parsedSingle.proposalData) {
+                const singleTime = new Date(parsedSingle.updatedAt || 0).getTime();
+                const lpTime = new Date(lp.updatedAt || 0).getTime();
+                if (singleTime >= lpTime) {
+                  localMap.set(id, { ...lp, ...parsedSingle });
+                }
+              }
+            }
+          } catch {}
+
+          try {
+            const snapshots = await getDraftSnapshots(id);
+            if (snapshots.length > 0) {
+              const latestSnap = snapshots[0];
+              const snapTime = new Date(latestSnap.savedAt || 0).getTime();
+              const currLp = localMap.get(id);
+              const currTime = new Date(currLp?.updatedAt || 0).getTime();
+              if (snapTime >= currTime && latestSnap.proposalData) {
+                localMap.set(id, {
+                  ...(currLp || lp),
+                  proposalData: latestSnap.proposalData,
+                  updatedAt: latestSnap.savedAt,
+                });
+              }
+            }
+          } catch {}
+        }
+
+        const mapped: BiddingProject[] = [];
+        const processedIds = new Set<string>();
+
+        for (const cp of cloudProjects) {
+          processedIds.add(cp.id);
+          const localProj = localMap.get(cp.id);
           const cloudMeta = cp.proposal_data?._cloudStatus || {};
 
-          // สถานะ ใครทำ ทำถึงไหน
-          const lastModifiedBy = cloudMeta.lastModifiedBy || localProj?.lastModifiedBy;
-          const assignedTo = cloudMeta.assignedTo || localProj?.assignedTo;
-          const progressPercent = typeof cloudMeta.progressPercent === 'number'
-            ? cloudMeta.progressPercent
-            : localProj?.progressPercent;
-          const currentStage = cloudMeta.currentStage || localProj?.currentStage;
+          // เปรียบเทียบเวลาแก้ไขระหว่างเครื่องกับ Cloud
+          const localTime = new Date(localProj?.updatedAt || 0).getTime();
+          const cloudTime = new Date(cp.updated_at || cp.created_at || 0).getTime();
 
-          // เนื้อหาร่าง proposalData: หาก Cloud มีฉบับเต็มให้ใช้ หรือหากเครื่องนี้มีร่าง IndexedDB ให้ใช้ฉบับที่สมบูรณ์
-          const hasLocalDraft = localProj && localProj.proposalData && Object.keys(localProj.proposalData).length > 0;
-          const cloudHasFullData = cp.proposal_data && (cp.proposal_data.section1 || cp.proposal_data.section3);
-          const effectiveProposalData = cloudHasFullData
-            ? cp.proposal_data
-            : (hasLocalDraft
-                ? localProj.proposalData
-                : (cp.proposal_data && !cp.proposal_data._cloudStatus ? cp.proposal_data : DEFAULT_BIDDING_PROJECTS[0]?.proposalData));
+          // ตรวจสอบว่าในเครื่องมีเนื้อหาที่แท้จริงของผู้ใช้หรือไม่
+          const hasLocalContent = localProj && localProj.proposalData && (
+            (localProj.proposalData.section1?.objectives && localProj.proposalData.section1.objectives.length > 0) ||
+            (localProj.proposalData.cover?.projectTitle && localProj.proposalData.cover.projectTitle.trim() !== '') ||
+            (localProj.proposalData.section1?.background && localProj.proposalData.section1.background.trim() !== '')
+          );
+
+          // ถ้าในเครื่องมีเนื้อหา และ (เวลาในเครื่องใหม่กว่าหรือใกล้เคียง หรือ Cloud เป็นตัวอย่างโครงการเดิม)
+          // ให้ยึดเนื้อหาร่างในเครื่องเป็นหลักเสมอ ไม่ให้ตัวอย่างจาก Cloud มาเขียนทับ!
+          let effectiveProposalData: any;
+          if (hasLocalContent && localTime >= cloudTime) {
+            effectiveProposalData = localProj.proposalData;
+          } else if (cp.proposal_data && (cp.proposal_data.section1 || cp.proposal_data.section3)) {
+            if (localProj && localProj.proposalData && localTime > cloudTime) {
+              effectiveProposalData = localProj.proposalData;
+            } else {
+              effectiveProposalData = cp.proposal_data;
+            }
+          } else {
+            effectiveProposalData = localProj?.proposalData || cp.proposal_data || DEFAULT_BIDDING_PROJECTS[0]?.proposalData;
+          }
+
+          const useLocalMeta = localProj && (localTime >= cloudTime || hasLocalContent);
+          const projectTitle = useLocalMeta && localProj.projectTitle ? localProj.projectTitle : (cp.project_title || localProj?.projectTitle || 'โครงการไม่ระบุชื่อ');
+          const projectCode = useLocalMeta && localProj.projectCode ? localProj.projectCode : (cp.project_code || localProj?.projectCode || '');
+          const clientAgency = useLocalMeta && localProj.clientAgency ? localProj.clientAgency : (cp.client_agency || localProj?.clientAgency || '');
+          const budgetAmount = useLocalMeta && localProj.budgetAmount ? localProj.budgetAmount : (Number(cp.budget_amount) || localProj?.budgetAmount || 0);
 
           const rawProj: BiddingProject = {
             id: cp.id,
-            projectCode: cp.project_code,
-            projectTitle: cp.project_title,
-            clientAgency: cp.client_agency,
-            budgetAmount: Number(cp.budget_amount) || 0,
+            projectCode,
+            projectTitle,
+            clientAgency,
+            budgetAmount,
             egpUrl: cp.egp_url || undefined,
             announcementDate: cp.announcement_date || undefined,
             submissionDeadline: cp.submission_deadline || undefined,
             status: cp.status || 'draft',
             statusNote: cp.status_note || undefined,
-            lastModifiedBy,
-            assignedTo,
-            progressPercent,
-            currentStage,
+            lastModifiedBy: cloudMeta.lastModifiedBy || localProj?.lastModifiedBy,
+            assignedTo: cloudMeta.assignedTo || localProj?.assignedTo,
+            progressPercent: typeof cloudMeta.progressPercent === 'number'
+              ? cloudMeta.progressPercent
+              : localProj?.progressPercent,
+            currentStage: cloudMeta.currentStage || localProj?.currentStage,
             attachments: attachmentsMap.get(cp.id) || (localProj ? localProj.attachments : []),
             proposalData: effectiveProposalData,
-            createdAt: cp.created_at,
-            updatedAt: cp.updated_at,
+            createdAt: cp.created_at || localProj?.createdAt,
+            updatedAt: localTime > cloudTime ? localProj!.updatedAt : cp.updated_at,
           };
-          return normalizeProjectBudget(rawProj);
-        });
+          mapped.push(normalizeProjectBudget(rawProj));
+        }
+
+        // สำคัญที่สุด: นำโครงการที่ผู้ใช้สร้างไว้ในเครื่อง (IndexedDB/LocalStorage) ที่ยังไม่มีใน Cloud มารวมเข้าด้วย
+        // เพื่อป้องกันไม่ให้โครงการที่เพิ่งสร้างในเครื่องสูญหาย
+        for (const [id, lp] of localMap.entries()) {
+          if (!processedIds.has(id)) {
+            mapped.push(normalizeProjectBudget(lp));
+          }
+        }
 
         // เติมเต็ม dataUrl จาก IndexedDB สำหรับไฟล์ที่ไม่มี public url
         for (const p of mapped) {
