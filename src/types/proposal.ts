@@ -138,6 +138,9 @@ export interface Section4TeamAndRisk {
   teamMembers: TeamMember[];
   riskManagementOverview: string;
   riskItems: RiskItem[];
+  // 4.3 การบริหารจัดการโครงการ (Project Management)
+  projectManagementOverview?: string; // คำอธิบาย/รายละเอียดพรรณาการทำงานและการบริหารโครงการ
+  projectManagementImageBlocks?: ReportImageBlock[]; // ภาพประกอบการบริหารโครงการ (ผังขั้นตอนการทำงาน, แผนผังการประสานงาน, Agile Sprint)
   complianceMatrixOverview?: string; // คำนำสำหรับตารางเปรียบเทียบข้อเสนอโครงการกับ TOR
   imageBlocks?: ReportImageBlock[]; // ภาพประกอบในส่วนที่ 4 (เช่น แผนผังองค์กร 6 นิ้ว หรือภาพคู่ 3 นิ้ว) ไม่จำกัดจำนวน
 }

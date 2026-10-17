@@ -2044,6 +2044,21 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
             rows: riskRows,
           })
         );
+      } else if (h.id === 's4_project_management') {
+        part4Children.push(
+          new Paragraph({ spacing: { before: 240, after: 120 } }),
+          createH2(`${numPrefix} การบริหารจัดการโครงการ (Project Management)`),
+          ...createBodyParagraphs(
+            section4.projectManagementOverview ||
+              'บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด กำหนดกรอบแนวทางการบริหารจัดการโครงการตามมาตรฐานสากล เพื่อควบคุมและขับเคลื่อนการดำเนินงานให้เป็นไปตามเป้าหมายของสัญญา ทั้งในมิติด้านคุณภาพ ขอบเขตงาน กรอบระยะเวลา และงบประมาณอย่างเคร่งครัด'
+          )
+        );
+
+        if (section4.projectManagementImageBlocks && section4.projectManagementImageBlocks.length > 0) {
+          part4Children.push(
+            ...renderImageBlocksToDocx(section4.projectManagementImageBlocks, `ภาพที่ ${numPrefix}`)
+          );
+        }
       } else if (h.id === 's4_compliance') {
         part4Children.push(
           new Paragraph({ spacing: { before: 240, after: 120 } }),

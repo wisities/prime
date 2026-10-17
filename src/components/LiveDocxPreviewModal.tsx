@@ -1238,6 +1238,19 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                           </div>
                         );
                       }
+                      if (h.id === 's4_project_management') {
+                        return (
+                          <div key={h.id} style={{ marginBottom: '1.5rem' }}>
+                            <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--primary-900)' }}>
+                              {numPrefix} {h.title}
+                            </h3>
+                            <div style={{ fontSize: '0.85rem', color: 'var(--slate-700)', lineHeight: 1.6, marginBottom: '0.75rem', whiteSpace: 'pre-line' }}>
+                              {section4.projectManagementOverview || 'บริษัทฯ กำหนดกรอบแนวทางการบริหารจัดการโครงการตามมาตรฐานสากล เพื่อควบคุมและขับเคลื่อนการดำเนินงานให้เป็นไปตามเป้าหมายของสัญญา'}
+                            </div>
+                            {renderImageBlocksPreview(section4.projectManagementImageBlocks, `ภาพที่ ${numPrefix}-`)}
+                          </div>
+                        );
+                      }
                       if (h.id === 's4_compliance') {
                         return (
                           <div key={h.id} style={{ marginBottom: '1.5rem' }}>

@@ -15,7 +15,7 @@ import {
   importMasterTeamFromJson,
 } from '../services/masterLibraryService';
 import { isSupabaseConfigured } from '../services/supabaseClient';
-import { Users, ShieldAlert, Plus, Trash2, Library, ChevronDown, ChevronUp, TableProperties, CheckCheck, Sparkles, RotateCcw, Clock, ArrowUp, ArrowDown, BookmarkPlus, BookmarkCheck, Check, Camera, Upload, User, Database, Download } from 'lucide-react';
+import { Users, ShieldAlert, Plus, Trash2, Library, ChevronDown, ChevronUp, TableProperties, CheckCheck, Sparkles, RotateCcw, Clock, ArrowUp, ArrowDown, BookmarkPlus, BookmarkCheck, Check, Camera, Upload, User, Database, Download, Briefcase } from 'lucide-react';
 
 interface Section4EditorProps {
   section4: Section4TeamAndRisk;
@@ -954,13 +954,79 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
         </div>
       </div>
 
-      {/* 4.3 ตารางเปรียบเทียบข้อเสนอโครงการกับข้อกำหนด TOR (TOR Compliance & Value-Added Matrix) */}
+      {/* 4.3 การบริหารจัดการโครงการ (Project Management) */}
+      <div className="card">
+        <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <div className="card-title-group" style={{ margin: 0 }}>
+            <h2 style={{ fontSize: '1.15rem' }}>
+              <Briefcase size={20} color="var(--primary-700)" />
+              4.3 การบริหารจัดการโครงการ (Project Management)
+            </h2>
+            <p>
+              รายละเอียดพรรณาแนวทางการบริหารจัดการโครงการ แผนผังขั้นตอนการทำงาน (Workflow) และภาพประกอบการดำเนินงาน
+            </p>
+          </div>
+
+          <div>
+            <button
+              type="button"
+              onClick={() => {
+                if (
+                  !section4.projectManagementOverview ||
+                  window.confirm('คุณต้องการนำข้อความร่างมาตรฐานการบริหารจัดการโครงการ (PMBOK & Agile) มาใส่แทนที่ข้อความเดิมใช่หรือไม่?')
+                ) {
+                  const defaultTemplate = `บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด ดำเนินการบริหารจัดการโครงการตามมาตรฐานสากล (PMBOK & Agile/Scrum Framework) เพื่อควบคุมและผลักดันงานให้บรรลุเป้าหมายตามขอบเขตงาน (TOR) ทั้งด้านคุณภาพ เวลา และงบประมาณอย่างมีประสิทธิภาพสูงสุด โดยมีแนวทางบริหาร 5 มิติหลักดังนี้:
+
+1. การบริหารขอบเขตงานและคุณภาพ (Scope & Quality Management): ดำเนินการประชุมวิเคราะห์ความต้องการ (Requirements Gathering) ร่วมกับผู้ใช้งาน จัดทำเอกสารข้อกำหนดความต้องการของระบบ (SRS) ตรวจสอบความถูกต้องและจัดทำแบบรับรองผล (Sign-off) ในแต่ละงวดงานอย่างเคร่งครัด
+2. การบริหารเวลาและงวดงาน (Time & Schedule Management): ควบคุมการดำเนินงานตามแผนผังการทำงานหลัก (WBS) ประชุมติดตามความคืบหน้า (Sprint Planning & Daily Standup) และรายงานความก้าวหน้าแก่คณะกรรมการตรวจรับพัสดุเป็นประจำทุกสัปดาห์และทุกเดือน
+3. การบริหารการสื่อสารและการประสานงาน (Communication Management): กำหนดช่องทางการติดต่อประสานงานอย่างเป็นทางการและบันทึกรายงานการประชุม (Minutes of Meeting) อย่างเป็นระบบ พร้อมจัดประชุมทบทวนผลการทำงานร่วมกับผู้ประสานงานหลักของหน่วยงานอย่างต่อเนื่อง
+4. การควบคุมและส่งมอบงาน (Deliverable & Change Management): ดำเนินกระบวนการทดสอบระบบร่วมกับผู้ใช้งาน (User Acceptance Test - UAT) การจัดเตรียมคู่มือระบบ การฝึกอบรมบุคลากร และกระบวนการขออนุมัติการเปลี่ยนแปลง (Change Request) ที่รัดกุม
+5. การรับประกันและการสนับสนุนหลังส่งมอบ (Warranty & Maintenance Support): จัดตั้งทีมงาน Helpdesk & Technical Support ดูแลแก้ไขปัญหาตามข้อตกลงระดับการให้บริการ (SLA) ตลอดระยะเวลารับประกันของสัญญา`;
+                  onChange({ ...section4, projectManagementOverview: defaultTemplate });
+                }
+              }}
+              className="btn btn-outline"
+              style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem', borderColor: 'var(--slate-300)', color: 'var(--slate-700)' }}
+              title="ดึงข้อความตัวอย่างโครงสร้างการบริหารโครงการตามมาตรฐาน"
+            >
+              <RotateCcw size={14} /> ใส่ข้อความร่างมาตรฐาน PMBOK / Agile
+            </button>
+          </div>
+        </div>
+
+        <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+          <label className="form-label" style={{ fontWeight: 600 }}>
+            รายละเอียดพรรณาการทำงานและการบริหารโครงการ (Narrative Project Management Description)
+          </label>
+          <textarea
+            className="form-textarea"
+            style={{ minHeight: '160px', lineHeight: 1.6 }}
+            value={section4.projectManagementOverview || ''}
+            onChange={(e) => onChange({ ...section4, projectManagementOverview: e.target.value })}
+            placeholder="พรรณนารายละเอียดกระบวนการทำงาน การควบคุมคุณภาพ การบริหารจัดการเวลา การสื่อสาร และการส่งมอบงานในโครงการ..."
+          />
+          <p style={{ fontSize: '0.785rem', color: '#64748B', marginTop: '4px' }}>
+            * ข้อความนี้จะถูกจัดพิมพ์ขึ้นเป็นหัวข้อ 4.3 ในเอกสาร Word (.docx) ตามรูปแบบฟอนต์สารบรรณเก้า (TH Sarabun PSK 16pt)
+          </p>
+        </div>
+
+        {/* ช่องอัพโหลดภาพประกอบการบริหารโครงการ */}
+        <ReportImageManager
+          title="ภาพประกอบการบริหารจัดการโครงการ (Project Management Diagrams)"
+          subtitle="อัปโหลดผังขั้นตอนการทำงาน (Workflow), แผนผังสายการประสานงาน (Communication Flow), แผนภาพ Agile/Scrum Sprint หรือภาพกระบวนการทำงานอื่นๆ (รองรับภาพเดี่ยว 6 นิ้ว และภาพคู่ 3 นิ้ว)"
+          imageBlocks={section4.projectManagementImageBlocks || []}
+          defaultCaptionPrefix="ภาพที่ 4.3-"
+          onChange={(newBlocks) => onChange({ ...section4, projectManagementImageBlocks: newBlocks })}
+        />
+      </div>
+
+      {/* 4.4 ตารางเปรียบเทียบข้อเสนอโครงการกับข้อกำหนด TOR (TOR Compliance & Value-Added Matrix) */}
       <div className="card">
         <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div className="card-title-group" style={{ margin: 0 }}>
             <h2 style={{ fontSize: '1.15rem' }}>
               <TableProperties size={20} color="var(--primary-700)" />
-              4.3 ตารางเปรียบเทียบข้อเสนอโครงการกับข้อกำหนด TOR (Compliance & Value-Added Matrix)
+              4.4 ตารางเปรียบเทียบข้อเสนอโครงการกับข้อกำหนด TOR (Compliance & Value-Added Matrix)
             </h2>
             <p>
               ตารางเปรียบเทียบข้อกำหนด TOR ทุกข้อ โดยระบุว่า "ยอมรับและดำเนินการตาม TOR" หรือ "ยอมรับและเสนอแนวทางดีกว่า TOR" พร้อมคำอธิบายในช่องหมายเหตุ
