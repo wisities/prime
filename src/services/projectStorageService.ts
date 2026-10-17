@@ -1,7 +1,7 @@
 import { BiddingProject, ProjectAttachment } from '../types/proposal';
 import { DEFAULT_BIDDING_PROJECTS } from '../data/defaultData';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
-import { idbSet, idbGet, idbGetAll, idbDelete, IDB_STORES, saveDraftSnapshot, getDraftSnapshots, DraftBackupSnapshot } from './localDatabase';
+import { idbSet, idbGet, idbGetAll, idbDelete, IDB_STORES } from './localDatabase';
 
 const LOCAL_STORAGE_KEY = 'prime_bidding_projects_v2';
 
@@ -208,7 +208,7 @@ export async function loadAllProjects(): Promise<{
           localMap.set(lp.id, lp);
         }
 
-        // ตรวจสอบคีย์ร่างเฉพาะ prime_active_draft_{id} และประวัติ Snapshots ทุกโครงการในเครื่อง
+        // ตรวจสอบคีย์ร่างเฉพาะ prime_active_draft_{id} ในเครื่อง
         for (const [id, lp] of localMap.entries()) {
           try {
             const single = localStorage.getItem(`prime_active_draft_${id}`);
@@ -220,23 +220,6 @@ export async function loadAllProjects(): Promise<{
                 if (singleTime >= lpTime) {
                   localMap.set(id, { ...lp, ...parsedSingle });
                 }
-              }
-            }
-          } catch {}
-
-          try {
-            const snapshots = await getDraftSnapshots(id);
-            if (snapshots.length > 0) {
-              const latestSnap = snapshots[0];
-              const snapTime = new Date(latestSnap.savedAt || 0).getTime();
-              const currLp = localMap.get(id);
-              const currTime = new Date(currLp?.updatedAt || 0).getTime();
-              if (snapTime >= currTime && latestSnap.proposalData) {
-                localMap.set(id, {
-                  ...(currLp || lp),
-                  proposalData: latestSnap.proposalData,
-                  updatedAt: latestSnap.savedAt,
-                });
               }
             }
           } catch {}
@@ -315,12 +298,11 @@ export async function loadAllProjects(): Promise<{
           }
         }
 
-        // เติมเต็ม dataUrl จาก IndexedDB สำหรับไฟล์ที่ไม่มี public url
+        // ปรับปรุง metadata ไฟล์แนบให้อ้างอิง idb:// เมื่อไม่มี public URL (ไม่โหลด base64 เข้า RAM ตอนเปิดแอป)
         for (const p of mapped) {
-          for (const a of p.attachments) {
-            if (!a.dataUrl || a.dataUrl.startsWith('idb://')) {
-              const idbUrl = await getAttachmentFromIDB(a.id);
-              if (idbUrl) a.dataUrl = idbUrl;
+          for (const a of p.attachments || []) {
+            if (!a.dataUrl) {
+              a.dataUrl = `idb://${a.id}`;
             }
           }
         }
@@ -352,9 +334,8 @@ export async function loadAllProjects(): Promise<{
       for (const p of normalizedList) {
         if (p.attachments) {
           for (const a of p.attachments) {
-            if (!a.dataUrl || a.dataUrl.startsWith('idb://')) {
-              const idbUrl = await getAttachmentFromIDB(a.id);
-              if (idbUrl) a.dataUrl = idbUrl;
+            if (!a.dataUrl) {
+              a.dataUrl = `idb://${a.id}`;
             }
           }
         }
@@ -389,14 +370,12 @@ export async function loadAllProjects(): Promise<{
     if (saved) {
       const parsed: BiddingProject[] = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // เติมเต็ม dataUrl จาก IndexedDB สำหรับไฟล์แนบทั้งหมด และปรับยอดงบประมาณให้สมบูรณ์
         const normalizedList = parsed.map(normalizeProjectBudget);
         for (const p of normalizedList) {
           if (p.attachments) {
             for (const a of p.attachments) {
-              if (!a.dataUrl || a.dataUrl.startsWith('idb://')) {
-                const idbUrl = await getAttachmentFromIDB(a.id);
-                if (idbUrl) a.dataUrl = idbUrl;
+              if (!a.dataUrl) {
+                a.dataUrl = `idb://${a.id}`;
               }
             }
           }
@@ -421,13 +400,6 @@ export async function loadAllProjects(): Promise<{
 export async function saveProject(rawProject: BiddingProject): Promise<boolean> {
   const project = normalizeProjectBudget(rawProject);
 
-  // 1. บันทึกลง IndexedDB ถาวร (ปลอดภัย 100% ข้อมูลรูปภาพ/ตารางไม่จำกัดขนาด ไม่หายเด็ดขาด)
-  try {
-    await idbSet(IDB_STORES.BIDDING_PROJECTS, project.id, project);
-  } catch (e) {
-    console.warn('IndexedDB project save error:', e);
-  }
-
   // บันทึกไฟล์แนบทุกไฟล์ลงใน IndexedDB ถาวร
   if (project.attachments && project.attachments.length > 0) {
     for (const att of project.attachments) {
@@ -435,6 +407,21 @@ export async function saveProject(rawProject: BiddingProject): Promise<boolean> 
         await storeAttachmentInIDB(att.id, att.dataUrl);
       }
     }
+  }
+
+  // 1. บันทึกลง IndexedDB ถาวร (แทน dataUrl ที่เป็น base64 ด้วย idb:// เพื่อประหยัด RAM)
+  const idbStoredProject: BiddingProject = {
+    ...project,
+    attachments: (project.attachments || []).map((att) => ({
+      ...att,
+      dataUrl: att.dataUrl && !att.dataUrl.startsWith('data:') ? att.dataUrl : (att.dataUrl ? `idb://${att.id}` : undefined),
+    })),
+  };
+
+  try {
+    await idbSet(IDB_STORES.BIDDING_PROJECTS, project.id, idbStoredProject);
+  } catch (e) {
+    console.warn('IndexedDB project save error:', e);
   }
 
   // 2. บันทึกลง LocalStorage: เก็บทั้งคีย์เฉพาะโครงการ (รับประกันไม่เกิน 5MB) และคีย์รวม

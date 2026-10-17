@@ -234,6 +234,28 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     }
   };
 
+  const handleDownloadAttachment = async (att: ProjectAttachment) => {
+    try {
+      let url = att.dataUrl;
+      if (!url || url.startsWith('idb://')) {
+        url = (await getAttachmentFromIDB(att.id)) || undefined;
+      }
+      if (!url) {
+        alert('ไม่พบเนื้อหาไฟล์ในระบบ');
+        return;
+      }
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = att.name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Error downloading attachment:', err);
+      alert('เกิดข้อผิดพลาดในการดาวน์โหลดไฟล์');
+    }
+  };
+
   // Expandable Checklist state for each project
   const [expandedChecklists, setExpandedChecklists] = useState<Record<string, boolean>>({});
 
@@ -1787,16 +1809,14 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                               ({(att.size / (1024 * 1024)).toFixed(1)} MB)
                             </span>
 
-                            {att.dataUrl && (
-                              <a
-                                href={att.dataUrl}
-                                download={att.name}
-                                className="att-icon-btn"
-                                title="ดาวน์โหลดไฟล์"
-                              >
-                                <Download size={12} />
-                              </a>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadAttachment(att)}
+                              className="att-icon-btn"
+                              title="ดาวน์โหลดไฟล์"
+                            >
+                              <Download size={12} />
+                            </button>
 
                             {/* If TOR, show import button */}
                             {att.category === 'tor' && (
@@ -2192,24 +2212,22 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                           </div>
 
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexShrink: 0 }}>
-                            {att.dataUrl && (
-                              <a
-                                href={att.dataUrl}
-                                download={att.name}
-                                className="btn-modal-cancel"
-                                style={{
-                                  padding: '0.3rem 0.6rem',
-                                  fontSize: '0.75rem',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '0.25rem',
-                                  textDecoration: 'none',
-                                }}
-                                title="ดาวน์โหลดหรือเปิดดูไฟล์นี้"
-                              >
-                                <Download size={13} /> ดาวน์โหลด
-                              </a>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadAttachment(att)}
+                              className="btn-modal-cancel"
+                              style={{
+                                padding: '0.3rem 0.6rem',
+                                fontSize: '0.75rem',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                                cursor: 'pointer',
+                              }}
+                              title="ดาวน์โหลดหรือเปิดดูไฟล์นี้"
+                            >
+                              <Download size={13} /> ดาวน์โหลด
+                            </button>
                             <button
                               type="button"
                               onClick={() => handleRemoveModalAttachment(att.id)}

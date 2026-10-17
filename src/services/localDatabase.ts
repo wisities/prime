@@ -146,7 +146,7 @@ export interface DraftBackupSnapshot {
 
 /**
  * บันทึกประวัติร่าง (Snapshot) ลง IndexedDB เพื่อกู้คืนย้อนหลังได้เสมอ
- * จำกัดไว้ที่ 20 รายการล่าสุดต่อโครงการเพื่อความเร็วและประหยัดพื้นที่
+ * จำกัดไว้ที่ 5 รายการล่าสุดต่อโครงการ โดยใช้ Key Cursor เพื่อไม่ให้เกิด Out of Memory
  */
 export async function saveDraftSnapshot(
   projectId: string,
@@ -172,39 +172,76 @@ export async function saveDraftSnapshot(
     proposalData: JSON.parse(JSON.stringify(proposalData)),
   };
 
-  try {
-    await idbSet(IDB_STORES.DRAFT_BACKUPS, snapshot.id, snapshot);
+  const db = await openLocalDB();
+  if (!db) return;
 
-    // ทำความสะอาด: เก็บเฉพาะ 15 รายการล่าสุดของโครงการนี้เพื่อความรวดเร็วและประหยัดหน่วยความจำ
-    const all = await idbGetAll<DraftBackupSnapshot>(IDB_STORES.DRAFT_BACKUPS);
-    const projSnapshots = all
-      .filter((s) => s.projectId === projectId)
-      .sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime());
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(IDB_STORES.DRAFT_BACKUPS, 'readwrite');
+      const store = tx.objectStore(IDB_STORES.DRAFT_BACKUPS);
 
-    if (projSnapshots.length > 15) {
-      const toDelete = projSnapshots.slice(15);
-      for (const old of toDelete) {
-        await idbDelete(IDB_STORES.DRAFT_BACKUPS, old.id);
-      }
+      // บันทึก Snapshot ฉบับใหม่
+      store.put({ id: snapshot.id, payload: snapshot, updatedAt: now.toISOString() });
+
+      // ทำความสะอาดแบบ Cursor ประหยัดหน่วยความจำ: เก็บเฉพาะ 5 รายการล่าสุดของโครงการนี้เท่านั้น
+      // โดยวนเฉพาะ Key ID ของโครงการนี้ (IDBKeyRange) และลบส่วนที่เกินทันที ไม่โหลด Payload เข้า RAM
+      const range = IDBKeyRange.bound(`${projectId}_0`, `${projectId}_\uffff`);
+      const keyReq = store.openKeyCursor ? store.openKeyCursor(range, 'prev') : store.openCursor(range, 'prev');
+      let count = 0;
+
+      keyReq.onsuccess = (e: any) => {
+        const cursor = e.target.result;
+        if (cursor) {
+          count++;
+          if (count > 5) {
+            store.delete(cursor.primaryKey || cursor.key);
+          }
+          cursor.continue();
+        }
+      };
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    } catch (err) {
+      console.warn('Failed to save draft snapshot:', err);
+      resolve();
     }
-  } catch (err) {
-    console.warn('Failed to save draft snapshot:', err);
-  }
+  });
 }
 
 /**
- * ดึงรายการสำเนาร่างย้อนหลังทั้งหมดของโครงการ
+ * ดึงรายการสำเนาร่างย้อนหลังของโครงการ (เฉพาะโครงการที่ระบุ สูงสุด 5 รายการล่าสุด)
+ * ใช้ IDBKeyRange ไม่โหลดโครงการอื่น และหยุดค้นหาทันทีที่ได้ครบ
  */
 export async function getDraftSnapshots(projectId: string): Promise<DraftBackupSnapshot[]> {
   if (!projectId) return [];
-  try {
-    const all = await idbGetAll<DraftBackupSnapshot>(IDB_STORES.DRAFT_BACKUPS);
-    return all
-      .filter((s) => s.projectId === projectId)
-      .sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime());
-  } catch (err) {
-    console.warn('Failed to get draft snapshots:', err);
-    return [];
-  }
+  const db = await openLocalDB();
+  if (!db) return [];
+
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(IDB_STORES.DRAFT_BACKUPS, 'readonly');
+      const store = tx.objectStore(IDB_STORES.DRAFT_BACKUPS);
+      const range = IDBKeyRange.bound(`${projectId}_0`, `${projectId}_\uffff`);
+      const req = store.openCursor(range, 'prev');
+      const results: DraftBackupSnapshot[] = [];
+
+      req.onsuccess = (e: any) => {
+        const cursor = e.target.result;
+        if (cursor && results.length < 5) {
+          if (cursor.value && cursor.value.payload) {
+            results.push(cursor.value.payload as DraftBackupSnapshot);
+          }
+          cursor.continue();
+        } else {
+          resolve(results);
+        }
+      };
+      req.onerror = () => resolve([]);
+    } catch (err) {
+      console.warn('Failed to get draft snapshots:', err);
+      resolve([]);
+    }
+  });
 }
 

@@ -332,9 +332,12 @@ export const App: React.FC = () => {
     } catch (e) {
       console.warn('LocalStorage save error', e);
     }
-    normalizedList
-      .filter((p) => !projects.includes(p))
-      .forEach((p) => saveProject(p));
+    const prevMap = new Map(projects.map((p) => [p.id, p]));
+    const changed = normalizedList.filter((p) => {
+      const prev = prevMap.get(p.id);
+      return !prev || prev.updatedAt !== p.updatedAt;
+    });
+    changed.forEach((p) => saveProject(p));
   };
 
   // Save Draft state & Feedback
