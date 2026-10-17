@@ -107,68 +107,47 @@ export const App: React.FC = () => {
     return loadInitialProjects()[0]?.id || 'proj-001';
   });
 
-  // Authentication & Access Control State
-  const [authStatus, setAuthStatus] = useState<'loading' | 'unauthenticated' | 'unauthorized' | 'authorized'>('loading');
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  // Authentication & Access Control State (Option 2: โหมดเข้าสู่ระบบโดยตรง Auto-Authorized สำหรับทุกคนในทีม)
+  const [authStatus, setAuthStatus] = useState<'loading' | 'unauthenticated' | 'unauthorized' | 'authorized'>('authorized');
+  const [currentUser, setCurrentUser] = useState<User | null>({
+    id: 'prime-team-user',
+    email: 'team@primeconsultant.com',
+    app_metadata: {},
+    user_metadata: { name: 'ทีมงานไพร์มดิจิทัล' },
+    aud: 'authenticated',
+    created_at: new Date().toISOString(),
+  } as any);
   const [showUserMgmtModal, setShowUserMgmtModal] = useState<boolean>(false);
   const [showMasterLibraryModal, setShowMasterLibraryModal] = useState<boolean>(false);
   const [showDraftHistoryModal, setShowDraftHistoryModal] = useState<boolean>(false);
 
-  // Check Supabase Auth Session and Allowed Users permission
+  // ล้างข้อความ Error หรือพารามิเตอร์แปลกปลอมจาก URL อัตโนมัติ (เช่น ค้างมาจาก Google OAuth Callback)
+  useEffect(() => {
+    try {
+      if (
+        window.location.search.includes('error') ||
+        window.location.hash.includes('error') ||
+        window.location.search.includes('sb=')
+      ) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    } catch {}
+  }, []);
+
+  // ดึงเซสชันเสริม (หากมีผู้ใช้ที่เคยล็อกอิน Google สำเร็จ ก็จะนำชื่อ/อีเมลมาแสดงผล แต่หากไม่มีก็จะเข้าใช้งานระบบได้ทันที)
   useEffect(() => {
     let isMounted = true;
 
     const verifySession = async () => {
-      // 1. ตรวจสอบว่าเคยเข้าใช้งานผ่านโหมดฉุกเฉิน / bypass ไว้หรือไม่
-      try {
-        if (localStorage.getItem('prime_offline_bypass') === 'true') {
-          if (isMounted) {
-            setCurrentUser({
-              id: 'offline-admin',
-              email: 'admin@primeconsultant.com',
-              app_metadata: {},
-              user_metadata: { name: 'ผู้ใช้งานระบบ (โหมดฉุกเฉิน)' },
-              aud: 'authenticated',
-              created_at: new Date().toISOString(),
-            } as any);
-            setAuthStatus('authorized');
-          }
-          return;
-        }
-      } catch {}
-
-      if (!isSupabaseConfigured() || !supabase) {
-        // หากยังไม่ได้ตั้งค่า Supabase ให้เปิดระบบเพื่อให้ผู้ใช้ทดสอบในเครื่องได้
-        if (isMounted) setAuthStatus('authorized');
-        return;
-      }
-
-      // Safety timeout: ป้องกันการค้างที่หน้า "กำลังตรวจสอบสิทธิ์..." เกิน 2.5 วินาที
-      const timeoutId = setTimeout(() => {
-        if (isMounted) {
-          setAuthStatus((prev) => (prev === 'loading' ? 'unauthenticated' : prev));
-        }
-      }, 2500);
+      if (!isSupabaseConfigured() || !supabase) return;
 
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        clearTimeout(timeoutId);
-        if (session?.user) {
-          if (isMounted) setCurrentUser(session.user);
-          const hasPerm = await checkEmailPermission(session.user.email || '');
-          if (isMounted) {
-            setAuthStatus(hasPerm ? 'authorized' : 'unauthorized');
-          }
-        } else {
-          if (isMounted) {
-            setCurrentUser(null);
-            setAuthStatus('unauthenticated');
-          }
+        if (session?.user && isMounted) {
+          setCurrentUser(session.user);
         }
       } catch (err) {
-        clearTimeout(timeoutId);
-        console.warn('Auth session check failed:', err);
-        if (isMounted) setAuthStatus('unauthenticated');
+        console.warn('Optional auth check warning:', err);
       }
     };
 
@@ -176,22 +155,8 @@ export const App: React.FC = () => {
 
     if (supabase) {
       const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
-        // หากอยู่ในโหมด bypass อยู่แล้ว ไม่ต้องเปลี่ยนสถานะ
-        try {
-          if (localStorage.getItem('prime_offline_bypass') === 'true') return;
-        } catch {}
-
-        if (session?.user) {
-          if (isMounted) setCurrentUser(session.user);
-          const hasPerm = await checkEmailPermission(session.user.email || '');
-          if (isMounted) {
-            setAuthStatus(hasPerm ? 'authorized' : 'unauthorized');
-          }
-        } else {
-          if (isMounted) {
-            setCurrentUser(null);
-            setAuthStatus('unauthenticated');
-          }
+        if (session?.user && isMounted) {
+          setCurrentUser(session.user);
         }
       });
 
@@ -203,12 +168,15 @@ export const App: React.FC = () => {
   }, []);
 
   const handleSignOut = async () => {
-    try {
-      localStorage.removeItem('prime_offline_bypass');
-    } catch {}
     await signOut();
-    setCurrentUser(null);
-    setAuthStatus('unauthenticated');
+    setCurrentUser({
+      id: 'prime-team-user',
+      email: 'team@primeconsultant.com',
+      app_metadata: {},
+      user_metadata: { name: 'ทีมงานไพร์มดิจิทัล' },
+      aud: 'authenticated',
+      created_at: new Date().toISOString(),
+    } as any);
   };
 
   // Load from Supabase Cloud or LocalStorage on mount
