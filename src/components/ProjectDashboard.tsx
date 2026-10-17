@@ -78,22 +78,42 @@ export interface ProjectCompletionSummary {
   isAllComplete: boolean;
 }
 
-export const computeProjectCompletion = (project: BiddingProject): ProjectCompletionSummary => {
+export const computeProjectCompletion = (project?: BiddingProject | null): ProjectCompletionSummary => {
+  if (!project) {
+    return {
+      totalTorClauses: 0,
+      completedTorClauses: 0,
+      torPercent: 0,
+      clausesList: [],
+      milestonesTotal: 0,
+      milestonesComplete: 0,
+      teamTotal: 0,
+      teamComplete: 0,
+      riskTotal: 0,
+      riskComplete: 0,
+      pastProjectsSelected: 0,
+      totalAllTopics: 0,
+      completedAllTopics: 0,
+      overallPercent: 0,
+      isAllComplete: false,
+    };
+  }
+
   const pData = project.proposalData;
-  const scopeItems = pData?.section1?.scopeItems || [];
+  const scopeItems = Array.isArray(pData?.section1?.scopeItems) ? pData.section1.scopeItems : [];
 
   const clausesList: ClauseCompletionInfo[] = scopeItems.map((item) => {
     // เกณฑ์ความสมบูรณ์ของข้อ 3.2: ต้องมีอย่างน้อยเป็นข้อความในช่องรายละเอียดวิธีการดำเนินงาน (ส่วนรูปภาพจะมีหรือไม่ก็ได้)
-    const hasMeth = (item.proposedMethodology || '').trim().length > 0;
+    const hasMeth = Boolean(item && (item.proposedMethodology || '').trim().length > 0);
 
     const missing: string[] = [];
     if (!hasMeth) missing.push('รายละเอียดวิธีดำเนินงาน (ข้อ 3.2)');
 
     return {
-      id: item.id,
-      clauseNumber: item.clauseNumber,
-      title: item.title,
-      level: item.level,
+      id: item?.id || '',
+      clauseNumber: item?.clauseNumber || '',
+      title: item?.title || '',
+      level: item?.level || 1,
       isComplete: hasMeth,
       missingItems: missing,
     };
@@ -103,26 +123,26 @@ export const computeProjectCompletion = (project: BiddingProject): ProjectComple
   const completedTorClauses = clausesList.filter((c) => c.isComplete).length;
   const torPercent = totalTorClauses > 0 ? Math.round((completedTorClauses / totalTorClauses) * 100) : 0;
 
-  const milestones = pData?.section2?.milestones || [];
+  const milestones = Array.isArray(pData?.section2?.milestones) ? pData.section2.milestones : [];
   const milestonesTotal = milestones.length;
   const milestonesComplete = milestones.filter(
-    (m) => (m.title || '').trim().length > 0 && m.percentage > 0 && (m.deliverables || []).length > 0
+    (m) => m && (m.title || '').trim().length > 0 && Number(m.percentage) > 0 && Array.isArray(m.deliverables) && m.deliverables.length > 0
   ).length;
 
-  const teamMembers = pData?.section4?.teamMembers || [];
+  const teamMembers = Array.isArray(pData?.section4?.teamMembers) ? pData.section4.teamMembers : [];
   const teamTotal = teamMembers.length;
   const teamComplete = teamMembers.filter(
-    (m) => (m.name || '').trim().length > 0 && (m.proposedRole || '').trim().length > 0
+    (m) => m && (m.name || '').trim().length > 0 && (m.proposedRole || '').trim().length > 0
   ).length;
 
-  const riskItems = pData?.section4?.riskItems || [];
+  const riskItems = Array.isArray(pData?.section4?.riskItems) ? pData.section4.riskItems : [];
   const riskTotal = riskItems.length;
   const riskComplete = riskItems.filter(
-    (r) => (r.riskTitle || '').trim().length > 0 && (r.mitigationPlan || '').trim().length > 0
+    (r) => r && (r.riskTitle || '').trim().length > 0 && (r.mitigationPlan || '').trim().length > 0
   ).length;
 
-  const pastProjects = pData?.section5?.pastProjects || [];
-  const pastProjectsSelected = pastProjects.filter((p) => p.isSelected).length;
+  const pastProjects = Array.isArray(pData?.section5?.pastProjects) ? pData.section5.pastProjects : [];
+  const pastProjectsSelected = pastProjects.filter((p) => Boolean(p && p.isSelected)).length;
 
   const totalAllTopics = totalTorClauses + milestonesTotal + teamTotal + riskTotal;
   const completedAllTopics = completedTorClauses + milestonesComplete + teamComplete + riskComplete;
@@ -321,10 +341,11 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   // Filtered & Sorted Projects
   const filteredProjects = projects
     .filter((p) => {
-      const matchSearch =
-        p.projectTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.projectCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.clientAgency.toLowerCase().includes(searchTerm.toLowerCase());
+      const title = (p.projectTitle || '').toLowerCase();
+      const code = (p.projectCode || '').toLowerCase();
+      const agency = (p.clientAgency || '').toLowerCase();
+      const q = (searchTerm || '').toLowerCase();
+      const matchSearch = title.includes(q) || code.includes(q) || agency.includes(q);
       const matchStatus = statusFilter === 'all' || p.status === statusFilter;
       return matchSearch && matchStatus;
     })
@@ -824,7 +845,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         if (p.id === projectId) {
           return {
             ...p,
-            attachments: p.attachments.filter((a) => a.id !== attachmentId),
+            attachments: (p.attachments || []).filter((a) => a.id !== attachmentId),
             updatedAt: new Date().toISOString(),
           };
         }
@@ -1283,9 +1304,9 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         ) : (
           filteredProjects.map((project) => {
             const summary = computeProjectCompletion(project);
-            const announcementDocs = project.attachments.filter((a) => a.category === 'announcement');
-            const torDocs = project.attachments.filter((a) => a.category === 'tor');
-            const otherDocs = project.attachments.filter((a) => a.category === 'other');
+            const announcementDocs = (project.attachments || []).filter((a) => a.category === 'announcement');
+            const torDocs = (project.attachments || []).filter((a) => a.category === 'tor');
+            const otherDocs = (project.attachments || []).filter((a) => a.category === 'other');
             const isCollapsed = !!collapsedProjects[project.id];
 
             return (
@@ -1750,7 +1771,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                     <div className="attachments-header">
                       <div className="attachments-title">
                         <Paperclip size={14} />
-                        <span>เอกสารแนบ ({project.attachments.length})</span>
+                        <span>เอกสารแนบ ({(project.attachments || []).length})</span>
                       </div>
                       
                       <div className="attachment-add-buttons">
@@ -1795,9 +1816,9 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                     </div>
 
                     {/* Attachments List */}
-                    {project.attachments.length > 0 ? (
+                    {(project.attachments || []).length > 0 ? (
                       <div className="attachments-list">
-                        {project.attachments.map((att) => (
+                        {(project.attachments || []).map((att) => (
                           <div key={att.id} className={`attachment-item-pill att-${att.category}`}>
                             <span className="att-tag">
                               {att.category === 'announcement' ? 'ประกาศ' : att.category === 'tor' ? 'TOR' : 'แนบ'}

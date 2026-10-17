@@ -230,8 +230,10 @@ export const App: React.FC = () => {
     });
   }, [authStatus]);
 
-  // Current active project
-  const currentProject = projects.find((p) => p.id === activeProjectId) || projects[0] || createDefaultBlankProject();
+  // Current active project (guaranteed to be fully sanitized and hydrated)
+  const currentProject = normalizeProjectBudget(
+    projects.find((p) => p.id === activeProjectId) || projects[0] || createDefaultBlankProject()
+  );
 
   // Proposal Data State for the currently selected project
   const [proposal, setProposal] = useState<ProposalData>(() => {
@@ -342,6 +344,11 @@ export const App: React.FC = () => {
     const active = normalizedList.find((p) => p.id === activeProjectId);
     if (active && active.proposalData) {
       setProposal(active.proposalData);
+    } else if (normalizedList.length > 0) {
+      setActiveProjectId(normalizedList[0].id);
+      if (normalizedList[0].proposalData) {
+        setProposal(normalizedList[0].proposalData);
+      }
     }
     try {
       const sanitized = normalizedList.map((p) => ({

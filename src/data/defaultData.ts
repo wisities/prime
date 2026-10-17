@@ -1201,6 +1201,8 @@ export function createBlankProposalData(
     section4: {
       teamOverview: '',
       teamMembers: [],
+      projectManagementOverview: '',
+      projectManagementImageBlocks: [],
       riskManagementOverview: '',
       riskItems: [],
       complianceMatrixOverview: '',

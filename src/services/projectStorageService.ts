@@ -1,4 +1,5 @@
-import { BiddingProject, ProjectAttachment } from '../types/proposal';
+import { BiddingProject, ProjectAttachment, ProposalData } from '../types/proposal';
+import { createBlankProposalData, createDefaultBlankProject } from '../data/defaultData';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { idbSet, idbGet, idbGetAll, idbDelete, IDB_STORES } from './localDatabase';
 
@@ -77,44 +78,89 @@ export async function getAttachmentFromIDB(id: string): Promise<string | null> {
 }
 
 /**
- * ปรับปรุงและซิงค์ยอดงบประมาณให้ตรงกันทุกระดับ (project.budgetAmount, section1.budgetAmount, cover.budgetFormatted)
+ * ปรับปรุง ตรวจสอบความถูกต้อง และเติมเต็มโครงสร้างโครงการให้สมบูรณ์ 100%
+ * - รับประกันว่าฟิลด์สำคัญ (id, projectTitle, projectCode, clientAgency, status, attachments) ไม่เป็น undefined
+ * - เติมเต็ม proposalData ทุกบท (cover, section1, section2, section3, section4, section5)
+ * - ซิงค์ยอดงบประมาณให้ตรงกันทุกระดับ (project.budgetAmount, section1.budgetAmount, cover.budgetFormatted)
  */
 export function normalizeProjectBudget(p: BiddingProject): BiddingProject {
-  const pCopy = { ...p };
-  const pData = pCopy.proposalData ? { ...pCopy.proposalData } : ({} as any);
-  const effBudget = pCopy.budgetAmount || pData.section1?.budgetAmount || 0;
+  if (!p) {
+    return createDefaultBlankProject();
+  }
 
-  if (effBudget > 0) {
-    pCopy.budgetAmount = effBudget;
-    if (pData.section1) {
-      if (!pData.section1.budgetAmount || pData.section1.budgetAmount === 0) {
-        pData.section1 = { ...pData.section1, budgetAmount: effBudget };
-      }
-      if (pData.section1.projectDurationDays === undefined || pData.section1.projectDurationDays === null) {
-        pData.section1.projectDurationDays = 180;
-      }
-      if (pData.section1.projectDurationMonths === undefined || pData.section1.projectDurationMonths === null) {
-        pData.section1.projectDurationMonths = Math.max(1, Math.round(pData.section1.projectDurationDays / 30));
-      }
-    } else {
-      pData.section1 = {
-        background: '',
-        objectives: [],
-        expectedBenefits: [],
-        targetAudience: '',
-        projectScopeOverview: '',
-        scopeItems: [],
-        budgetAmount: effBudget,
-        projectDurationDays: 180,
-        projectDurationMonths: 6,
-      };
-    }
-    if (pData.cover) {
-      if (!pData.cover.budgetFormatted || pData.cover.budgetFormatted.trim() === '' || pData.cover.budgetFormatted === '0 บาท') {
-        pData.cover = { ...pData.cover, budgetFormatted: `${effBudget.toLocaleString()} บาท` };
-      }
+  const pCopy: BiddingProject = {
+    ...p,
+    id: p.id || `proj-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    projectTitle: p.projectTitle || 'โครงการใหม่',
+    projectCode: p.projectCode || '',
+    clientAgency: p.clientAgency || '',
+    budgetAmount: Number(p.budgetAmount) || 0,
+    status: p.status || 'draft',
+    statusNote: p.statusNote || 'เริ่มต้นร่างโครงการ',
+    attachments: Array.isArray(p.attachments) ? p.attachments : [],
+  };
+
+  const blank = createBlankProposalData(
+    pCopy.projectTitle,
+    pCopy.projectCode,
+    pCopy.clientAgency,
+    pCopy.budgetAmount,
+    180
+  );
+
+  const rawData = pCopy.proposalData || ({} as any);
+
+  const pData: ProposalData = {
+    documentStructure: rawData.documentStructure || blank.documentStructure,
+    cover: {
+      ...blank.cover,
+      ...(rawData.cover || {}),
+      projectTitle: rawData.cover?.projectTitle || pCopy.projectTitle,
+      projectCode: rawData.cover?.projectCode || pCopy.projectCode,
+      clientAgency: rawData.cover?.clientAgency || pCopy.clientAgency,
+    },
+    section1: {
+      ...blank.section1,
+      ...(rawData.section1 || {}),
+      objectives: Array.isArray(rawData.section1?.objectives) ? rawData.section1.objectives : [],
+      expectedBenefits: Array.isArray(rawData.section1?.expectedBenefits) ? rawData.section1.expectedBenefits : [],
+      scopeItems: Array.isArray(rawData.section1?.scopeItems) ? rawData.section1.scopeItems : [],
+    },
+    section2: {
+      ...blank.section2,
+      ...(rawData.section2 || {}),
+      milestones: Array.isArray(rawData.section2?.milestones) ? rawData.section2.milestones : [],
+    },
+    section3: {
+      ...blank.section3,
+      ...(rawData.section3 || {}),
+    },
+    section4: {
+      ...blank.section4,
+      ...(rawData.section4 || {}),
+      teamMembers: Array.isArray(rawData.section4?.teamMembers) ? rawData.section4.teamMembers : [],
+      riskItems: Array.isArray(rawData.section4?.riskItems) ? rawData.section4.riskItems : [],
+      projectManagementOverview: rawData.section4?.projectManagementOverview || blank.section4.projectManagementOverview || '',
+      projectManagementImageBlocks: Array.isArray(rawData.section4?.projectManagementImageBlocks) ? rawData.section4.projectManagementImageBlocks : [],
+    },
+    section5: {
+      ...blank.section5,
+      ...(rawData.section5 || {}),
+      specializations: Array.isArray(rawData.section5?.specializations) ? rawData.section5.specializations : blank.section5.specializations,
+      certifications: Array.isArray(rawData.section5?.certifications) ? rawData.section5.certifications : blank.section5.certifications,
+      pastProjects: Array.isArray(rawData.section5?.pastProjects) ? rawData.section5.pastProjects : [],
+    },
+  };
+
+  const effBudget = pCopy.budgetAmount || pData.section1.budgetAmount || 0;
+  pCopy.budgetAmount = effBudget;
+  pData.section1.budgetAmount = effBudget;
+  if (!pData.cover.budgetFormatted || pData.cover.budgetFormatted.trim() === '' || pData.cover.budgetFormatted === '0 บาท') {
+    if (effBudget > 0) {
+      pData.cover.budgetFormatted = `${effBudget.toLocaleString()} บาท`;
     }
   }
+
   pCopy.proposalData = pData;
   return pCopy;
 }
@@ -305,7 +351,7 @@ export async function loadAllProjects(): Promise<{
               ? cloudMeta.progressPercent
               : localProj?.progressPercent,
             currentStage: cloudMeta.currentStage || localProj?.currentStage,
-            attachments: attachmentsMap.get(cp.id) || (localProj ? localProj.attachments : []),
+            attachments: attachmentsMap.get(cp.id) || (localProj && Array.isArray(localProj.attachments) ? localProj.attachments : []) || [],
             proposalData: effectiveProposalData,
             createdAt: cp.created_at || localProj?.createdAt,
             updatedAt: localTime > cloudTime ? localProj!.updatedAt : cp.updated_at,

@@ -304,8 +304,8 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
   const filteredProjects = sortPastProjects(
     projects.filter((p) => {
       const matchSearch =
-        p.projectName.toLowerCase().includes(projectSearch.toLowerCase()) ||
-        p.clientName.toLowerCase().includes(projectSearch.toLowerCase()) ||
+        (p.projectName || '').toLowerCase().includes(projectSearch.toLowerCase()) ||
+        (p.clientName || '').toLowerCase().includes(projectSearch.toLowerCase()) ||
         (p.description || '').toLowerCase().includes(projectSearch.toLowerCase());
       const matchType =
         projectTypeFilter === 'all' ||
@@ -317,7 +317,7 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
 
   const filteredTeam = teamMembers.filter((m) => {
     return (
-      m.name.toLowerCase().includes(teamSearch.toLowerCase()) ||
+      (m.name || '').toLowerCase().includes(teamSearch.toLowerCase()) ||
       (m.proposedRole || '').toLowerCase().includes(teamSearch.toLowerCase()) ||
       (m.certifications || '').toLowerCase().includes(teamSearch.toLowerCase()) ||
       (m.education || '').toLowerCase().includes(teamSearch.toLowerCase())
