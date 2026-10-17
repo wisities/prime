@@ -323,9 +323,17 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
       (m.education || '').toLowerCase().includes(teamSearch.toLowerCase())
     );
   });
+  const handleClose = () => {
+    if (isEditingMember || isEditingProject) {
+      if (!window.confirm('คุณกำลังแก้ไขข้อมูลอยู่และยังไม่ได้บันทึก ยืนยันการปิดหน้าต่างหรือไม่?')) {
+        return;
+      }
+    }
+    onClose();
+  };
 
   return (
-    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 1050 }}>
+    <div className="modal-overlay" style={{ zIndex: 1050 }}>
       <div
         className="modal-content"
         onClick={(e) => e.stopPropagation()}
@@ -349,7 +357,7 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             style={{ background: 'none', border: 'none', fontSize: '1.3rem', cursor: 'pointer', padding: '4px', color: 'var(--slate-500)' }}
             title="ปิดหน้าต่าง"
           >

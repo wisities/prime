@@ -76,10 +76,10 @@ input, textarea, select, button {
 .app-header {
   background: linear-gradient(135deg, var(--primary-900) 0%, var(--primary-800) 100%);
   color: #FFFFFF;
-  border-bottom: 2px solid var(--gold-500);
   position: sticky;
   top: 0;
-  z-index: 40;
+  z-index: 100;
+  width: 100%;
   box-shadow: var(--shadow-md);
 }
 
@@ -92,6 +92,7 @@ input, textarea, select, button {
   justify-content: space-between;
   gap: 1.25rem;
   flex-wrap: wrap;
+  border-bottom: 2px solid var(--gold-500);
 }
 
 .brand-section {
@@ -216,8 +217,11 @@ input, textarea, select, button {
 .tabs-nav-bar {
   background-color: #FFFFFF;
   border-bottom: 1px solid var(--slate-200);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
   overflow-x: auto;
+  scrollbar-width: thin;
+  position: relative;
+  z-index: 101;
 }
 
 .tabs-container {
@@ -231,11 +235,11 @@ input, textarea, select, button {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.9rem 1.1rem;
+  padding: 0.8rem 1.15rem;
   border: none;
   background: none;
   color: var(--slate-600);
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
   border-bottom: 3px solid transparent;
@@ -409,7 +413,8 @@ input, textarea, select, button {
 }
 
 /* Modal */
-.modal-overlay {
+.modal-overlay,
+.modal-backdrop {
   position: fixed;
   inset: 0;
   background-color: rgba(15, 23, 42, 0.7);

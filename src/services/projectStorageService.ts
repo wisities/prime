@@ -169,7 +169,32 @@ export async function loadAllProjects(): Promise<{
           });
         }
 
+        // อ่านข้อมูลโครงการท้องถิ่นจาก IndexedDB ก่อนเพื่อรักษาเนื้อหาร่าง (เครื่องใครเครื่องมัน)
+        let idbProjects: BiddingProject[] = [];
+        try {
+          idbProjects = (await idbGetAll<BiddingProject>(IDB_STORES.BIDDING_PROJECTS)) || [];
+        } catch {}
+        const idbMap = new Map<string, BiddingProject>(idbProjects.map((p) => [p.id, p]));
+
         const mapped: BiddingProject[] = cloudProjects.map((cp: any) => {
+          const localProj = idbMap.get(cp.id);
+          const cloudMeta = cp.proposal_data?._cloudStatus || {};
+
+          // สถานะ ใครทำ ทำถึงไหน
+          const lastModifiedBy = cloudMeta.lastModifiedBy || localProj?.lastModifiedBy;
+          const assignedTo = cloudMeta.assignedTo || localProj?.assignedTo;
+          const progressPercent = typeof cloudMeta.progressPercent === 'number'
+            ? cloudMeta.progressPercent
+            : localProj?.progressPercent;
+          const currentStage = cloudMeta.currentStage || localProj?.currentStage;
+
+          // เนื้อหาร่าง proposalData: อยู่ที่เครื่องใครเครื่องมัน
+          // หากเครื่องนี้เคยเปิดทำและมีร่างใน IndexedDB อยู่แล้ว ให้ใช้ร่างของเครื่องนี้เสมอ
+          const hasLocalDraft = localProj && localProj.proposalData && Object.keys(localProj.proposalData).length > 0;
+          const effectiveProposalData = hasLocalDraft
+            ? localProj.proposalData
+            : (cp.proposal_data && !cp.proposal_data._cloudStatus ? cp.proposal_data : DEFAULT_BIDDING_PROJECTS[0]?.proposalData);
+
           const rawProj: BiddingProject = {
             id: cp.id,
             projectCode: cp.project_code,
@@ -181,8 +206,12 @@ export async function loadAllProjects(): Promise<{
             submissionDeadline: cp.submission_deadline || undefined,
             status: cp.status || 'draft',
             statusNote: cp.status_note || undefined,
-            attachments: attachmentsMap.get(cp.id) || [],
-            proposalData: cp.proposal_data || {},
+            lastModifiedBy,
+            assignedTo,
+            progressPercent,
+            currentStage,
+            attachments: attachmentsMap.get(cp.id) || (localProj ? localProj.attachments : []),
+            proposalData: effectiveProposalData,
             createdAt: cp.created_at,
             updatedAt: cp.updated_at,
           };
@@ -316,9 +345,31 @@ export async function saveProject(rawProject: BiddingProject): Promise<boolean> 
     console.warn('LocalStorage save error:', e);
   }
 
-  // 2. ซิงค์ไปยัง Supabase Cloud
+  // 2. ซิงค์ไปยัง Supabase Cloud (บันทึกสถานะโครงการ: ใครทำ, ทำถึงไหน)
   if (isSupabaseConfigured() && supabase) {
     try {
+      const userStr = project.lastModifiedBy || 'ไม่ระบุผู้ทำ';
+      const stageStr = project.currentStage || 'กำลังจัดทำข้อเสนอ';
+      const progressNum = project.progressPercent ?? 0;
+      const statusNoteText = project.statusNote || `[ผู้จัดทำ: ${userStr}] ${stageStr} (${progressNum}%)`;
+
+      // คลาวด์เก็บสถานะความคืบหน้า (ใครทำ ทำถึงไหน)
+      // ส่วนเนื้อหาร่างฉบับเต็มของแต่ละโครงการจะถูกบันทึกในเครื่องของแต่ละคน (IndexedDB)
+      const cloudProposalPayload = {
+        _cloudStatus: {
+          lastModifiedBy: project.lastModifiedBy,
+          assignedTo: project.assignedTo,
+          progressPercent: project.progressPercent,
+          currentStage: project.currentStage,
+          updatedAt: new Date().toISOString(),
+        },
+        cover: {
+          projectTitle: project.projectTitle,
+          projectCode: project.projectCode,
+          clientAgency: project.clientAgency,
+        },
+      };
+
       const { error } = await supabase.from('bidding_projects').upsert(
         {
           id: project.id,
@@ -330,8 +381,8 @@ export async function saveProject(rawProject: BiddingProject): Promise<boolean> 
           announcement_date: project.announcementDate || null,
           submission_deadline: project.submissionDeadline || null,
           status: project.status,
-          status_note: project.statusNote || null,
-          proposal_data: project.proposalData,
+          status_note: statusNoteText,
+          proposal_data: cloudProposalPayload,
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'id' }

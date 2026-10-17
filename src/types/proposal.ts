@@ -247,6 +247,10 @@ export interface BiddingProject {
   submissionDeadline?: string; // วันเวลาที่จะต้องยื่นข้อเสนอโครงการในระบบ YYYY-MM-DDTHH:mm
   status: ProposalStatus; // 'draft' | 'submitted' | 'cancelled'
   statusNote?: string;
+  lastModifiedBy?: string; // ใครทำ: อีเมลหรือชื่อผู้แก้ไขล่าสุด
+  assignedTo?: string; // ผู้รับผิดชอบหลัก
+  progressPercent?: number; // % ความคืบหน้าภาพรวม (0-100)
+  currentStage?: string; // ทำถึงไหน: ขั้นตอนหรือความคืบหน้ารายส่วน
   attachments: ProjectAttachment[];
   proposalData: ProposalData;
   createdAt: string;

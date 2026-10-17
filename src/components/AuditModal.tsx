@@ -51,7 +51,7 @@ export const AuditModal: React.FC<AuditModalProps> = ({ data, isOpen, onClose })
   const infoCount = issues.filter((i) => i.severity === 'info').length;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay">
       <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '820px' }}>
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>

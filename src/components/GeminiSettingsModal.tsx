@@ -102,7 +102,7 @@ export const GeminiSettingsModal: React.FC<GeminiSettingsModalProps> = ({
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-overlay modal-backdrop">
       <div
         className="modal-container"
         style={{ maxWidth: '580px', width: '92%' }}

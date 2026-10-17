@@ -158,7 +158,7 @@ export const DocumentStructureModal: React.FC<DocumentStructureModalProps> = ({
   );
 
   return (
-    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 1100 }}>
+    <div className="modal-overlay" style={{ zIndex: 1100 }}>
       <div
         className="modal-content"
         onClick={(e) => e.stopPropagation()}

@@ -270,7 +270,7 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
     .sort((a, b) => a.order - b.order);
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay">
       <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '960px', maxHeight: '94vh' }}>
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>

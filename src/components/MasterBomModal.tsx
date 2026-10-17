@@ -296,7 +296,7 @@ export const MasterBomModal: React.FC<MasterBomModalProps> = ({
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 1050 }}>
+    <div className="modal-overlay" style={{ zIndex: 1050 }}>
       <div
         className="modal-content"
         onClick={(e) => e.stopPropagation()}

@@ -4,7 +4,7 @@ import { INITIAL_PROPOSAL_DATA, DEFAULT_BIDDING_PROJECTS } from './data/defaultD
 import { exportProposalToDocx } from './services/docxExport';
 import { runRuleBasedAudit } from './services/proposalAuditor';
 
-import { ProjectDashboard } from './components/ProjectDashboard';
+import { ProjectDashboard, computeProjectCompletion } from './components/ProjectDashboard';
 import { CoverEditor } from './components/CoverEditor';
 import { Section1Editor } from './components/Section1Editor';
 import { Section2Editor } from './components/Section2Editor';
@@ -199,6 +199,13 @@ export const App: React.FC = () => {
       setProjects((prevProjects) => {
         const updatedProjects = prevProjects.map((p) => {
           if (p.id === activeProjectId) {
+            const comp = computeProjectCompletion({ ...p, proposalData: nextProposal });
+            const stage = comp.overallPercent === 100
+              ? 'เนื้อหาครบถ้วน 100%'
+              : comp.totalTorClauses > 0
+              ? `TOR (${comp.completedTorClauses}/${comp.totalTorClauses}), บุคลากร (${comp.teamComplete}/${comp.teamTotal})`
+              : 'เริ่มต้นร่างโครงการ';
+
             const updated = normalizeProjectBudget({
               ...p,
               proposalData: nextProposal,
@@ -206,6 +213,9 @@ export const App: React.FC = () => {
               projectCode: nextProposal.cover.projectCode || p.projectCode,
               clientAgency: nextProposal.cover.clientAgency || p.clientAgency,
               budgetAmount: nextProposal.section1?.budgetAmount || p.budgetAmount || effectiveBudget,
+              lastModifiedBy: currentUser?.email || p.lastModifiedBy || 'ผู้จัดทำในระบบ',
+              progressPercent: comp.overallPercent,
+              currentStage: stage,
               updatedAt: new Date().toISOString(),
             });
             // Async sync to cloud database
@@ -255,6 +265,13 @@ export const App: React.FC = () => {
     setIsSavingDraft(true);
     try {
       const effectiveBudget = proposal.section1?.budgetAmount || currentProject.budgetAmount || 0;
+      const comp = computeProjectCompletion({ ...currentProject, proposalData: proposal });
+      const stage = comp.overallPercent === 100
+        ? 'เนื้อหาครบถ้วน 100%'
+        : comp.totalTorClauses > 0
+        ? `TOR (${comp.completedTorClauses}/${comp.totalTorClauses}), บุคลากร (${comp.teamComplete}/${comp.teamTotal})`
+        : 'เริ่มต้นร่างโครงการ';
+
       const updatedProject = normalizeProjectBudget({
         ...currentProject,
         proposalData: proposal,
@@ -262,6 +279,9 @@ export const App: React.FC = () => {
         projectCode: proposal.cover.projectCode || currentProject.projectCode,
         clientAgency: proposal.cover.clientAgency || currentProject.clientAgency,
         budgetAmount: proposal.section1?.budgetAmount || currentProject.budgetAmount || effectiveBudget,
+        lastModifiedBy: currentUser?.email || currentProject.lastModifiedBy || 'ผู้จัดทำในระบบ',
+        progressPercent: comp.overallPercent,
+        currentStage: stage,
         updatedAt: new Date().toISOString(),
       });
 
@@ -815,25 +835,10 @@ export const App: React.FC = () => {
             )}
           </div>
         </div>
-      </header>
 
-      {/* DASHBOARD VIEW */}
-      {currentView === 'dashboard' ? (
-        <ProjectDashboard
-          projects={projects}
-          cloudStatus={cloudStatus}
-          onSelectProject={handleSelectProjectFromDashboard}
-          onUpdateProjects={handleUpdateProjects}
-          onOpenTorImporterForProject={handleOpenTorImporterForProject}
-          onResetProjectsToDefault={handleResetProjectsToDefault}
-          onOpenUserManagement={() => setShowUserMgmtModal(true)}
-          onOpenMasterLibraries={() => setShowMasterLibraryModal(true)}
-        />
-      ) : (
-        /* PROPOSAL EDITOR VIEW */
-        <div>
-          {/* Tabs Navigation */}
-          <nav className="tabs-nav-bar">
+        {/* Embedded Sticky Tabs Navigation for Proposal Editor */}
+        {currentView === 'editor' && (
+          <nav className="tabs-nav-bar" aria-label="แถบหัวข้อข้อเสนอโครงการ">
             <div className="tabs-container">
               <button
                 type="button"
@@ -890,7 +895,25 @@ export const App: React.FC = () => {
               </button>
             </div>
           </nav>
+        )}
+      </header>
 
+      {/* DASHBOARD VIEW */}
+      {currentView === 'dashboard' ? (
+        <ProjectDashboard
+          projects={projects}
+          cloudStatus={cloudStatus}
+          currentUserEmail={currentUser?.email}
+          onSelectProject={handleSelectProjectFromDashboard}
+          onUpdateProjects={handleUpdateProjects}
+          onOpenTorImporterForProject={handleOpenTorImporterForProject}
+          onResetProjectsToDefault={handleResetProjectsToDefault}
+          onOpenUserManagement={() => setShowUserMgmtModal(true)}
+          onOpenMasterLibraries={() => setShowMasterLibraryModal(true)}
+        />
+      ) : (
+        /* PROPOSAL EDITOR VIEW */
+        <div>
           {/* Main Content Area */}
           <main className="main-wrapper">
             {/* Project Mini Summary Banner with Status and e-GP Link */}

@@ -151,6 +151,7 @@ export const computeProjectCompletion = (project: BiddingProject): ProjectComple
 interface ProjectDashboardProps {
   projects: BiddingProject[];
   cloudStatus?: 'cloud' | 'local';
+  currentUserEmail?: string;
   onSelectProject: (projectId: string) => void;
   onUpdateProjects: (updated: BiddingProject[]) => void;
   onOpenTorImporterForProject: (projectId: string, attachmentId?: string) => void;
@@ -162,6 +163,7 @@ interface ProjectDashboardProps {
 export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   projects,
   cloudStatus = 'local',
+  currentUserEmail,
   onSelectProject,
   onUpdateProjects,
   onOpenTorImporterForProject,
@@ -820,6 +822,20 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     }
   };
 
+  // Export single project draft JSON for transferring to a teammate
+  const handleExportSingleProject = (project: BiddingProject) => {
+    const jsonStr = JSON.stringify(project, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const cleanCode = (project.projectCode || 'PROJECT').replace(/[/\\?%*:|"<>]/g, '_');
+    const cleanTitle = (project.projectTitle || 'Proposal').substring(0, 30).replace(/[/\\?%*:|"<>]/g, '_');
+    a.download = `ร่างโครงการ_${cleanCode}_${cleanTitle}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // Export JSON backup of all projects
   const handleExportAllJson = () => {
     const jsonStr = JSON.stringify(projects, null, 2);
@@ -832,7 +848,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  // Import JSON backup
+  // Import JSON (supports both single project .json or full array backup)
   const handleImportAllJson = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -844,6 +860,23 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].projectTitle) {
           onUpdateProjects(parsed);
           alert(`นำเข้าข้อมูลโครงการทั้งหมด ${parsed.length} รายการ เรียบร้อยแล้ว`);
+        } else if (parsed && parsed.projectTitle && (parsed.id || parsed.projectCode)) {
+          // นำเข้าไฟล์โครงการเดี่ยวที่ได้รับจากเพื่อนร่วมงาน
+          const existingIdx = projects.findIndex(
+            (p) => p.id === parsed.id || (p.projectCode && p.projectCode === parsed.projectCode)
+          );
+          let updatedList: BiddingProject[];
+          if (existingIdx >= 0) {
+            if (window.confirm(`พบโครงการ "${parsed.projectTitle}" (${parsed.projectCode}) อยู่ในเครื่องแล้ว ต้องการแทนที่เนื้อหาร่างด้วยไฟล์ที่นำเข้ามาหรือไม่?`)) {
+              updatedList = projects.map((p, idx) => (idx === existingIdx ? { ...p, ...parsed, id: p.id } : p));
+            } else {
+              return;
+            }
+          } else {
+            updatedList = [parsed, ...projects];
+          }
+          onUpdateProjects(updatedList);
+          alert(`นำเข้าไฟล์ร่างโครงการ "${parsed.projectTitle}" เข้าสู่เครื่องของคุณเรียบร้อยแล้ว!`);
         } else {
           alert('รูปแบบไฟล์ JSON ไม่ถูกต้องสำหรับรายการโครงการ');
         }
@@ -944,9 +977,9 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             type="button"
             className="btn btn-secondary hero-btn"
             onClick={() => jsonImportInputRef.current?.click()}
-            title="นำเข้าไฟล์สำรอง JSON ของทุกโครงการ"
+            title="นำเข้าไฟล์ร่างโครงการ (.json) ที่เพื่อนร่วมงานส่งให้ หรือนำเข้าไฟล์สำรองฐานข้อมูล"
           >
-            <Upload size={16} /> นำเข้าฐานข้อมูล
+            <Upload size={16} /> นำเข้าไฟล์โครงการ (.json)
           </button>
           <button
             type="button"
@@ -1459,6 +1492,46 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                     </div>
                   </div>
 
+                  {/* Cloud Collaboration Status: Who is doing & How far */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '0.5rem',
+                      padding: '0.45rem 0.75rem',
+                      backgroundColor: '#F8FAFC',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '6px',
+                      fontSize: '0.8rem',
+                      marginBottom: '0.5rem',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Users size={14} style={{ color: '#2563EB' }} />
+                      <span style={{ color: 'var(--slate-500)' }}>ผู้จัดทำล่าสุด:</span>
+                      <strong style={{ color: 'var(--slate-800)' }}>
+                        {project.lastModifiedBy || 'ไม่ระบุผู้จัดทำ'}
+                      </strong>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ color: 'var(--slate-500)' }}>สถานะ:</span>
+                      <span
+                        style={{
+                          fontWeight: 600,
+                          color: summary.torPercent === 100 ? '#15803D' : '#0369A1',
+                          backgroundColor: summary.torPercent === 100 ? '#DCFCE7' : '#E0F2FE',
+                          padding: '1px 8px',
+                          borderRadius: '12px',
+                        }}
+                      >
+                        {project.currentStage || (summary.torPercent === 100 ? 'เสร็จสมบูรณ์' : `ทำถึง: TOR ${summary.completedTorClauses}/${summary.totalTorClauses} ข้อ`)}
+                      </span>
+                    </div>
+                  </div>
+
                   {/* Status Note if available */}
                   {project.statusNote && (
                     <div className="project-status-note">
@@ -1760,15 +1833,28 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                 </div>
 
                 {/* Card Footer Actions */}
-                <div className="project-card-footer">
-                  <button
-                    type="button"
-                    className="btn btn-outline footer-btn-export"
-                    onClick={() => handleExportDocx(project)}
-                    title="สร้างและดาวน์โหลดไฟล์ข้อเสนอโครงการเป็น Microsoft Word (.docx)"
-                  >
-                    <FileDown size={14} /> ดาวน์โหลด Word
-                  </button>
+                <div className="project-card-footer" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn btn-outline"
+                      style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem', display: 'flex', alignItems: 'center', gap: '5px' }}
+                      onClick={() => handleExportSingleProject(project)}
+                      title="ส่งออกไฟล์ร่างข้อเสนอโครงการนี้ (.json) เพื่อแชร์หรือส่งต่อให้เพื่อนร่วมงานนำไปทำต่อในเครื่องตนเอง"
+                    >
+                      <Download size={14} />
+                      <span>ส่งออกไฟล์ร่าง (.json)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn btn-outline footer-btn-export"
+                      onClick={() => handleExportDocx(project)}
+                      title="สร้างและดาวน์โหลดไฟล์ข้อเสนอโครงการเป็น Microsoft Word (.docx)"
+                    >
+                      <FileDown size={14} /> ดาวน์โหลด Word
+                    </button>
+                  </div>
 
                   <button
                     type="button"

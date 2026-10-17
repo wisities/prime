@@ -1573,7 +1573,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
 
       {/* Master Library Selection Modal */}
       {showLibraryModal && (
-        <div className="modal-overlay" onClick={() => setShowLibraryModal(false)}>
+        <div className="modal-overlay">
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '820px' }}>
             <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
               <div>

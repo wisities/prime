@@ -174,7 +174,7 @@ export const BomExportModal: React.FC<BomExportModalProps> = ({
     : items.filter((it) => it.category === selectedCategoryFilter);
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay">
       <div
         className="modal-content"
         onClick={(e) => e.stopPropagation()}
