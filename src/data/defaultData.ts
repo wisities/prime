@@ -1131,113 +1131,28 @@ export const INITIAL_PROPOSAL_DATA: ProposalData = {
   },
 };
 
-export const DEFAULT_BIDDING_PROJECTS: BiddingProject[] = [
-  {
-    id: 'proj-001',
-    projectCode: 'EGP-67-10492',
-    projectTitle: 'โครงการพัฒนาระบบบริการประชาชนดิจิทัลและการบูรณาการข้อมูลอัจฉริยะ',
-    clientAgency: 'กรมพัฒนาธุรกิจการค้า กระทรวงพาณิชย์',
-    budgetAmount: 7500000,
-    egpUrl: 'https://process3.gprocurement.go.th/egp2procmain/jsp/procsearch.sch?project_id=6710492001',
-    announcementDate: '2026-09-15',
-    submissionDeadline: '2026-10-25T16:30',
+// โครงการเริ่มต้น: กำหนดให้เป็นรายการว่าง (ไม่มีโครงการตัวอย่างหลงเหลือในระบบ)
+export const DEFAULT_BIDDING_PROJECTS: BiddingProject[] = [];
+
+/**
+ * สร้างโครงการว่างเริ่มต้นใหม่ (สำหรับเริ่มโครงการใหม่ที่สะอาด 100% ไม่มีข้อมูลตัวอย่าง)
+ */
+export function createDefaultBlankProject(): BiddingProject {
+  const id = `proj-${Date.now()}`;
+  return {
+    id,
+    projectCode: '',
+    projectTitle: 'โครงการใหม่',
+    clientAgency: '',
+    budgetAmount: 0,
     status: 'draft',
-    statusNote: 'กำลังจัดเตรียมเนื้อหาข้อเสนอส่วนที่ 3 และตรวจสอบความสอดคล้องของ TOR',
-    attachments: [
-      {
-        id: 'att-1',
-        name: 'ประกาศจัดจ้าง_EGP-67-10492.pdf',
-        size: 1425000,
-        type: 'application/pdf',
-        uploadedAt: '2026-09-16T10:30:00',
-        category: 'announcement',
-      },
-      {
-        id: 'att-2',
-        name: 'TOR_ข้อกำหนดรายละเอียดโครงการ.docx',
-        size: 3580000,
-        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        uploadedAt: '2026-09-16T10:35:00',
-        category: 'tor',
-      },
-    ],
-    proposalData: JSON.parse(JSON.stringify(INITIAL_PROPOSAL_DATA)),
-    createdAt: '2026-09-16T09:00:00',
-    updatedAt: '2026-10-10T09:00:00',
-  },
-  {
-    id: 'proj-002',
-    projectCode: 'EGP-67-08812',
-    projectTitle: 'โครงการจัดทำระบบคลังข้อมูลกลางและระบบสนับสนุนการตัดสินใจเชิงนโยบาย (Data Lakehouse & Policy BI)',
-    clientAgency: 'สำนักงานปลัดกระทรวงดิจิทัลเพื่อเศรษฐกิจและสังคม',
-    budgetAmount: 12800000,
-    egpUrl: 'https://process3.gprocurement.go.th/egp2procmain/jsp/procsearch.sch?project_id=6708812003',
-    announcementDate: '2026-08-01',
-    submissionDeadline: '2026-09-05T15:00',
-    status: 'submitted',
-    statusNote: 'ยื่นข้อเสนอทางระบบ e-GP เรียบร้อยแล้ว อยู่ระหว่างขั้นตอนการพิจารณาผลการประกวดราคา',
-    attachments: [
-      {
-        id: 'att-3',
-        name: 'ประกาศเชิญชวน_EGP-67-08812.pdf',
-        size: 980000,
-        type: 'application/pdf',
-        uploadedAt: '2026-08-02T09:15:00',
-        category: 'announcement',
-      },
-      {
-        id: 'att-4',
-        name: 'TOR_ขอบเขตงานคลังข้อมูล.pdf',
-        size: 4210000,
-        type: 'application/pdf',
-        uploadedAt: '2026-08-02T09:20:00',
-        category: 'tor',
-      },
-    ],
-    proposalData: (() => {
-      const data = JSON.parse(JSON.stringify(INITIAL_PROPOSAL_DATA));
-      data.cover.projectTitle = 'โครงการจัดทำระบบคลังข้อมูลกลางและระบบสนับสนุนการตัดสินใจเชิงนโยบาย (Data Lakehouse & Policy BI)';
-      data.cover.projectCode = 'EGP-67-08812';
-      data.cover.clientAgency = 'สำนักงานปลัดกระทรวงดิจิทัลเพื่อเศรษฐกิจและสังคม';
-      data.cover.budgetFormatted = '12,800,000 บาท';
-      return data;
-    })(),
-    createdAt: '2026-08-02T09:00:00',
-    updatedAt: '2026-09-05T14:45:00',
-  },
-  {
-    id: 'proj-003',
-    projectCode: 'EGP-67-05118',
-    projectTitle: 'โครงการปรับปรุงประสิทธิภาพระบบบริหารจัดการเอกสารอิเล็กทรอนิกส์ (e-Saraban Enhancement)',
-    clientAgency: 'กรมส่งเสริมการปกครองท้องถิ่น',
-    budgetAmount: 3450000,
-    egpUrl: 'https://process3.gprocurement.go.th/egp2procmain/jsp/procsearch.sch?project_id=6705118001',
-    announcementDate: '2026-06-10',
-    submissionDeadline: '2026-07-15T12:00',
-    status: 'cancelled',
-    statusNote: 'หน่วยงานผู้ว่าจ้างยกเลิกการประกวดราคาเนื่องจากมีการปรับปรุงรายละเอียดข้อกำหนด TOR ใหม่',
-    attachments: [
-      {
-        id: 'att-5',
-        name: 'ประกาศยกเลิกการประกวดราคา_EGP-67-05118.pdf',
-        size: 650000,
-        type: 'application/pdf',
-        uploadedAt: '2026-07-10T14:00:00',
-        category: 'announcement',
-      },
-    ],
-    proposalData: (() => {
-      const data = JSON.parse(JSON.stringify(INITIAL_PROPOSAL_DATA));
-      data.cover.projectTitle = 'โครงการปรับปรุงประสิทธิภาพระบบบริหารจัดการเอกสารอิเล็กทรอนิกส์ (e-Saraban Enhancement)';
-      data.cover.projectCode = 'EGP-67-05118';
-      data.cover.clientAgency = 'กรมส่งเสริมการปกครองท้องถิ่น';
-      data.cover.budgetFormatted = '3,450,000 บาท';
-      return data;
-    })(),
-    createdAt: '2026-06-12T10:00:00',
-    updatedAt: '2026-07-11T11:00:00',
-  },
-];
+    statusNote: 'เริ่มต้นร่างโครงการ',
+    attachments: [],
+    proposalData: createBlankProposalData('โครงการใหม่', '', '', 0, 180),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
 
 /**
  * สร้างข้อมูลโครงสร้างข้อเสนอเปล่าสำหรับเริ่มต้นโครงการใหม่ โดยไม่มีข้อมูลเดิมติดมา

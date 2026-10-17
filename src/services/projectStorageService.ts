@@ -1,5 +1,4 @@
 import { BiddingProject, ProjectAttachment } from '../types/proposal';
-import { DEFAULT_BIDDING_PROJECTS } from '../data/defaultData';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { idbSet, idbGet, idbGetAll, idbDelete, IDB_STORES } from './localDatabase';
 
@@ -120,46 +119,70 @@ export function normalizeProjectBudget(p: BiddingProject): BiddingProject {
   return pCopy;
 }
 
+export const SAMPLE_PROJECT_IDS = new Set(['proj-001', 'proj-002', 'proj-003']);
+export const SAMPLE_PROJECT_CODES = new Set(['EGP-67-10492', 'EGP-67-08812', 'EGP-67-05118']);
+
+export function isSampleProject(id?: string, code?: string, client?: string): boolean {
+  if (id && SAMPLE_PROJECT_IDS.has(id)) return true;
+  if (code && SAMPLE_PROJECT_CODES.has(code)) return true;
+  if (client && (
+    client.includes('กรมพัฒนาธุรกิจการค้า') ||
+    client.includes('สำนักงานปลัดกระทรวงดิจิทัล') ||
+    client.includes('กรมส่งเสริมการปกครองท้องถิ่น')
+  )) return true;
+  return false;
+}
+
 /**
  * โหลดข้อมูลโครงการทั้งหมด
+ * - กวาดล้างและตัดโครงการตัวอย่างออกจากระบบอย่างถาวร
  * - หากเชื่อมต่อ Supabase สำเร็จ: โหลดจากฐานข้อมูล Cloud PostgreSQL
- * - หากยังไม่ได้เชื่อมต่อหรือเกิดปัญหาเครือข่าย: โหลดจาก LocalStorage สำรอง
- * - ดึงข้อมูลไฟล์แนบขนาดใหญ่จาก IndexedDB โดยอัตโนมัติ
+ * - หากยังไม่ได้เชื่อมต่อหรือเกิดปัญหาเครือข่าย: โหลดจาก LocalStorage/IndexedDB
  */
 export async function loadAllProjects(): Promise<{
   projects: BiddingProject[];
   source: 'cloud' | 'local';
 }> {
+  // กวาดล้างและลบโครงการตัวอย่างเดิมออกจาก IndexedDB, LocalStorage และ Cloud อย่างถาวร
+  for (const sampleId of ['proj-001', 'proj-002', 'proj-003']) {
+    try {
+      await idbDelete(IDB_STORES.BIDDING_PROJECTS, sampleId);
+      localStorage.removeItem(`prime_active_draft_${sampleId}`);
+    } catch {}
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await supabase.from('bidding_projects').delete().eq('id', sampleId);
+      } catch {}
+    }
+  }
+
+  // ลบโครงการตัวอย่างออกจากแคช LocalStorage
+  try {
+    const rawSaved = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (rawSaved) {
+      const parsed = JSON.parse(rawSaved);
+      if (Array.isArray(parsed)) {
+        const cleaned = parsed.filter((p: any) => !isSampleProject(p.id, p.projectCode, p.clientAgency));
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cleaned));
+      }
+    }
+  } catch {}
+
   if (isSupabaseConfigured() && supabase) {
     try {
       // ดึงข้อมูลโครงการพร้อมไฟล์แนบ
-      const { data: cloudProjects, error: projError } = await supabase
+      const { data: rawCloudProjects, error: projError } = await supabase
         .from('bidding_projects')
         .select('*')
         .order('created_at', { ascending: false });
 
       if (projError) {
         console.warn('Supabase fetch error, fallback to local:', projError);
-      } else if (cloudProjects) {
-        // หากเชื่อมต่อตารางได้ แต่ตารางยังว่างเปล่า (0 โครงการ)
-        // ให้อัปโหลดข้อมูลโครงการที่มีอยู่ในเครื่องขึ้น Cloud อัตโนมัติทันที
-        if (cloudProjects.length === 0) {
-          const localProjects = (() => {
-            try {
-              const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-              if (saved) {
-                const parsed = JSON.parse(saved);
-                if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-              }
-            } catch {}
-            return DEFAULT_BIDDING_PROJECTS;
-          })();
-
-          for (const proj of localProjects) {
-            await saveProject(proj);
-          }
-          return { projects: localProjects, source: 'cloud' };
-        }
+      } else if (rawCloudProjects) {
+        // กรองเอาเฉพาะโครงการจริง ไม่เอาโครงการตัวอย่าง
+        const cloudProjects = rawCloudProjects.filter(
+          (cp: any) => !isSampleProject(cp.id, cp.project_code, cp.client_agency)
+        );
 
         // ดึงรายการไฟล์แนบ
         const { data: cloudAttachments } = await supabase
@@ -256,7 +279,7 @@ export async function loadAllProjects(): Promise<{
               effectiveProposalData = cp.proposal_data;
             }
           } else {
-            effectiveProposalData = localProj?.proposalData || cp.proposal_data || DEFAULT_BIDDING_PROJECTS[0]?.proposalData;
+            effectiveProposalData = localProj?.proposalData || cp.proposal_data;
           }
 
           const useLocalMeta = localProj && (localTime >= cloudTime || hasLocalContent);
@@ -291,15 +314,17 @@ export async function loadAllProjects(): Promise<{
         }
 
         // สำคัญที่สุด: นำโครงการที่ผู้ใช้สร้างไว้ในเครื่อง (IndexedDB/LocalStorage) ที่ยังไม่มีใน Cloud มารวมเข้าด้วย
-        // เพื่อป้องกันไม่ให้โครงการที่เพิ่งสร้างในเครื่องสูญหาย
+        // (กรองโครงการตัวอย่างออก)
         for (const [id, lp] of localMap.entries()) {
-          if (!processedIds.has(id)) {
+          if (!processedIds.has(id) && !isSampleProject(id, lp.projectCode, lp.clientAgency)) {
             mapped.push(normalizeProjectBudget(lp));
           }
         }
 
+        const finalMapped = mapped.filter((p) => !isSampleProject(p.id, p.projectCode, p.clientAgency));
+
         // ปรับปรุง metadata ไฟล์แนบให้อ้างอิง idb:// เมื่อไม่มี public URL (ไม่โหลด base64 เข้า RAM ตอนเปิดแอป)
-        for (const p of mapped) {
+        for (const p of finalMapped) {
           for (const a of p.attachments || []) {
             if (!a.dataUrl) {
               a.dataUrl = `idb://${a.id}`;
@@ -309,7 +334,7 @@ export async function loadAllProjects(): Promise<{
 
         // แคชเก็บไว้ใน LocalStorage ด้วยเพื่อความต่อเนื่อง (ตัด base64 ขนาดใหญ่ออกป้องกันโควตาเต็ม)
         try {
-          const sanitized = mapped.map((p) => ({
+          const sanitized = finalMapped.map((p) => ({
             ...p,
             attachments: (p.attachments || []).map((a) => ({
               ...a,
@@ -319,7 +344,7 @@ export async function loadAllProjects(): Promise<{
           localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(sanitized));
         } catch {}
 
-        return { projects: mapped, source: 'cloud' };
+        return { projects: finalMapped, source: 'cloud' };
       }
     } catch (err) {
       console.warn('Could not load from Supabase:', err);
@@ -330,35 +355,38 @@ export async function loadAllProjects(): Promise<{
   try {
     const idbProjects = await idbGetAll<BiddingProject>(IDB_STORES.BIDDING_PROJECTS);
     if (idbProjects && Array.isArray(idbProjects) && idbProjects.length > 0) {
-      const normalizedList = idbProjects.map(normalizeProjectBudget);
-      for (const p of normalizedList) {
-        if (p.attachments) {
-          for (const a of p.attachments) {
-            if (!a.dataUrl) {
-              a.dataUrl = `idb://${a.id}`;
-            }
-          }
-        }
-      }
-
-      // ตรวจสอบว่ามีคีย์ร่างเดี่ยวเฉพาะโครงการ prime_active_draft_{id} ที่ใหม่กว่าหรือไม่
-      for (let i = 0; i < normalizedList.length; i++) {
-        try {
-          const single = localStorage.getItem(`prime_active_draft_${normalizedList[i].id}`);
-          if (single) {
-            const parsedSingle = JSON.parse(single);
-            if (parsedSingle && parsedSingle.proposalData) {
-              const singleTime = new Date(parsedSingle.updatedAt || 0).getTime();
-              const listTime = new Date(normalizedList[i].updatedAt || 0).getTime();
-              if (singleTime >= listTime) {
-                normalizedList[i] = normalizeProjectBudget({ ...normalizedList[i], ...parsedSingle });
+      const filtered = idbProjects.filter((p) => !isSampleProject(p.id, p.projectCode, p.clientAgency));
+      if (filtered.length > 0) {
+        const normalizedList = filtered.map(normalizeProjectBudget);
+        for (const p of normalizedList) {
+          if (p.attachments) {
+            for (const a of p.attachments) {
+              if (!a.dataUrl) {
+                a.dataUrl = `idb://${a.id}`;
               }
             }
           }
-        } catch {}
-      }
+        }
 
-      return { projects: normalizedList, source: 'local' };
+        // ตรวจสอบว่ามีคีย์ร่างเดี่ยวเฉพาะโครงการ prime_active_draft_{id} ที่ใหม่กว่าหรือไม่
+        for (let i = 0; i < normalizedList.length; i++) {
+          try {
+            const single = localStorage.getItem(`prime_active_draft_${normalizedList[i].id}`);
+            if (single) {
+              const parsedSingle = JSON.parse(single);
+              if (parsedSingle && parsedSingle.proposalData) {
+                const singleTime = new Date(parsedSingle.updatedAt || 0).getTime();
+                const listTime = new Date(normalizedList[i].updatedAt || 0).getTime();
+                if (singleTime >= listTime) {
+                  normalizedList[i] = normalizeProjectBudget({ ...normalizedList[i], ...parsedSingle });
+                }
+              }
+            }
+          } catch {}
+        }
+
+        return { projects: normalizedList, source: 'local' };
+      }
     }
   } catch (e) {
     console.warn('IndexedDB read error:', e);
@@ -370,24 +398,27 @@ export async function loadAllProjects(): Promise<{
     if (saved) {
       const parsed: BiddingProject[] = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        const normalizedList = parsed.map(normalizeProjectBudget);
-        for (const p of normalizedList) {
-          if (p.attachments) {
-            for (const a of p.attachments) {
-              if (!a.dataUrl) {
-                a.dataUrl = `idb://${a.id}`;
+        const filtered = parsed.filter((p) => !isSampleProject(p.id, p.projectCode, p.clientAgency));
+        if (filtered.length > 0) {
+          const normalizedList = filtered.map(normalizeProjectBudget);
+          for (const p of normalizedList) {
+            if (p.attachments) {
+              for (const a of p.attachments) {
+                if (!a.dataUrl) {
+                  a.dataUrl = `idb://${a.id}`;
+                }
               }
             }
           }
+          return { projects: normalizedList, source: 'local' };
         }
-        return { projects: normalizedList, source: 'local' };
       }
     }
   } catch (e) {
     console.warn('LocalStorage read error:', e);
   }
 
-  return { projects: DEFAULT_BIDDING_PROJECTS.map(normalizeProjectBudget), source: 'local' };
+  return { projects: [], source: 'local' };
 }
 
 /**

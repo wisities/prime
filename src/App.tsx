@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ProposalData, BiddingProject, ProposalStatus } from './types/proposal';
-import { INITIAL_PROPOSAL_DATA, DEFAULT_BIDDING_PROJECTS } from './data/defaultData';
+import { INITIAL_PROPOSAL_DATA, createDefaultBlankProject } from './data/defaultData';
 import { exportProposalToDocx } from './services/docxExport';
 import { runRuleBasedAudit } from './services/proposalAuditor';
 
@@ -100,12 +100,14 @@ function loadInitialProjects(): BiddingProject[] {
       }
     }
 
-    const merged = Array.from(projectMap.values());
+    const sampleIds = ['proj-001', 'proj-002', 'proj-003'];
+    sampleIds.forEach((id) => projectMap.delete(id));
+    const merged = Array.from(projectMap.values()).filter((p) => !sampleIds.includes(p.id));
     if (merged.length > 0) return merged;
   } catch (e) {
     console.warn('Could not read projects from localStorage', e);
   }
-  return DEFAULT_BIDDING_PROJECTS.map(normalizeProjectBudget);
+  return [];
 }
 
 export const App: React.FC = () => {
@@ -122,9 +124,9 @@ export const App: React.FC = () => {
       const lastId = localStorage.getItem('prime_last_active_project_id');
       const initial = loadInitialProjects();
       if (lastId && initial.some((p) => p.id === lastId)) return lastId;
-      return initial[0]?.id || 'proj-001';
+      return initial[0]?.id || '';
     } catch {
-      return 'proj-001';
+      return '';
     }
   });
 
@@ -229,7 +231,7 @@ export const App: React.FC = () => {
   }, [authStatus]);
 
   // Current active project
-  const currentProject = projects.find((p) => p.id === activeProjectId) || projects[0] || DEFAULT_BIDDING_PROJECTS[0];
+  const currentProject = projects.find((p) => p.id === activeProjectId) || projects[0] || createDefaultBlankProject();
 
   // Proposal Data State for the currently selected project
   const [proposal, setProposal] = useState<ProposalData>(() => {
@@ -507,11 +509,12 @@ export const App: React.FC = () => {
   };
 
   const handleResetProjectsToDefault = () => {
-    if (confirm('คุณต้องการรีเซ็ตโครงการทั้งหมดกลับเป็นชุดข้อมูลเริ่มต้นของ Prime Digital ใช่หรือไม่? ข้อมูลที่แก้ไขจะถูกแทนที่')) {
-      setProjects(DEFAULT_BIDDING_PROJECTS);
-      setActiveProjectId(DEFAULT_BIDDING_PROJECTS[0].id);
-      setProposal(DEFAULT_BIDDING_PROJECTS[0].proposalData);
-      localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(DEFAULT_BIDDING_PROJECTS));
+    if (confirm('คุณต้องการรีเซ็ตโครงการทั้งหมดใช่หรือไม่? โครงการตัวอย่างจะถูกล้างออกและเริ่มต้นใหม่แบบว่างเปล่า')) {
+      const blank = createDefaultBlankProject();
+      setProjects([blank]);
+      setActiveProjectId(blank.id);
+      setProposal(blank.proposalData);
+      localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify([blank]));
     }
   };
 
