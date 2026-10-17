@@ -35,6 +35,24 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     window.location.reload();
   };
 
+  handleDeepReset = async () => {
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch {}
+
+    if (typeof window !== 'undefined' && window.indexedDB) {
+      try {
+        window.indexedDB.deleteDatabase('PrimeProposalAttachmentsDB');
+        window.indexedDB.deleteDatabase('PrimeLocalDatabase_v1');
+      } catch {}
+    }
+
+    setTimeout(() => {
+      window.location.reload();
+    }, 300);
+  };
+
   handleReload = () => {
     window.location.reload();
   };
@@ -61,18 +79,18 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
               border: '1px solid #E2E8F0',
               borderRadius: '16px',
               padding: '2.5rem',
-              maxWidth: '640px',
+              maxWidth: '660px',
               width: '100%',
               boxShadow: '0 8px 24px rgba(0,0,0,0.06)',
             }}
           >
             <div style={{ fontSize: '2.75rem', marginBottom: '1rem' }}>⚠️</div>
             <h2 style={{ color: '#0F2744', marginBottom: '0.75rem', fontSize: '1.35rem', fontWeight: 700 }}>
-              เกิดข้อผิดพลาดในการโหลดข้อมูลในเบราว์เซอร์
+              เกิดข้อผิดพลาดในการโหลดข้อมูล (Out of Memory หรือรูปแบบข้อมูลเก่า)
             </h2>
             <p style={{ color: '#64748B', fontSize: '0.92rem', marginBottom: '1.75rem', lineHeight: 1.6 }}>
-              ข้อมูลร่างเดิมบางส่วนในเบราว์เซอร์อาจมีรูปแบบที่ไม่ตรงกับระบบเวอร์ชันปัจจุบัน
-              คุณสามารถกดปุ่มลองโหลดใหม่ หรือกดรีเซ็ตแคชเพื่อเริ่มใช้งานใหม่ได้อย่างปลอดภัย
+              ตรวจพบข้อมูลเก่าหรือไฟล์แนบสะสมขนาดใหญ่ในฐานข้อมูลเบราว์เซอร์ (IndexedDB/LocalStorage)
+              กรุณากดปุ่ม <strong>"ล้างแคชสมบูรณ์และคืน RAM"</strong> เพื่อล้างไฟล์ตกค้างและเริ่มต้นใช้งานระบบใหม่อย่างราบรื่น
             </p>
             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
               <button
@@ -83,14 +101,14 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
                   color: '#FFFFFF',
                   border: 'none',
                   borderRadius: '8px',
-                  padding: '0.75rem 1.5rem',
-                  fontSize: '0.95rem',
+                  padding: '0.75rem 1.25rem',
+                  fontSize: '0.92rem',
                   fontWeight: 600,
                   cursor: 'pointer',
                   boxShadow: '0 2px 6px rgba(15,39,68,0.2)',
                 }}
               >
-                🔁 ลองโหลดหน้าใหม่อีกครั้ง
+                🔁 ลองโหลดใหม่
               </button>
               <button
                 type="button"
@@ -100,14 +118,32 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
                   color: '#FFFFFF',
                   border: 'none',
                   borderRadius: '8px',
-                  padding: '0.75rem 1.5rem',
-                  fontSize: '0.95rem',
+                  padding: '0.75rem 1.25rem',
+                  fontSize: '0.92rem',
                   fontWeight: 600,
                   cursor: 'pointer',
                   boxShadow: '0 2px 6px rgba(217,119,6,0.2)',
                 }}
               >
-                🔄 รีเซ็ตแคชและเริ่มใช้งานใหม่
+                🔄 รีเซ็ตแคช LocalStorage
+              </button>
+              <button
+                type="button"
+                onClick={this.handleDeepReset}
+                style={{
+                  backgroundColor: '#DC2626',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '0.75rem 1.25rem',
+                  fontSize: '0.92rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 6px rgba(220,38,38,0.2)',
+                }}
+                title="ล้างข้อมูลทั้ง LocalStorage และ IndexedDB คืนพื้นที่ RAM ทั้งหมด 100%"
+              >
+                🧹 ล้างแคชสมบูรณ์และคืน RAM (ล้าง IndexedDB)
               </button>
             </div>
             {this.state.error && (

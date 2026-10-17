@@ -6,9 +6,9 @@
 
 export function compressImageFile(
   file: File,
-  maxWidth: number = 1600,
-  maxHeight: number = 1600,
-  quality: number = 0.85
+  maxWidth: number = 1200,
+  maxHeight: number = 1200,
+  quality: number = 0.72
 ): Promise<string> {
   return new Promise((resolve) => {
     // If not an image or is SVG, use standard base64 read
@@ -56,10 +56,15 @@ export function compressImageFile(
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(img, 0, 0, width, height);
 
-      // Small transparent PNGs (< 400KB) can remain PNG, otherwise JPEG for massive compression
-      const isSmallPng = file.type === 'image/png' && file.size < 400 * 1024;
+      // Small transparent PNGs (< 250KB) can remain PNG, otherwise JPEG for massive compression
+      const isSmallPng = file.type === 'image/png' && file.size < 250 * 1024;
       const mimeType = isSmallPng ? 'image/png' : 'image/jpeg';
       const compressedDataUrl = canvas.toDataURL(mimeType, quality);
+
+      // Reclaim canvas memory from GPU & V8 Heap immediately
+      canvas.width = 0;
+      canvas.height = 0;
+
       resolve(compressedDataUrl);
     };
 

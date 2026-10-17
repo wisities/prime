@@ -96,8 +96,10 @@ export function normalizeProjectBudget(p: BiddingProject): BiddingProject {
     clientAgency: p.clientAgency || '',
     budgetAmount: Number(p.budgetAmount) || 0,
     status: p.status || 'draft',
-    statusNote: p.statusNote || 'เริ่มต้นร่างโครงการ',
-    attachments: Array.isArray(p.attachments) ? p.attachments : [],
+    attachments: (Array.isArray(p.attachments) ? p.attachments : []).map((att) => ({
+      ...att,
+      dataUrl: att.dataUrl && !att.dataUrl.startsWith('data:') ? att.dataUrl : (att.id ? `idb://${att.id}` : undefined),
+    })),
   };
 
   const blank = createBlankProposalData(
@@ -784,7 +786,7 @@ export async function uploadAttachmentFile(
     type: file.type || 'application/octet-stream',
     uploadedAt: new Date().toISOString(),
     category,
-    dataUrl: fileUrl || base64DataUrl,
+    dataUrl: fileUrl || `idb://${attachmentId}`,
   };
 }
 

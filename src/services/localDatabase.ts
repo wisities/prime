@@ -144,9 +144,32 @@ export interface DraftBackupSnapshot {
   proposalData: any;
 }
 
+function sanitizeProposalForSnapshot(data: any): any {
+  if (!data) return data;
+  try {
+    const copy = JSON.parse(JSON.stringify(data));
+    // ตัด Base64 ภาพขนาดใหญ่ออกเพื่อประหยัด RAM ให้ Snapshot มีขนาดไม่เกินไม่กี่ KB
+    if (copy.section3?.conceptualDiagramUrl && copy.section3.conceptualDiagramUrl.startsWith('data:')) {
+      copy.section3.conceptualDiagramUrl = undefined;
+    }
+    if (Array.isArray(copy.section4?.projectManagementImageBlocks)) {
+      copy.section4.projectManagementImageBlocks = copy.section4.projectManagementImageBlocks.map((b: any) => ({
+        ...b,
+        url: b.url && b.url.startsWith('data:') ? undefined : b.url,
+      }));
+    }
+    if (copy.cover?.companyLogoUrl && copy.cover.companyLogoUrl.startsWith('data:')) {
+      copy.cover.companyLogoUrl = undefined;
+    }
+    return copy;
+  } catch {
+    return data;
+  }
+}
+
 /**
  * บันทึกประวัติร่าง (Snapshot) ลง IndexedDB เพื่อกู้คืนย้อนหลังได้เสมอ
- * จำกัดไว้ที่ 5 รายการล่าสุดต่อโครงการ โดยใช้ Key Cursor เพื่อไม่ให้เกิด Out of Memory
+ * จำกัดไว้ที่ 3 รายการล่าสุดต่อโครงการ โดยใช้ Key Cursor เพื่อไม่ให้เกิด Out of Memory
  */
 export async function saveDraftSnapshot(
   projectId: string,
@@ -169,7 +192,7 @@ export async function saveDraftSnapshot(
     savedAt: now.toISOString(),
     savedTimeFormatted: dateStr,
     triggerType,
-    proposalData: JSON.parse(JSON.stringify(proposalData)),
+    proposalData: sanitizeProposalForSnapshot(proposalData),
   };
 
   const db = await openLocalDB();
@@ -183,8 +206,7 @@ export async function saveDraftSnapshot(
       // บันทึก Snapshot ฉบับใหม่
       store.put({ id: snapshot.id, payload: snapshot, updatedAt: now.toISOString() });
 
-      // ทำความสะอาดแบบ Cursor ประหยัดหน่วยความจำ: เก็บเฉพาะ 5 รายการล่าสุดของโครงการนี้เท่านั้น
-      // โดยวนเฉพาะ Key ID ของโครงการนี้ (IDBKeyRange) และลบส่วนที่เกินทันที ไม่โหลด Payload เข้า RAM
+      // ทำความสะอาดแบบ Cursor ประหยัดหน่วยความจำ: เก็บเฉพาะ 3 รายการล่าสุดของโครงการนี้เท่านั้น
       const range = IDBKeyRange.bound(`${projectId}_0`, `${projectId}_\uffff`);
       const keyReq = store.openKeyCursor ? store.openKeyCursor(range, 'prev') : store.openCursor(range, 'prev');
       let count = 0;
@@ -193,7 +215,7 @@ export async function saveDraftSnapshot(
         const cursor = e.target.result;
         if (cursor) {
           count++;
-          if (count > 5) {
+          if (count > 3) {
             store.delete(cursor.primaryKey || cursor.key);
           }
           cursor.continue();
@@ -207,6 +229,40 @@ export async function saveDraftSnapshot(
       resolve();
     }
   });
+}
+
+/**
+ * ล้างข้อมูลสะสมขนาดใหญ่ใน IndexedDB อัตโนมัติ (Prune Bloated Storage)
+ * - กำจัด Snapshot เก่าที่สะสมเกิน 3 ฉบับ
+ * - ปรับปรุงไม่ให้ค้าง Base64 ขนาดใหญ่ใน RAM
+ */
+export async function purgeBloatedHistoricalSnapshots(): Promise<void> {
+  const db = await openLocalDB();
+  if (!db) return;
+
+  try {
+    const tx = db.transaction(IDB_STORES.DRAFT_BACKUPS, 'readwrite');
+    const store = tx.objectStore(IDB_STORES.DRAFT_BACKUPS);
+    const cursorReq = store.openCursor();
+    const projectCountMap = new Map<string, number>();
+
+    cursorReq.onsuccess = (e: any) => {
+      const cursor = e.target.result;
+      if (cursor) {
+        const val = cursor.value?.payload;
+        if (val && val.projectId) {
+          const currentCount = (projectCountMap.get(val.projectId) || 0) + 1;
+          projectCountMap.set(val.projectId, currentCount);
+          if (currentCount > 3) {
+            store.delete(cursor.primaryKey || cursor.key);
+          }
+        }
+        cursor.continue();
+      }
+    };
+  } catch (err) {
+    console.warn('Failed to prune snapshots:', err);
+  }
 }
 
 /**

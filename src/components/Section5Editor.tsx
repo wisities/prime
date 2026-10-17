@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Section5Company, PastProject, MasterCompanyProfile } from '../types/proposal';
 import { ReportImageManager } from './ReportImageManager';
+import { compressImageFile } from '../utils/imageCompressor';
 import {
   getMasterProjectsLibrary,
   fetchMasterProjectsLibraryFromCloud,
@@ -169,12 +170,17 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
     handleFieldsChange({ [field]: value });
   };
 
-  const handleFileUpload = (file: File, callback: (base64: string, fileName: string) => void) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      callback(reader.result as string, file.name);
-    };
-    reader.readAsDataURL(file);
+  const handleFileUpload = async (file: File, callback: (base64: string, fileName: string) => void) => {
+    try {
+      const compressed = await compressImageFile(file, 1200, 1200, 0.72);
+      callback(compressed, file.name);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        callback(reader.result as string, file.name);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleProjectToggle = (id: string, isSelected: boolean) => {

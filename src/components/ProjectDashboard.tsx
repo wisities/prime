@@ -729,7 +729,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
           category,
           type: file.type || (isPdf ? 'application/pdf' : isDocx ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/octet-stream'),
           uploadedAt: new Date().toISOString(),
-          dataUrl,
+          dataUrl: `idb://${existingIdx >= 0 ? currentAttachments[existingIdx].id : attId}`,
         };
 
         if (existingIdx >= 0) {

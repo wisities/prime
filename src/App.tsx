@@ -59,7 +59,7 @@ import {
 } from 'lucide-react';
 
 import { loadAllProjects, saveProject, normalizeProjectBudget } from './services/projectStorageService';
-import { saveDraftSnapshot } from './services/localDatabase';
+import { saveDraftSnapshot, purgeBloatedHistoricalSnapshots } from './services/localDatabase';
 
 const PROJECTS_STORAGE_KEY = 'prime_bidding_projects_v2';
 
@@ -155,6 +155,11 @@ export const App: React.FC = () => {
         window.history.replaceState({}, document.title, window.location.pathname);
       }
     } catch {}
+  }, []);
+
+  // กวาดล้าง Snapshots ข้อมูลเก่าที่สะสมใน IndexedDB อัตโนมัติ ป้องกันปัญหา Out of Memory
+  useEffect(() => {
+    purgeBloatedHistoricalSnapshots();
   }, []);
 
   // ดึงเซสชันเสริม (หากมีผู้ใช้ที่เคยล็อกอิน Google สำเร็จ ก็จะนำชื่อ/อีเมลมาแสดงผล แต่หากไม่มีก็จะเข้าใช้งานระบบได้ทันที)
@@ -273,46 +278,43 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [currentProject, proposal]);
 
-  // ฟังก์ชันบันทึกและประมวลผลความคืบหน้า (ทำงานแบบ Debounce เพื่อไม่ให้การพิมพ์หน่วง)
+  // ฟังก์ชันบันทึกและประมวลผลความคืบหน้า (ทำงานแบบ Debounce นอก State Setter เพื่อไม่ให้หน่วยความจำบวม)
   const syncActiveProposalToStorage = (proposalToSync: ProposalData) => {
     if (!activeProjectId) return;
-    setProjects((prevProjects) => {
-      const target = prevProjects.find((p) => p.id === activeProjectId);
-      if (!target) return prevProjects;
+    const target = projects.find((p) => p.id === activeProjectId);
+    if (!target) return;
 
-      const effectiveBudget = proposalToSync.section1?.budgetAmount || target.budgetAmount || 0;
-      const comp = computeProjectCompletion({ ...target, proposalData: proposalToSync });
-      const stage = comp.overallPercent === 100
-        ? 'เนื้อหาครบถ้วน 100%'
-        : comp.totalTorClauses > 0
-        ? `TOR (${comp.completedTorClauses}/${comp.totalTorClauses}), บุคลากร (${comp.teamComplete}/${comp.teamTotal})`
-        : 'เริ่มต้นร่างโครงการ';
+    const effectiveBudget = proposalToSync.section1?.budgetAmount || target.budgetAmount || 0;
+    const comp = computeProjectCompletion({ ...target, proposalData: proposalToSync });
+    const stage = comp.overallPercent === 100
+      ? 'เนื้อหาครบถ้วน 100%'
+      : comp.totalTorClauses > 0
+      ? `TOR (${comp.completedTorClauses}/${comp.totalTorClauses}), บุคลากร (${comp.teamComplete}/${comp.teamTotal})`
+      : 'เริ่มต้นร่างโครงการ';
 
-      const updated = normalizeProjectBudget({
-        ...target,
-        proposalData: proposalToSync,
-        projectTitle: proposalToSync.cover?.projectTitle || target.projectTitle,
-        projectCode: proposalToSync.cover?.projectCode || target.projectCode,
-        clientAgency: proposalToSync.cover?.clientAgency || target.clientAgency,
-        budgetAmount: proposalToSync.section1?.budgetAmount || target.budgetAmount || effectiveBudget,
-        lastModifiedBy: currentUser?.email || target.lastModifiedBy || 'ผู้จัดทำในระบบ',
-        progressPercent: comp.overallPercent,
-        currentStage: stage,
-        updatedAt: new Date().toISOString(),
-      });
-
-      // บันทึกลง LocalStorage และฐานข้อมูลอย่างราบรื่น
-      try {
-        localStorage.setItem(`prime_active_draft_${updated.id}`, JSON.stringify(updated));
-      } catch {}
-
-      saveProject(updated);
-
-      return prevProjects.map((p) => (p.id === activeProjectId ? updated : p));
+    const updated = normalizeProjectBudget({
+      ...target,
+      proposalData: proposalToSync,
+      projectTitle: proposalToSync.cover?.projectTitle || target.projectTitle,
+      projectCode: proposalToSync.cover?.projectCode || target.projectCode,
+      clientAgency: proposalToSync.cover?.clientAgency || target.clientAgency,
+      budgetAmount: proposalToSync.section1?.budgetAmount || target.budgetAmount || effectiveBudget,
+      lastModifiedBy: currentUser?.email || target.lastModifiedBy || 'ผู้จัดทำในระบบ',
+      progressPercent: comp.overallPercent,
+      currentStage: stage,
+      updatedAt: new Date().toISOString(),
     });
+
+    setProjects((prevProjects) => prevProjects.map((p) => (p.id === activeProjectId ? updated : p)));
+
+    try {
+      localStorage.setItem(`prime_active_draft_${updated.id}`, JSON.stringify(updated));
+    } catch {}
+
+    saveProject(updated);
   };
 
-  // เมื่อแก้ไขข้อความใน Editor: อัปเดต State หน้าจอทันที 0ms เพื่อความลื่นไหลสูงสุด และหน่วงเวลาเซฟลงดิสก์ 700ms
+  // เมื่อแก้ไขข้อความใน Editor: อัปเดต State หน้าจอทันที 0ms เพื่อความลื่นไหลสูงสุด และหน่วงเวลาเซฟลงดิสก์ 1,200ms
   const updateProposalAndProject = (updater: (prev: ProposalData) => ProposalData) => {
     setProposal((prev) => {
       const nextProposal = updater(prev);
@@ -324,14 +326,14 @@ export const App: React.FC = () => {
         nextProposal.cover.budgetFormatted = `${effectiveBudget.toLocaleString()} บาท`;
       }
 
-      // หน่วงเวลาการประมวลผลหนัก (คำนวณความคืบหน้า, JSON.stringify, เซฟ LocalStorage & IndexedDB) 700ms
+      // หน่วงเวลาการประมวลผลหนัก (คำนวณความคืบหน้า, JSON.stringify, เซฟ LocalStorage & IndexedDB) 1,200ms
       // เพื่อให้แป้นพิมพ์ตอบสนองได้ทันที 0ms ปราศจากอาการหน่วง/กระตุก
       if (autoSaveTimeoutRef.current) {
         clearTimeout(autoSaveTimeoutRef.current);
       }
       autoSaveTimeoutRef.current = setTimeout(() => {
         syncActiveProposalToStorage(nextProposal);
-      }, 700);
+      }, 1200);
 
       return nextProposal;
     });
