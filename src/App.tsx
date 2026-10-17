@@ -119,14 +119,40 @@ export const App: React.FC = () => {
     let isMounted = true;
 
     const verifySession = async () => {
+      // 1. ตรวจสอบว่าเคยเข้าใช้งานผ่านโหมดฉุกเฉิน / bypass ไว้หรือไม่
+      try {
+        if (localStorage.getItem('prime_offline_bypass') === 'true') {
+          if (isMounted) {
+            setCurrentUser({
+              id: 'offline-admin',
+              email: 'admin@primeconsultant.com',
+              app_metadata: {},
+              user_metadata: { name: 'ผู้ใช้งานระบบ (โหมดฉุกเฉิน)' },
+              aud: 'authenticated',
+              created_at: new Date().toISOString(),
+            } as any);
+            setAuthStatus('authorized');
+          }
+          return;
+        }
+      } catch {}
+
       if (!isSupabaseConfigured() || !supabase) {
         // หากยังไม่ได้ตั้งค่า Supabase ให้เปิดระบบเพื่อให้ผู้ใช้ทดสอบในเครื่องได้
         if (isMounted) setAuthStatus('authorized');
         return;
       }
 
+      // Safety timeout: ป้องกันการค้างที่หน้า "กำลังตรวจสอบสิทธิ์..." เกิน 2.5 วินาที
+      const timeoutId = setTimeout(() => {
+        if (isMounted) {
+          setAuthStatus((prev) => (prev === 'loading' ? 'unauthenticated' : prev));
+        }
+      }, 2500);
+
       try {
         const { data: { session } } = await supabase.auth.getSession();
+        clearTimeout(timeoutId);
         if (session?.user) {
           if (isMounted) setCurrentUser(session.user);
           const hasPerm = await checkEmailPermission(session.user.email || '');
@@ -140,6 +166,7 @@ export const App: React.FC = () => {
           }
         }
       } catch (err) {
+        clearTimeout(timeoutId);
         console.warn('Auth session check failed:', err);
         if (isMounted) setAuthStatus('unauthenticated');
       }
@@ -149,6 +176,11 @@ export const App: React.FC = () => {
 
     if (supabase) {
       const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        // หากอยู่ในโหมด bypass อยู่แล้ว ไม่ต้องเปลี่ยนสถานะ
+        try {
+          if (localStorage.getItem('prime_offline_bypass') === 'true') return;
+        } catch {}
+
         if (session?.user) {
           if (isMounted) setCurrentUser(session.user);
           const hasPerm = await checkEmailPermission(session.user.email || '');
@@ -171,6 +203,9 @@ export const App: React.FC = () => {
   }, []);
 
   const handleSignOut = async () => {
+    try {
+      localStorage.removeItem('prime_offline_bypass');
+    } catch {}
     await signOut();
     setCurrentUser(null);
     setAuthStatus('unauthenticated');
@@ -543,6 +578,10 @@ export const App: React.FC = () => {
       <LoginPage
         isSupabaseReady={isSupabaseConfigured()}
         onBypassOffline={() => {
+          try {
+            localStorage.setItem('prime_offline_bypass', 'true');
+            window.history.replaceState({}, document.title, window.location.pathname);
+          } catch {}
           setCurrentUser({
             id: 'offline-admin',
             email: 'admin@primeconsultant.com',

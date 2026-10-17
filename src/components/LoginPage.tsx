@@ -201,6 +201,41 @@ export const LoginPage: React.FC<LoginPageProps> = ({ isSupabaseReady, onBypassO
                 )}
               </div>
             )}
+
+            {onBypassOffline && (
+              <div style={{ marginTop: '0.85rem', paddingTop: '0.75rem', borderTop: '1px solid #FCA5A5' }}>
+                <button
+                  type="button"
+                  onClick={onBypassOffline}
+                  style={{
+                    width: '100%',
+                    backgroundColor: '#DC2626',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '0.65rem 1rem',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.5rem',
+                    boxShadow: '0 2px 4px rgba(220, 38, 38, 0.25)',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#B91C1C';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#DC2626';
+                  }}
+                >
+                  <span>ข้ามข้อผิดพลาดนี้ และเข้าใช้งานระบบทันที</span>
+                  <ArrowRight size={15} />
+                </button>
+              </div>
+            )}
           </div>
         )}
 

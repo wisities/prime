@@ -166,6 +166,7 @@ export async function signInWithGoogle(): Promise<{ error?: any }> {
     provider: 'google',
     options: {
       redirectTo: window.location.origin,
+      scopes: 'openid email profile',
       queryParams: {
         access_type: 'offline',
         prompt: 'select_account',
