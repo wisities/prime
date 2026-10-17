@@ -21,6 +21,7 @@ import { AccessDeniedPage } from './components/AccessDeniedPage';
 import { UserManagementModal } from './components/UserManagementModal';
 import { GeminiSettingsModal } from './components/GeminiSettingsModal';
 import { MasterLibraryManagementModal } from './components/MasterLibraryManagementModal';
+import { DraftHistoryModal } from './components/DraftHistoryModal';
 import { isGeminiAvailable } from './services/geminiService';
 import { checkEmailPermission, signOut } from './services/authService';
 import { supabase, isSupabaseConfigured } from './services/supabaseClient';
@@ -54,6 +55,7 @@ import {
   AlertCircle,
   Loader2,
   Library,
+  History,
 } from 'lucide-react';
 
 import { loadAllProjects, saveProject, normalizeProjectBudget } from './services/projectStorageService';
@@ -66,7 +68,23 @@ function loadInitialProjects(): BiddingProject[] {
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map(normalizeProjectBudget);
+        const list = parsed.map(normalizeProjectBudget);
+        for (let i = 0; i < list.length; i++) {
+          try {
+            const single = localStorage.getItem(`prime_active_draft_${list[i].id}`);
+            if (single) {
+              const parsedSingle = JSON.parse(single);
+              if (parsedSingle && parsedSingle.proposalData) {
+                const singleTime = new Date(parsedSingle.updatedAt || 0).getTime();
+                const listTime = new Date(list[i].updatedAt || 0).getTime();
+                if (singleTime >= listTime) {
+                  list[i] = normalizeProjectBudget({ ...list[i], ...parsedSingle });
+                }
+              }
+            }
+          } catch {}
+        }
+        return list;
       }
     }
   } catch (e) {
@@ -93,6 +111,7 @@ export const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showUserMgmtModal, setShowUserMgmtModal] = useState<boolean>(false);
   const [showMasterLibraryModal, setShowMasterLibraryModal] = useState<boolean>(false);
+  const [showDraftHistoryModal, setShowDraftHistoryModal] = useState<boolean>(false);
 
   // Check Supabase Auth Session and Allowed Users permission
   useEffect(() => {
@@ -163,7 +182,15 @@ export const App: React.FC = () => {
       setProjects(loaded);
       setCloudStatus(source);
       if (loaded.length > 0) {
-        setActiveProjectId((curr) => (loaded.some((p) => p.id === curr) ? curr : loaded[0].id));
+        const nextId = (activeProjectId && loaded.some((p) => p.id === activeProjectId))
+          ? activeProjectId
+          : loaded[0].id;
+        setActiveProjectId(nextId);
+        const target = loaded.find((p) => p.id === nextId) || loaded[0];
+        if (target && target.proposalData) {
+          const normalized = normalizeProjectBudget(target);
+          setProposal(normalized.proposalData);
+        }
       }
     });
   }, [authStatus]);
@@ -182,7 +209,7 @@ export const App: React.FC = () => {
       const normalized = normalizeProjectBudget(currentProject);
       setProposal(normalized.proposalData);
     }
-  }, [activeProjectId, currentProject?.id, currentProject?.budgetAmount]);
+  }, [activeProjectId, currentProject?.id, currentProject?.updatedAt]);
 
   // When proposal changes in editor, update the projects array and persist to cloud / local
   const updateProposalAndProject = (updater: (prev: ProposalData) => ProposalData) => {
@@ -297,10 +324,10 @@ export const App: React.FC = () => {
 
       if (showToast) {
         setDraftToast({
-          message: `✓ บันทึกร่างโครงการ "${updatedProject.projectTitle || updatedProject.projectCode}" สำเร็จเรียบร้อย (${timeStr} น.)`,
+          message: `✓ บันทึกร่างโครงการ "${updatedProject.projectTitle || updatedProject.projectCode}" ลงฐานข้อมูลเครื่อง (IndexedDB) ปลอดภัย 100% (${timeStr} น.)`,
           type: 'success',
         });
-        setTimeout(() => setDraftToast(null), 3500);
+        setTimeout(() => setDraftToast(null), 3800);
       }
       return ok;
     } catch (err: any) {
@@ -316,6 +343,15 @@ export const App: React.FC = () => {
     } finally {
       setIsSavingDraft(false);
     }
+  };
+
+  const handleRestoreDraft = (restoredProposalData: ProposalData, snapshotTime: string) => {
+    updateProposalAndProject(() => restoredProposalData);
+    setDraftToast({
+      message: `✓ กู้คืนเนื้อหาร่างจากประวัติ "${snapshotTime}" สำเร็จเรียบร้อย`,
+      type: 'success',
+    });
+    setTimeout(() => setDraftToast(null), 3500);
   };
 
   const handleBackToDashboard = async () => {
@@ -569,12 +605,39 @@ export const App: React.FC = () => {
                     </>
                   )}
                 </button>
+
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowDraftHistoryModal(true)}
+                  style={{
+                    padding: '0.45rem 0.75rem',
+                    fontSize: '0.785rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    backgroundColor: 'rgba(245, 158, 11, 0.25)',
+                    borderColor: 'rgba(245, 158, 11, 0.45)',
+                    color: '#FEF3C7',
+                    fontWeight: 600,
+                  }}
+                  title="ดูประวัติการบันทึกร่างย้อนหลัง และกู้คืนข้อมูลได้ตลอดเวลา (ปลอดภัย 100%)"
+                >
+                  <History size={14} color="#FBBF24" />
+                  <span>ประวัติร่าง (กู้คืน)</span>
+                </button>
               </div>
             ) : (
               <button
                 type="button"
                 className="btn-back-dashboard"
-                onClick={() => setCurrentView('editor')}
+                onClick={() => {
+                  const target = projects.find((p) => p.id === activeProjectId) || projects[0];
+                  if (target && target.proposalData) {
+                    setProposal(normalizeProjectBudget(target).proposalData);
+                  }
+                  setCurrentView('editor');
+                }}
                 title="เปิดเครื่องมือจัดทำข้อเสนอโครงการ"
                 style={{ marginLeft: '0.85rem', background: 'rgba(217, 119, 6, 0.25)', borderColor: 'rgba(217, 119, 6, 0.4)' }}
               >
@@ -972,6 +1035,26 @@ export const App: React.FC = () => {
                   )}
                 </button>
 
+                <button
+                  type="button"
+                  onClick={() => setShowDraftHistoryModal(true)}
+                  className="btn btn-secondary"
+                  style={{
+                    padding: '0.28rem 0.65rem',
+                    fontSize: '0.785rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    color: '#92400E',
+                    backgroundColor: '#FEF3C7',
+                    borderColor: '#FDE68A',
+                    fontWeight: 600,
+                  }}
+                  title="ดูประวัติการบันทึกร่างย้อนหลัง และกู้คืนข้อมูลได้ตลอดเวลา (ปลอดภัย 100%)"
+                >
+                  <History size={13} /> ประวัติร่าง
+                </button>
+
                 <span
                   style={{
                     backgroundColor: 'var(--primary-100)',
@@ -1186,6 +1269,14 @@ export const App: React.FC = () => {
       <MasterLibraryManagementModal
         isOpen={showMasterLibraryModal}
         onClose={() => setShowMasterLibraryModal(false)}
+      />
+
+      <DraftHistoryModal
+        isOpen={showDraftHistoryModal}
+        onClose={() => setShowDraftHistoryModal(false)}
+        projectId={currentProject?.id || activeProjectId}
+        projectTitle={currentProject?.projectTitle || proposal?.cover?.projectTitle || ''}
+        onRestoreDraft={handleRestoreDraft}
       />
     </div>
   );

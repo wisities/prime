@@ -5,7 +5,7 @@
  */
 
 const DB_NAME = 'PrimeLocalDataStore_v2';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export const IDB_STORES = {
   MASTER_PROJECTS: 'master_projects',
@@ -13,6 +13,7 @@ export const IDB_STORES = {
   MASTER_BOM: 'master_bom',
   MASTER_COMPANY: 'master_company',
   BIDDING_PROJECTS: 'bidding_projects',
+  DRAFT_BACKUPS: 'draft_backups',
 } as const;
 
 let dbPromise: Promise<IDBDatabase | null> | null = null;
@@ -124,3 +125,79 @@ export async function idbDelete(storeName: string, key: string): Promise<void> {
     }
   });
 }
+
+export interface DraftBackupSnapshot {
+  id: string; // `${projectId}_${timestamp}`
+  projectId: string;
+  projectTitle: string;
+  projectCode: string;
+  savedAt: string;
+  savedTimeFormatted: string;
+  triggerType: 'manual' | 'auto';
+  proposalData: any;
+}
+
+/**
+ * บันทึกประวัติร่าง (Snapshot) ลง IndexedDB เพื่อกู้คืนย้อนหลังได้เสมอ
+ * จำกัดไว้ที่ 20 รายการล่าสุดต่อโครงการเพื่อความเร็วและประหยัดพื้นที่
+ */
+export async function saveDraftSnapshot(
+  projectId: string,
+  projectTitle: string,
+  projectCode: string,
+  proposalData: any,
+  triggerType: 'manual' | 'auto' = 'manual'
+): Promise<void> {
+  if (!projectId || !proposalData) return;
+  const now = new Date();
+  const timestamp = now.getTime();
+  const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+  const dateStr = `${now.toLocaleDateString('th-TH')} ${timeStr} น.`;
+
+  const snapshot: DraftBackupSnapshot = {
+    id: `${projectId}_${timestamp}`,
+    projectId,
+    projectTitle: projectTitle || 'โครงการไม่ระบุชื่อ',
+    projectCode: projectCode || '',
+    savedAt: now.toISOString(),
+    savedTimeFormatted: dateStr,
+    triggerType,
+    proposalData: JSON.parse(JSON.stringify(proposalData)),
+  };
+
+  try {
+    await idbSet(IDB_STORES.DRAFT_BACKUPS, snapshot.id, snapshot);
+
+    // ทำความสะอาด: เก็บเฉพาะ 20 รายการล่าสุดของโครงการนี้
+    const all = await idbGetAll<DraftBackupSnapshot>(IDB_STORES.DRAFT_BACKUPS);
+    const projSnapshots = all
+      .filter((s) => s.projectId === projectId)
+      .sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime());
+
+    if (projSnapshots.length > 20) {
+      const toDelete = projSnapshots.slice(20);
+      for (const old of toDelete) {
+        await idbDelete(IDB_STORES.DRAFT_BACKUPS, old.id);
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to save draft snapshot:', err);
+  }
+}
+
+/**
+ * ดึงรายการสำเนาร่างย้อนหลังทั้งหมดของโครงการ
+ */
+export async function getDraftSnapshots(projectId: string): Promise<DraftBackupSnapshot[]> {
+  if (!projectId) return [];
+  try {
+    const all = await idbGetAll<DraftBackupSnapshot>(IDB_STORES.DRAFT_BACKUPS);
+    return all
+      .filter((s) => s.projectId === projectId)
+      .sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime());
+  } catch (err) {
+    console.warn('Failed to get draft snapshots:', err);
+    return [];
+  }
+}
+

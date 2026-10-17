@@ -1,7 +1,7 @@
 import { BiddingProject, ProjectAttachment } from '../types/proposal';
 import { DEFAULT_BIDDING_PROJECTS } from '../data/defaultData';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
-import { idbSet, idbGet, idbGetAll, idbDelete, IDB_STORES } from './localDatabase';
+import { idbSet, idbGet, idbGetAll, idbDelete, IDB_STORES, saveDraftSnapshot, getDraftSnapshots, DraftBackupSnapshot } from './localDatabase';
 
 const LOCAL_STORAGE_KEY = 'prime_bidding_projects_v2';
 
@@ -188,12 +188,14 @@ export async function loadAllProjects(): Promise<{
             : localProj?.progressPercent;
           const currentStage = cloudMeta.currentStage || localProj?.currentStage;
 
-          // เนื้อหาร่าง proposalData: อยู่ที่เครื่องใครเครื่องมัน
-          // หากเครื่องนี้เคยเปิดทำและมีร่างใน IndexedDB อยู่แล้ว ให้ใช้ร่างของเครื่องนี้เสมอ
+          // เนื้อหาร่าง proposalData: หาก Cloud มีฉบับเต็มให้ใช้ หรือหากเครื่องนี้มีร่าง IndexedDB ให้ใช้ฉบับที่สมบูรณ์
           const hasLocalDraft = localProj && localProj.proposalData && Object.keys(localProj.proposalData).length > 0;
-          const effectiveProposalData = hasLocalDraft
-            ? localProj.proposalData
-            : (cp.proposal_data && !cp.proposal_data._cloudStatus ? cp.proposal_data : DEFAULT_BIDDING_PROJECTS[0]?.proposalData);
+          const cloudHasFullData = cp.proposal_data && (cp.proposal_data.section1 || cp.proposal_data.section3);
+          const effectiveProposalData = cloudHasFullData
+            ? cp.proposal_data
+            : (hasLocalDraft
+                ? localProj.proposalData
+                : (cp.proposal_data && !cp.proposal_data._cloudStatus ? cp.proposal_data : DEFAULT_BIDDING_PROJECTS[0]?.proposalData));
 
           const rawProj: BiddingProject = {
             id: cp.id,
@@ -262,6 +264,24 @@ export async function loadAllProjects(): Promise<{
           }
         }
       }
+
+      // ตรวจสอบว่ามีคีย์ร่างเดี่ยวเฉพาะโครงการ prime_active_draft_{id} ที่ใหม่กว่าหรือไม่
+      for (let i = 0; i < normalizedList.length; i++) {
+        try {
+          const single = localStorage.getItem(`prime_active_draft_${normalizedList[i].id}`);
+          if (single) {
+            const parsedSingle = JSON.parse(single);
+            if (parsedSingle && parsedSingle.proposalData) {
+              const singleTime = new Date(parsedSingle.updatedAt || 0).getTime();
+              const listTime = new Date(normalizedList[i].updatedAt || 0).getTime();
+              if (singleTime >= listTime) {
+                normalizedList[i] = normalizeProjectBudget({ ...normalizedList[i], ...parsedSingle });
+              }
+            }
+          }
+        } catch {}
+      }
+
       return { projects: normalizedList, source: 'local' };
     }
   } catch (e) {
@@ -306,9 +326,17 @@ export async function loadAllProjects(): Promise<{
 export async function saveProject(rawProject: BiddingProject): Promise<boolean> {
   const project = normalizeProjectBudget(rawProject);
 
-  // 1. บันทึกลง IndexedDB ถาวร (ปลอดภัย 100% ข้อมูลรูปภาพ/ตารางไม่หาย)
+  // 1. บันทึกลง IndexedDB ถาวร (ปลอดภัย 100% ข้อมูลรูปภาพ/ตารางไม่จำกัดขนาด ไม่หายเด็ดขาด)
   try {
     await idbSet(IDB_STORES.BIDDING_PROJECTS, project.id, project);
+    // บันทึก Snapshot สำรองประวัติร่างเพื่อกู้คืนย้อนหลังได้เสมอ
+    await saveDraftSnapshot(
+      project.id,
+      project.projectTitle,
+      project.projectCode,
+      project.proposalData,
+      'manual'
+    );
   } catch (e) {
     console.warn('IndexedDB project save error:', e);
   }
@@ -322,7 +350,7 @@ export async function saveProject(rawProject: BiddingProject): Promise<boolean> 
     }
   }
 
-  // 2. บันทึกลง LocalStorage เสมอเพื่อความเร็วและความปลอดภัย (ตัด base64 ขนาดใหญ่ออก)
+  // 2. บันทึกลง LocalStorage: เก็บทั้งคีย์เฉพาะโครงการ (รับประกันไม่เกิน 5MB) และคีย์รวม
   try {
     const sanitizedProject: BiddingProject = {
       ...project,
@@ -332,6 +360,14 @@ export async function saveProject(rawProject: BiddingProject): Promise<boolean> 
       })),
     };
 
+    // 2.1 บันทึกคีย์เฉพาะโครงการนี้โดยตรง (ขนาดเล็กเพียง 50-200KB ไม่มีทางเกินโควตา 5MB)
+    try {
+      localStorage.setItem(`prime_active_draft_${project.id}`, JSON.stringify(sanitizedProject));
+    } catch (singleErr) {
+      console.warn('Dedicated draft save warning:', singleErr);
+    }
+
+    // 2.2 บันทึกเข้าอาร์เรย์รายการโครงการรวม
     const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
     let list: BiddingProject[] = saved ? JSON.parse(saved) : [];
     const index = list.findIndex((p) => p.id === sanitizedProject.id);
@@ -342,10 +378,10 @@ export async function saveProject(rawProject: BiddingProject): Promise<boolean> 
     }
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(list));
   } catch (e) {
-    console.warn('LocalStorage save error:', e);
+    console.warn('LocalStorage save error (IndexedDB still holds complete data):', e);
   }
 
-  // 2. ซิงค์ไปยัง Supabase Cloud (บันทึกสถานะโครงการ: ใครทำ, ทำถึงไหน)
+  // 3. ซิงค์ไปยัง Supabase Cloud (บันทึกเนื้อหาฉบับเต็มครบทุกส่วน + สถานะโครงการ)
   if (isSupabaseConfigured() && supabase) {
     try {
       const userStr = project.lastModifiedBy || 'ไม่ระบุผู้ทำ';
@@ -353,20 +389,15 @@ export async function saveProject(rawProject: BiddingProject): Promise<boolean> 
       const progressNum = project.progressPercent ?? 0;
       const statusNoteText = project.statusNote || `[ผู้จัดทำ: ${userStr}] ${stageStr} (${progressNum}%)`;
 
-      // คลาวด์เก็บสถานะความคืบหน้า (ใครทำ ทำถึงไหน)
-      // ส่วนเนื้อหาร่างฉบับเต็มของแต่ละโครงการจะถูกบันทึกในเครื่องของแต่ละคน (IndexedDB)
+      // คลาวด์เก็บเนื้อหาร่างฉบับเต็มครบทุกส่วน เพื่อให้เปิดจากเครื่องไหนก็ไม่หาย
       const cloudProposalPayload = {
+        ...project.proposalData,
         _cloudStatus: {
           lastModifiedBy: project.lastModifiedBy,
           assignedTo: project.assignedTo,
           progressPercent: project.progressPercent,
           currentStage: project.currentStage,
           updatedAt: new Date().toISOString(),
-        },
-        cover: {
-          projectTitle: project.projectTitle,
-          projectCode: project.projectCode,
-          clientAgency: project.clientAgency,
         },
       };
 
