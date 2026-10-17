@@ -10,9 +10,13 @@ const DB_NAME = 'PrimeProposalAttachmentsDB';
 const DB_VERSION = 1;
 const STORE_NAME = 'attachment_data';
 
+let attachmentDbPromise: Promise<IDBDatabase | null> | null = null;
+
 function openIndexedDB(): Promise<IDBDatabase | null> {
   if (typeof window === 'undefined' || !window.indexedDB) return Promise.resolve(null);
-  return new Promise((resolve) => {
+  if (attachmentDbPromise) return attachmentDbPromise;
+
+  attachmentDbPromise = new Promise((resolve) => {
     try {
       const request = window.indexedDB.open(DB_NAME, DB_VERSION);
       request.onupgradeneeded = (e: any) => {
@@ -22,11 +26,21 @@ function openIndexedDB(): Promise<IDBDatabase | null> {
         }
       };
       request.onsuccess = () => resolve(request.result);
-      request.onerror = () => resolve(null);
+      request.onerror = () => {
+        attachmentDbPromise = null;
+        resolve(null);
+      };
+      request.onblocked = () => {
+        attachmentDbPromise = null;
+        resolve(null);
+      };
     } catch {
+      attachmentDbPromise = null;
       resolve(null);
     }
   });
+
+  return attachmentDbPromise;
 }
 
 export async function storeAttachmentInIDB(id: string, dataUrl: string): Promise<void> {
@@ -329,14 +343,6 @@ export async function saveProject(rawProject: BiddingProject): Promise<boolean> 
   // 1. บันทึกลง IndexedDB ถาวร (ปลอดภัย 100% ข้อมูลรูปภาพ/ตารางไม่จำกัดขนาด ไม่หายเด็ดขาด)
   try {
     await idbSet(IDB_STORES.BIDDING_PROJECTS, project.id, project);
-    // บันทึก Snapshot สำรองประวัติร่างเพื่อกู้คืนย้อนหลังได้เสมอ
-    await saveDraftSnapshot(
-      project.id,
-      project.projectTitle,
-      project.projectCode,
-      project.proposalData,
-      'manual'
-    );
   } catch (e) {
     console.warn('IndexedDB project save error:', e);
   }
@@ -376,7 +382,22 @@ export async function saveProject(rawProject: BiddingProject): Promise<boolean> 
     } else {
       list = [sanitizedProject, ...list];
     }
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(list));
+
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(list));
+    } catch {
+      // หากเนื้อหารวมทุกโครงการใหญ่เกินโควตา LocalStorage (5MB) ให้บันทึกเฉพาะส่วนหัวและสถานะ
+      try {
+        const lightweightList = list.map((p) => ({
+          ...p,
+          proposalData: {
+            cover: p.proposalData?.cover,
+            _cloudStatus: (p.proposalData as any)?._cloudStatus,
+          } as any,
+        }));
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(lightweightList));
+      } catch {}
+    }
   } catch (e) {
     console.warn('LocalStorage save error (IndexedDB still holds complete data):', e);
   }

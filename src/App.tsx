@@ -59,6 +59,7 @@ import {
 } from 'lucide-react';
 
 import { loadAllProjects, saveProject, normalizeProjectBudget } from './services/projectStorageService';
+import { saveDraftSnapshot } from './services/localDatabase';
 
 const PROJECTS_STORAGE_KEY = 'prime_bidding_projects_v2';
 
@@ -203,13 +204,17 @@ export const App: React.FC = () => {
     return normalizeProjectBudget(currentProject).proposalData;
   });
 
-  // When switching projects or projects change, load that project's proposalData with budget normalization
+  // Ref for debounced auto-save to cloud & indexedDB
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // When switching projects, load that project's proposalData with budget normalization
   useEffect(() => {
-    if (currentProject && currentProject.proposalData) {
-      const normalized = normalizeProjectBudget(currentProject);
+    const target = projects.find((p) => p.id === activeProjectId);
+    if (target && target.proposalData) {
+      const normalized = normalizeProjectBudget(target);
       setProposal(normalized.proposalData);
     }
-  }, [activeProjectId, currentProject?.id, currentProject?.updatedAt]);
+  }, [activeProjectId]);
 
   // When proposal changes in editor, update the projects array and persist to cloud / local
   const updateProposalAndProject = (updater: (prev: ProposalData) => ProposalData) => {
@@ -245,8 +250,20 @@ export const App: React.FC = () => {
               currentStage: stage,
               updatedAt: new Date().toISOString(),
             });
-            // Async sync to cloud database
-            saveProject(updated);
+
+            // บันทึกสำเนาลง LocalStorage ทันทีเพื่อความปลอดภัยสูงสุดในการพิมพ์
+            try {
+              localStorage.setItem(`prime_active_draft_${updated.id}`, JSON.stringify(updated));
+            } catch {}
+
+            // หน่วงเวลาบันทึก IndexedDB และ Cloud (1200ms) เพื่อป้องกันการเขียนฐานข้อมูลซ้ำซ้อนขณะพิมพ์
+            if (autoSaveTimeoutRef.current) {
+              clearTimeout(autoSaveTimeoutRef.current);
+            }
+            autoSaveTimeoutRef.current = setTimeout(() => {
+              saveProject(updated);
+            }, 1200);
+
             return updated;
           }
           return p;
@@ -289,6 +306,9 @@ export const App: React.FC = () => {
 
   const handleManualSaveDraft = async (showToast: boolean = true): Promise<boolean> => {
     if (!currentProject) return false;
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
     setIsSavingDraft(true);
     try {
       const effectiveBudget = proposal.section1?.budgetAmount || currentProject.budgetAmount || 0;
@@ -315,8 +335,17 @@ export const App: React.FC = () => {
       // Update local projects list
       setProjects((prev) => prev.map((p) => (p.id === updatedProject.id ? updatedProject : p)));
 
-      // Persist to LocalStorage and Supabase Cloud
+      // Persist to LocalStorage, IndexedDB and Supabase Cloud
       const ok = await saveProject(updatedProject);
+
+      // บันทึก Snapshot สำรองประวัติร่างลงใน IndexedDB เพื่อการันตีกู้คืนได้เสมอ
+      await saveDraftSnapshot(
+        updatedProject.id,
+        updatedProject.projectTitle,
+        updatedProject.projectCode,
+        updatedProject.proposalData,
+        'manual'
+      );
 
       const now = new Date();
       const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
@@ -324,7 +353,7 @@ export const App: React.FC = () => {
 
       if (showToast) {
         setDraftToast({
-          message: `✓ บันทึกร่างโครงการ "${updatedProject.projectTitle || updatedProject.projectCode}" ลงฐานข้อมูลเครื่อง (IndexedDB) ปลอดภัย 100% (${timeStr} น.)`,
+          message: `✓ บันทึกร่างโครงการ "${updatedProject.projectTitle || updatedProject.projectCode}" ลงฐานข้อมูล (IndexedDB & Cloud) สำเร็จ (${timeStr} น.)`,
           type: 'success',
         });
         setTimeout(() => setDraftToast(null), 3800);

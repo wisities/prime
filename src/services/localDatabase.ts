@@ -41,10 +41,17 @@ export function openLocalDB(): Promise<IDBDatabase | null> {
       req.onsuccess = () => resolve(req.result);
       req.onerror = (err) => {
         console.warn('Could not open IndexedDB:', err);
+        dbPromise = null;
+        resolve(null);
+      };
+      req.onblocked = () => {
+        console.warn('IndexedDB version upgrade blocked by another connection');
+        dbPromise = null;
         resolve(null);
       };
     } catch (err) {
       console.warn('IndexedDB exception:', err);
+      dbPromise = null;
       resolve(null);
     }
   });
@@ -168,14 +175,14 @@ export async function saveDraftSnapshot(
   try {
     await idbSet(IDB_STORES.DRAFT_BACKUPS, snapshot.id, snapshot);
 
-    // ทำความสะอาด: เก็บเฉพาะ 20 รายการล่าสุดของโครงการนี้
+    // ทำความสะอาด: เก็บเฉพาะ 15 รายการล่าสุดของโครงการนี้เพื่อความรวดเร็วและประหยัดหน่วยความจำ
     const all = await idbGetAll<DraftBackupSnapshot>(IDB_STORES.DRAFT_BACKUPS);
     const projSnapshots = all
       .filter((s) => s.projectId === projectId)
       .sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime());
 
-    if (projSnapshots.length > 20) {
-      const toDelete = projSnapshots.slice(20);
+    if (projSnapshots.length > 15) {
+      const toDelete = projSnapshots.slice(15);
       for (const old of toDelete) {
         await idbDelete(IDB_STORES.DRAFT_BACKUPS, old.id);
       }
