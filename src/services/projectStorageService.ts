@@ -1,7 +1,7 @@
 import { BiddingProject, ProjectAttachment, ProposalData } from '../types/proposal';
 import { createBlankProposalData, createDefaultBlankProject } from '../data/defaultData';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
-import { idbSet, idbGet, idbGetAll, idbDelete, IDB_STORES } from './localDatabase';
+import { idbSet, idbGet, idbGetAll, idbDelete, IDB_STORES, stripAllLargeBase64 } from './localDatabase';
 
 const LOCAL_STORAGE_KEY = 'prime_bidding_projects_v2';
 
@@ -503,24 +503,25 @@ export async function saveProject(rawProject: BiddingProject): Promise<boolean> 
     console.warn('IndexedDB project save error:', e);
   }
 
-  // 2. บันทึกลง LocalStorage: เก็บทั้งคีย์เฉพาะโครงการ (รับประกันไม่เกิน 5MB) และคีย์รวม
+  // 2. บันทึกลง LocalStorage: เก็บทั้งคีย์เฉพาะโครงการ (ขนาดเบา <100KB) และคีย์รวมสรุป (ขนาดเบา <10KB)
   try {
     const sanitizedProject: BiddingProject = {
       ...project,
+      proposalData: stripAllLargeBase64(project.proposalData),
       attachments: (project.attachments || []).map((att) => ({
         ...att,
-        dataUrl: att.dataUrl && att.dataUrl.length < 30000 ? att.dataUrl : undefined,
+        dataUrl: att.dataUrl && !att.dataUrl.startsWith('data:') ? att.dataUrl : (att.dataUrl ? `idb://${att.id}` : undefined),
       })),
     };
 
-    // 2.1 บันทึกคีย์เฉพาะโครงการนี้โดยตรง (ขนาดเล็กเพียง 50-200KB ไม่มีทางเกินโควตา 5MB)
+    // 2.1 บันทึกคีย์เฉพาะโครงการนี้โดยตรง (ขนาดเล็กเพียง 30-100KB ไม่มีทางเกินโควตา 5MB)
     try {
       localStorage.setItem(`prime_active_draft_${project.id}`, JSON.stringify(sanitizedProject));
     } catch (singleErr) {
       console.warn('Dedicated draft save warning:', singleErr);
     }
 
-    // 2.2 บันทึกเข้าอาร์เรย์รายการโครงการรวม
+    // 2.2 บันทึกเข้าอาร์เรย์รายการโครงการรวมเฉพาะ Metadata สรุป (ประหยัด RAM และ LocalStorage ไม่เกิน 10KB เสมอ)
     const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
     let list: BiddingProject[] = saved ? JSON.parse(saved) : [];
     const index = list.findIndex((p) => p.id === sanitizedProject.id);
@@ -530,21 +531,35 @@ export async function saveProject(rawProject: BiddingProject): Promise<boolean> 
       list = [sanitizedProject, ...list];
     }
 
+    const lightweightList = list.map((p) => ({
+      id: p.id,
+      projectTitle: p.projectTitle,
+      projectCode: p.projectCode,
+      clientAgency: p.clientAgency,
+      budgetAmount: p.budgetAmount,
+      status: p.status,
+      statusNote: p.statusNote,
+      currentStage: p.currentStage,
+      progressPercent: p.progressPercent,
+      lastModifiedBy: p.lastModifiedBy,
+      updatedAt: p.updatedAt,
+      createdAt: p.createdAt,
+      attachments: (p.attachments || []).map((a) => ({
+        id: a.id,
+        name: a.name,
+        size: a.size,
+        category: a.category,
+        uploadedAt: a.uploadedAt,
+      })),
+      proposalData: {
+        cover: p.proposalData?.cover,
+        _cloudStatus: (p.proposalData as any)?._cloudStatus,
+      } as any,
+    }));
+
     try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(list));
-    } catch {
-      // หากเนื้อหารวมทุกโครงการใหญ่เกินโควตา LocalStorage (5MB) ให้บันทึกเฉพาะส่วนหัวและสถานะ
-      try {
-        const lightweightList = list.map((p) => ({
-          ...p,
-          proposalData: {
-            cover: p.proposalData?.cover,
-            _cloudStatus: (p.proposalData as any)?._cloudStatus,
-          } as any,
-        }));
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(lightweightList));
-      } catch {}
-    }
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(lightweightList));
+    } catch {}
   } catch (e) {
     console.warn('LocalStorage save error (IndexedDB still holds complete data):', e);
   }

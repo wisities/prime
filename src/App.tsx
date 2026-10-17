@@ -121,10 +121,7 @@ export const App: React.FC = () => {
   const [projects, setProjects] = useState<BiddingProject[]>(loadInitialProjects);
   const [activeProjectId, setActiveProjectId] = useState<string>(() => {
     try {
-      const lastId = localStorage.getItem('prime_last_active_project_id');
-      const initial = loadInitialProjects();
-      if (lastId && initial.some((p) => p.id === lastId)) return lastId;
-      return initial[0]?.id || '';
+      return localStorage.getItem('prime_last_active_project_id') || '';
     } catch {
       return '';
     }

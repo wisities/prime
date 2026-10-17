@@ -144,24 +144,30 @@ export interface DraftBackupSnapshot {
   proposalData: any;
 }
 
+export function stripAllLargeBase64(obj: any): any {
+  if (!obj || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(stripAllLargeBase64);
+  }
+  const clean: any = {};
+  for (const key of Object.keys(obj)) {
+    const val = obj[key];
+    // ตัด Base64 หรือ data URLs ที่มีความยาวเกิน 500 ตัวอักษรออกทั้งหมด เพื่อให้ Payload มีขนาดเบามาก (< 50KB)
+    if (typeof val === 'string' && (val.startsWith('data:') || val.length > 50000) && val.length > 500) {
+      clean[key] = undefined;
+    } else if (typeof val === 'object' && val !== null) {
+      clean[key] = stripAllLargeBase64(val);
+    } else {
+      clean[key] = val;
+    }
+  }
+  return clean;
+}
+
 function sanitizeProposalForSnapshot(data: any): any {
   if (!data) return data;
   try {
-    const copy = JSON.parse(JSON.stringify(data));
-    // ตัด Base64 ภาพขนาดใหญ่ออกเพื่อประหยัด RAM ให้ Snapshot มีขนาดไม่เกินไม่กี่ KB
-    if (copy.section3?.conceptualDiagramUrl && copy.section3.conceptualDiagramUrl.startsWith('data:')) {
-      copy.section3.conceptualDiagramUrl = undefined;
-    }
-    if (Array.isArray(copy.section4?.projectManagementImageBlocks)) {
-      copy.section4.projectManagementImageBlocks = copy.section4.projectManagementImageBlocks.map((b: any) => ({
-        ...b,
-        url: b.url && b.url.startsWith('data:') ? undefined : b.url,
-      }));
-    }
-    if (copy.cover?.companyLogoUrl && copy.cover.companyLogoUrl.startsWith('data:')) {
-      copy.cover.companyLogoUrl = undefined;
-    }
-    return copy;
+    return stripAllLargeBase64(JSON.parse(JSON.stringify(data)));
   } catch {
     return data;
   }
@@ -232,9 +238,9 @@ export async function saveDraftSnapshot(
 }
 
 /**
- * ล้างข้อมูลสะสมขนาดใหญ่ใน IndexedDB อัตโนมัติ (Prune Bloated Storage)
- * - กำจัด Snapshot เก่าที่สะสมเกิน 3 ฉบับ
- * - ปรับปรุงไม่ให้ค้าง Base64 ขนาดใหญ่ใน RAM
+ * ล้างข้อมูลสะสมขนาดใหญ่ใน IndexedDB อัตโนมัติ (Zero-RAM Prune Bloated Storage)
+ * - ใช้ Key Cursor ทิศทาง 'prev' (ใหม่ไปเก่า) โดยไม่โหลด Payload เข้า RAM แม้แต่ไบต์เดียว
+ * - รักษาเฉพาะ 3 ฉบับล่าสุดของแต่ละโครงการ และลบฉบับเก่าทิ้งทันที
  */
 export async function purgeBloatedHistoricalSnapshots(): Promise<void> {
   const db = await openLocalDB();
@@ -243,25 +249,44 @@ export async function purgeBloatedHistoricalSnapshots(): Promise<void> {
   try {
     const tx = db.transaction(IDB_STORES.DRAFT_BACKUPS, 'readwrite');
     const store = tx.objectStore(IDB_STORES.DRAFT_BACKUPS);
-    const cursorReq = store.openCursor();
     const projectCountMap = new Map<string, number>();
 
-    cursorReq.onsuccess = (e: any) => {
+    // ใช้ openKeyCursor เพื่ออ่านเฉพาะ Key เท่านั้น ไม่โหลด Payload เข้า JavaScript Heap
+    const keyReq = store.openKeyCursor ? store.openKeyCursor(null, 'prev') : store.openCursor(null, 'prev');
+
+    keyReq.onsuccess = (e: any) => {
       const cursor = e.target.result;
       if (cursor) {
-        const val = cursor.value?.payload;
-        if (val && val.projectId) {
-          const currentCount = (projectCountMap.get(val.projectId) || 0) + 1;
-          projectCountMap.set(val.projectId, currentCount);
-          if (currentCount > 3) {
-            store.delete(cursor.primaryKey || cursor.key);
-          }
+        const keyStr = String(cursor.primaryKey || cursor.key || '');
+        const sepIndex = keyStr.lastIndexOf('_');
+        const projId = sepIndex > 0 ? keyStr.substring(0, sepIndex) : keyStr;
+
+        const currentCount = (projectCountMap.get(projId) || 0) + 1;
+        projectCountMap.set(projId, currentCount);
+
+        // ถ้าเกิน 3 ฉบับล่าสุด ลบฉบับเก่าทิ้งทันที
+        if (currentCount > 3) {
+          store.delete(cursor.primaryKey || cursor.key);
         }
         cursor.continue();
       }
     };
   } catch (err) {
     console.warn('Failed to prune snapshots:', err);
+  }
+}
+
+/**
+ * ล้าง Snapshot ทั้งหมดใน IndexedDB 100% ทันที
+ */
+export async function clearAllDraftSnapshots(): Promise<void> {
+  const db = await openLocalDB();
+  if (!db) return;
+  try {
+    const tx = db.transaction(IDB_STORES.DRAFT_BACKUPS, 'readwrite');
+    tx.objectStore(IDB_STORES.DRAFT_BACKUPS).clear();
+  } catch (err) {
+    console.warn('Failed to clear snapshots:', err);
   }
 }
 

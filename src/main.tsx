@@ -43,14 +43,32 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 
     if (typeof window !== 'undefined' && window.indexedDB) {
       try {
-        window.indexedDB.deleteDatabase('PrimeProposalAttachmentsDB');
-        window.indexedDB.deleteDatabase('PrimeLocalDatabase_v1');
+        if (window.indexedDB.databases) {
+          const dbs = await window.indexedDB.databases();
+          for (const db of dbs) {
+            if (db.name) {
+              window.indexedDB.deleteDatabase(db.name);
+            }
+          }
+        }
       } catch {}
+
+      const knownDbs = [
+        'PrimeLocalDataStore_v2',
+        'PrimeProposalAttachmentsDB',
+        'PrimeLocalDatabase_v1',
+        'PrimeLocalDataStore_v1',
+      ];
+      knownDbs.forEach((name) => {
+        try {
+          window.indexedDB.deleteDatabase(name);
+        } catch {}
+      });
     }
 
     setTimeout(() => {
       window.location.reload();
-    }, 300);
+    }, 350);
   };
 
   handleReload = () => {

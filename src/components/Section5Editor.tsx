@@ -172,14 +172,21 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
 
   const handleFileUpload = async (file: File, callback: (base64: string, fileName: string) => void) => {
     try {
+      if (!file.type.startsWith('image/')) {
+        alert('กรุณาเลือกไฟล์รูปภาพ (JPG, PNG, WebP) เท่านั้น เพื่อให้ระบบแทรกลงในรายงาน Word (.docx) ได้อย่างถูกต้องและประหยัด RAM');
+        return;
+      }
+      if (file.size > 8 * 1024 * 1024) {
+        alert('ไฟล์รูปภาพมีขนาดใหญ่เกิน 8MB กรุณาเลือกไฟล์ที่มีขนาดเหมาะสม');
+        return;
+      }
       const compressed = await compressImageFile(file, 1200, 1200, 0.72);
-      callback(compressed, file.name);
-    } catch {
-      const reader = new FileReader();
-      reader.onload = () => {
-        callback(reader.result as string, file.name);
-      };
-      reader.readAsDataURL(file);
+      if (compressed) {
+        callback(compressed, file.name);
+      }
+    } catch (err) {
+      console.warn('Image processing error:', err);
+      alert('เกิดข้อผิดพลาดในการประมวลผลรูปภาพ');
     }
   };
 

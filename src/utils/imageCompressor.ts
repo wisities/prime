@@ -11,12 +11,24 @@ export function compressImageFile(
   quality: number = 0.72
 ): Promise<string> {
   return new Promise((resolve) => {
-    // If not an image or is SVG, use standard base64 read
-    if (!file.type.startsWith('image/') || file.type === 'image/svg+xml') {
+    // If SVG, allow small SVGs only (< 500KB)
+    if (file.type === 'image/svg+xml') {
+      if (file.size > 500 * 1024) {
+        console.warn('SVG file too large, rejected to prevent memory bloat');
+        resolve('');
+        return;
+      }
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result as string);
       reader.onerror = () => resolve('');
       reader.readAsDataURL(file);
+      return;
+    }
+
+    // If not an image, reject immediately - do not allow PDFs or docs to become huge base64 strings
+    if (!file.type.startsWith('image/')) {
+      console.warn('Non-image file rejected in compressImageFile:', file.name, file.type);
+      resolve('');
       return;
     }
 
