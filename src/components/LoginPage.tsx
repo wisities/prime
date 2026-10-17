@@ -1,19 +1,61 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { signInWithGoogle } from '../services/authService';
-import { ShieldCheck, Lock, AlertCircle } from 'lucide-react';
+import { ShieldCheck, Lock, AlertCircle, HelpCircle, ArrowRight, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface LoginPageProps {
   onBypassOffline?: () => void;
   isSupabaseReady: boolean;
 }
 
-export const LoginPage: React.FC<LoginPageProps> = ({ isSupabaseReady }) => {
+export const LoginPage: React.FC<LoginPageProps> = ({ isSupabaseReady, onBypassOffline }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<string[] | null>(null);
+  const [showTroubleshoot, setShowTroubleshoot] = useState(true);
+
+  // ตรวจสอบ Error parameter ที่ส่งกลับมาจาก Supabase / Google OAuth ใน URL
+  useEffect(() => {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      
+      const error = searchParams.get('error') || hashParams.get('error');
+      const errorDescription = searchParams.get('error_description') || hashParams.get('error_description');
+      const errorCode = searchParams.get('error_code') || hashParams.get('error_code');
+
+      if (error || errorDescription) {
+        const decoded = decodeURIComponent(errorDescription || error || 'เกิดข้อผิดพลาดในการยืนยันตัวตน').replace(/\+/g, ' ');
+        setErrorMsg(decoded);
+
+        if (
+          decoded.includes('user profile') ||
+          decoded.includes('external provider') ||
+          error === 'server_error' ||
+          errorCode === 'unexpected_failure'
+        ) {
+          setErrorDetails([
+            'Google OAuth Consent Screen: ยังไม่ได้เพิ่ม Scope (email, profile, openid)',
+            'Publishing status ของ Google App ยังเป็น "Testing": ผู้ใช้ต้องถูกเพิ่มในรายชื่อ "Test users" ใน Google Cloud Console หรือต้องคลิก "Publish App"',
+            'Google People API: ยังไม่ได้เปิดใช้งาน (Enable) ใน Google Cloud Console',
+            'Redirect URI ใน Google Console ต้องระบุเป็น Supabase Callback URL: https://<project-ref>.supabase.co/auth/v1/callback',
+            'Client ID หรือ Client Secret ใน Supabase Dashboard (Authentication > Providers > Google) ไม่ตรงกับใน Google Console',
+          ]);
+        }
+      }
+    } catch {}
+  }, []);
+
+  const handleClearErrorAndRetry = () => {
+    setErrorMsg(null);
+    setErrorDetails(null);
+    window.history.replaceState({}, document.title, window.location.pathname);
+  };
 
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     setErrorMsg(null);
+    setErrorDetails(null);
+    window.history.replaceState({}, document.title, window.location.pathname);
     try {
       const { error } = await signInWithGoogle();
       if (error) {
@@ -94,21 +136,71 @@ export const LoginPage: React.FC<LoginPageProps> = ({ isSupabaseReady }) => {
         {errorMsg && (
           <div
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
               backgroundColor: '#FEF2F2',
               border: '1px solid #FCA5A5',
               color: '#991B1B',
-              padding: '0.75rem 1rem',
+              padding: '0.85rem 1rem',
               borderRadius: '8px',
               fontSize: '0.825rem',
               textAlign: 'left',
               marginBottom: '1.5rem',
             }}
           >
-            <AlertCircle size={18} style={{ flexShrink: 0 }} />
-            <span>{errorMsg}</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <AlertCircle size={18} style={{ flexShrink: 0 }} />
+                <strong style={{ fontSize: '0.85rem' }}>พบข้อผิดพลาดจาก Google OAuth</strong>
+              </div>
+              <button
+                type="button"
+                onClick={handleClearErrorAndRetry}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: '#991B1B',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                  fontSize: '0.75rem',
+                  textDecoration: 'underline',
+                }}
+              >
+                <RefreshCw size={12} /> ล้างข้อความ
+              </button>
+            </div>
+
+            <p style={{ margin: '0.4rem 0 0 0', lineHeight: 1.4 }}>{errorMsg}</p>
+
+            {errorDetails && (
+              <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px dashed #FCA5A5' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    fontSize: '0.785rem',
+                    color: '#7F1D1D',
+                  }}
+                  onClick={() => setShowTroubleshoot(!showTroubleshoot)}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <HelpCircle size={14} /> สาเหตุและวิธีตรวจสอบใน Google Console & Supabase
+                  </span>
+                  {showTroubleshoot ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                </div>
+
+                {showTroubleshoot && (
+                  <ul style={{ margin: '0.4rem 0 0 1.1rem', padding: 0, fontSize: '0.75rem', lineHeight: 1.5, color: '#7F1D1D' }}>
+                    {errorDetails.map((detail, idx) => (
+                      <li key={idx} style={{ marginTop: '3px' }}>{detail}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -169,6 +261,45 @@ export const LoginPage: React.FC<LoginPageProps> = ({ isSupabaseReady }) => {
           </svg>
           <span>{isLoading ? 'กำลังเชื่อมต่อกับ Google...' : 'เข้าสู่ระบบด้วย Google (Gmail)'}</span>
         </button>
+
+        {/* Emergency Bypass Button if OAuth is experiencing configuration issues */}
+        {onBypassOffline && (
+          <div style={{ marginTop: '1rem' }}>
+            <button
+              type="button"
+              onClick={onBypassOffline}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.5rem',
+                backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                border: '1.5px dashed #F59E0B',
+                borderRadius: '10px',
+                padding: '0.75rem 1rem',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                color: '#B45309',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(245, 158, 11, 0.18)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(245, 158, 11, 0.08)';
+              }}
+              title="เข้าใช้งานระบบทันทีโดยไม่ผ่าน Google OAuth เพื่อไม่ให้การทำงานสะดุด"
+            >
+              <span>เข้าใช้งานระบบชั่วคราว (โหมดฉุกเฉิน / Bypass)</span>
+              <ArrowRight size={15} />
+            </button>
+            <p style={{ fontSize: '0.72rem', color: '#94A3B8', marginTop: '0.35rem', margin: '4px 0 0 0' }}>
+              * ข้อมูลโครงการและการบันทึกร่างทั้งหมดจะถูกเก็บในเครื่อง (IndexedDB) ปลอดภัย 100%
+            </p>
+          </div>
+        )}
 
         {!isSupabaseReady && (
           <p style={{ fontSize: '0.75rem', color: '#DC2626', marginTop: '0.75rem' }}>

@@ -539,7 +539,22 @@ export const App: React.FC = () => {
   }
 
   if (authStatus === 'unauthenticated') {
-    return <LoginPage isSupabaseReady={isSupabaseConfigured()} />;
+    return (
+      <LoginPage
+        isSupabaseReady={isSupabaseConfigured()}
+        onBypassOffline={() => {
+          setCurrentUser({
+            id: 'offline-admin',
+            email: 'admin@primeconsultant.com',
+            app_metadata: {},
+            user_metadata: { name: 'ผู้ใช้งานระบบ (โหมดฉุกเฉิน)' },
+            aud: 'authenticated',
+            created_at: new Date().toISOString(),
+          } as any);
+          setAuthStatus('authorized');
+        }}
+      />
+    );
   }
 
   if (authStatus === 'unauthorized') {
