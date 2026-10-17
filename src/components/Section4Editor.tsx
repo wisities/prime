@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Section4TeamAndRisk, TeamMember, RiskItem, TorScopeItem } from '../types/proposal';
 import { ReportImageManager } from './ReportImageManager';
+import { compressImageFile } from '../utils/imageCompressor';
 import {
   getMasterTeamLibrary,
   fetchMasterTeamLibraryFromCloud,
@@ -232,16 +233,23 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
     onChange({ ...section4, teamMembers: [...section4.teamMembers, newMember] });
   };
 
-  const handlePhotoUpload = (id: string, file: File) => {
+  const handlePhotoUpload = async (id: string, file: File) => {
     if (!file.type.startsWith('image/')) {
       alert('กรุณาเลือกไฟล์รูปภาพที่ถูกต้อง (JPG, PNG, WebP)');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      handleTeamMemberChange(id, 'photoUrl', reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressed = await compressImageFile(file, 800, 800, 0.85);
+      if (compressed) {
+        handleTeamMemberChange(id, 'photoUrl', compressed);
+      }
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        handleTeamMemberChange(id, 'photoUrl', reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleDeleteMember = (id: string) => {

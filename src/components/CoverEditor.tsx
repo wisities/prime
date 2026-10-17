@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
 import { CoverConfig } from '../types/proposal';
+import { compressImageFile } from '../utils/imageCompressor';
 import { Image as ImageIcon, Upload, Trash2, FileText, CheckCircle2, Layers } from 'lucide-react';
 
 interface CoverEditorProps {
@@ -17,38 +18,60 @@ export const CoverEditor: React.FC<CoverEditorProps> = ({ cover, onChange }) => 
     onChange({ ...cover, [field]: value });
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, isBackCover: boolean) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, isBackCover: boolean) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
+    try {
+      const compressed = await compressImageFile(file, 1600, 1600, 0.85);
+      if (compressed) {
         if (isBackCover) {
-          handleFieldChange('backCoverImage', reader.result);
+          handleFieldChange('backCoverImage', compressed);
         } else {
-          handleFieldChange('coverImage', reader.result);
+          handleFieldChange('coverImage', compressed);
         }
       }
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          if (isBackCover) {
+            handleFieldChange('backCoverImage', reader.result);
+          } else {
+            handleFieldChange('coverImage', reader.result);
+          }
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
-  const handleBgUpload = (e: React.ChangeEvent<HTMLInputElement>, isLandscape: boolean) => {
+  const handleBgUpload = async (e: React.ChangeEvent<HTMLInputElement>, isLandscape: boolean) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
+    try {
+      const compressed = await compressImageFile(file, 1600, 1600, 0.85);
+      if (compressed) {
         if (isLandscape) {
-          handleFieldChange('landscapeBgImage', reader.result);
+          handleFieldChange('landscapeBgImage', compressed);
         } else {
-          handleFieldChange('portraitBgImage', reader.result);
+          handleFieldChange('portraitBgImage', compressed);
         }
       }
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          if (isLandscape) {
+            handleFieldChange('landscapeBgImage', reader.result);
+          } else {
+            handleFieldChange('portraitBgImage', reader.result);
+          }
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   return (

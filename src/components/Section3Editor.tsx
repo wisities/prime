@@ -3,6 +3,7 @@ import { Section3Methodology, TorScopeItem } from '../types/proposal';
 import { TorMapper } from './TorMapper';
 import { ReportImageManager } from './ReportImageManager';
 import { generateDefaultConceptualDiagram } from '../utils/ganttRenderer';
+import { compressImageFile } from '../utils/imageCompressor';
 import { Layers, Image as ImageIcon, Upload, Trash2, Sparkles } from 'lucide-react';
 
 interface Section3EditorProps {
@@ -28,17 +29,24 @@ export const Section3Editor: React.FC<Section3EditorProps> = ({
     onChangeSection3({ ...section3, conceptualDiagramCaption: text });
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        onChangeSection3({ ...section3, conceptualDiagramImage: reader.result });
+    try {
+      const compressed = await compressImageFile(file, 1600, 1600, 0.85);
+      if (compressed) {
+        onChangeSection3({ ...section3, conceptualDiagramImage: compressed });
       }
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          onChangeSection3({ ...section3, conceptualDiagramImage: reader.result });
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleUseDefaultTemplate = () => {

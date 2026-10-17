@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { ReportImageBlock } from '../types/proposal';
 import { createEmptySingleImageBlock, createEmptyPairImageBlock } from '../utils/imageBlockUtils';
+import { compressImageFile } from '../utils/imageCompressor';
 import {
   Image as ImageIcon,
   Columns,
@@ -60,18 +61,26 @@ export const ReportImageManager: React.FC<ReportImageManagerProps> = ({
     );
   };
 
-  const handleFileUpload = (
+  const handleFileUpload = async (
     blockId: string,
     field: 'url' | 'leftUrl' | 'rightUrl',
     file: File
   ) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        handleBlockChange(blockId, { [field]: reader.result });
+    try {
+      const compressedDataUrl = await compressImageFile(file, 1600, 1600, 0.85);
+      if (compressedDataUrl) {
+        handleBlockChange(blockId, { [field]: compressedDataUrl });
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (e) {
+      console.warn('Image compression fallback:', e);
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          handleBlockChange(blockId, { [field]: reader.result });
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   return (
