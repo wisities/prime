@@ -88,7 +88,7 @@ export const TorMapper: React.FC<TorMapperProps> = ({ scopeItems, onChange }) =>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         {scopeItems.map((item) => {
           const isExpanded = expandedIds[item.id] !== false;
-          // ตรวจเช็คความสมบูรณ์ของหัวข้อ 3.2: ต้องมีอย่างน้อยเป็นข้อความในช่องรายละเอียดวิธีการดำเนินงาน (ส่วนรูปภาพจะมีหรือไม่ก็ได้)
+          // ตรวจเช็คความสมบูรณ์ของหัวข้อ 3.3: ต้องมีอย่างน้อยเป็นข้อความในช่องรายละเอียดวิธีการดำเนินงาน (ส่วนรูปภาพจะมีหรือไม่ก็ได้)
           const isComplete = (item.proposedMethodology || '').trim().length > 0;
 
           const badge = levelBadges[(item.level - 1) % levelBadges.length];
@@ -231,7 +231,7 @@ export const TorMapper: React.FC<TorMapperProps> = ({ scopeItems, onChange }) =>
                       onChange={(e) => handleItemChange(item.id, 'proposedMethodology', e.target.value)}
                     />
                     <div className="form-hint">
-                      💡 <strong>เกณฑ์ความสมบูรณ์ของข้อ 3.2:</strong> ต้องมีอย่างน้อยเป็นข้อความในช่องรายละเอียดนี้ (ส่วนภาพประกอบด้านล่างจะมีหรือไม่ก็ได้) สามารถเขียนพรรณา, สร้างหัวข้อบูลเล็ตด้วยเครื่องหมาย • หรือ - หรือแทรกตารางขั้นตอนการทำงานได้
+                      💡 <strong>เกณฑ์ความสมบูรณ์ของข้อ 3.3:</strong> ต้องมีอย่างน้อยเป็นข้อความในช่องรายละเอียดนี้ (ส่วนภาพประกอบด้านล่างจะมีหรือไม่ก็ได้) สามารถเขียนพรรณา, สร้างหัวข้อบูลเล็ตด้วยเครื่องหมาย • หรือ - หรือแทรกตารางขั้นตอนการทำงานได้
                     </div>
                   </div>
 
@@ -240,7 +240,7 @@ export const TorMapper: React.FC<TorMapperProps> = ({ scopeItems, onChange }) =>
                     title={`ภาพประกอบสำหรับข้อ ${item.clauseNumber}: ${item.title}`}
                     subtitle="สามารถอัปโหลดภาพเดี่ยว 6 นิ้ว กึ่งกลาง หรือภาพคู่ 3 นิ้ว 2 คอลัมน์ ได้ไม่จำกัดจำนวนสำหรับข้อนี้"
                     imageBlocks={normalizeTorItemImageBlocks(item)}
-                    defaultCaptionPrefix={`ภาพที่ 3.2-${item.clauseNumber}`}
+                    defaultCaptionPrefix={`ภาพที่ 3.3-${item.clauseNumber}`}
                     onChange={(newBlocks) => {
                       handleItemChange(item.id, 'imageBlocks', newBlocks);
                     }}

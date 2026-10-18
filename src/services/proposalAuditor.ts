@@ -88,9 +88,9 @@ export function runRuleBasedAudit(data: ProposalData): AuditIssue[] {
           id: `comp-method-${item.id}`,
           category: 'completeness',
           severity: 'error',
-          section: 'ส่วนที่ 3.2: วิธีการดำเนินงาน',
+          section: 'ส่วนที่ 3.3: วิธีการดำเนินงาน',
           message: `${item.clauseNumber} (${item.title}) ยังไม่ได้กรอกรายละเอียดวิธีการดำเนินงาน`,
-          detail: 'หัวข้อ 3.2 ต้องมีอย่างน้อยเป็นข้อความในช่องรายละเอียดวิธีการดำเนินงาน (ส่วนรูปภาพจะมีหรือไม่ก็ได้)',
+          detail: 'หัวข้อ 3.3 ต้องมีอย่างน้อยเป็นข้อความในช่องรายละเอียดวิธีการดำเนินงาน (ส่วนรูปภาพจะมีหรือไม่ก็ได้)',
         });
       }
     });

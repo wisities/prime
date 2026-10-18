@@ -799,25 +799,33 @@ export const DEFAULT_DOCUMENT_STRUCTURE: DocumentStructureConfig = {
     {
       id: 'section3',
       sectionNumber: 'ส่วนที่ 3',
-      title: 'กรอบแนวคิดและวิธีการดำเนินงานตามข้อกำหนด (TOR Mapping)',
+      title: 'แนวคิดและวิธีการดำเนินงาน',
       enabled: true,
       order: 3,
       headings: [
         {
           id: 's3_framework',
-          title: 'แผนภาพกรอบแนวคิดการดำเนินงาน (Conceptual Framework)',
+          title: 'กรอบแนวคิดการดำเนินงาน (Conceptual Framework)',
           originalCode: '3.1',
-          description: 'ภาพแผนภาพสถาปัตยกรรมและกรอบแนวคิด พร้อมคำบรรยายภาพรวม',
+          description: 'อัพโหลดภาพแนวคิดและพรรณาภาพรวมสถาปัตยกรรมระบบ',
           enabled: true,
           order: 1,
         },
         {
-          id: 's3_methodology',
-          title: 'วิธีการดำเนินงานและส่งมอบตามข้อกำหนด TOR แต่ละข้อ',
+          id: 's3_approach',
+          title: 'แนวคิดการดำเนินโครงการ (Project Approach & Principles)',
           originalCode: '3.2',
-          description: 'แนวคิด ขั้นตอนการดำเนินงาน เครื่องมือ สิ่งส่งมอบ และรูปภาพประกอบรายข้อ',
+          description: 'ถอดกรอบ อธิบายหลักการทำงาน เนื้อหาหลักสูตร วิธีศึกษางานรวมๆ',
           enabled: true,
           order: 2,
+        },
+        {
+          id: 's3_methodology',
+          title: 'วิธีการดำเนินงาน (การทำงานตามขอบเขตงานแต่ละข้อ)',
+          originalCode: '3.3',
+          description: 'การทำงานตามขอบเขตงานแต่ละข้อ (TOR Scope Items) พร้อมเครื่องมือ สิ่งส่งมอบ และภาพประกอบรายข้อ',
+          enabled: true,
+          order: 3,
         },
       ],
     },
@@ -952,19 +960,43 @@ export function normalizeDocumentStructure(
       }
     });
 
+    // Special migration for Section 3 restructure (3.1 กรอบแนวคิด, 3.2 แนวคิดดำเนินโครงการ, 3.3 วิธีการดำเนินงาน)
+    if (defSec.id === 'section3') {
+      if (!existingHeadingMap.has('s3_approach')) {
+        const methH = userHeadings.find((h) => h.id === 's3_methodology');
+        if (methH) {
+          methH.order = 3;
+          methH.originalCode = '3.3';
+          if (methH.title === 'วิธีการดำเนินงานและส่งมอบตามข้อกำหนด TOR แต่ละข้อ') {
+            methH.title = 'วิธีการดำเนินงาน (การทำงานตามขอบเขตงานแต่ละข้อ)';
+          }
+        }
+      }
+    }
+
+    const secTitle =
+      userSec.title === 'กรอบแนวคิดและวิธีการดำเนินงานตามข้อกำหนด (TOR Mapping)'
+        ? defSec.title
+        : userSec.title || defSec.title;
+
+    const mappedHeadings = userHeadings.map((h, idx) => {
+      const defH = defSec.headings.find((dh) => dh.id === h.id) || h;
+      return {
+        ...defH,
+        title: h.title || defH.title,
+        enabled: h.enabled ?? defH.enabled,
+        order: h.order ?? idx + 1,
+      };
+    });
+
+    mappedHeadings.sort((a, b) => a.order - b.order);
+
     return {
       ...defSec,
+      title: secTitle,
       enabled: userSec.enabled ?? defSec.enabled,
       order: userSec.order ?? defSec.order,
-      headings: userHeadings.map((h, idx) => {
-        const defH = defSec.headings.find((dh) => dh.id === h.id) || h;
-        return {
-          ...defH,
-          title: h.title || defH.title,
-          enabled: h.enabled ?? defH.enabled,
-          order: h.order ?? idx + 1,
-        };
-      }),
+      headings: mappedHeadings,
     };
   });
 
@@ -1072,6 +1104,35 @@ export const INITIAL_PROPOSAL_DATA: ProposalData = {
   section3: {
     frameworkOverview: 'บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด กำหนดกรอบแนวคิดการดำเนินงานภายใต้หลักการ 4 มิติ คือ Modern Architecture, High Security & Compliance, User-Centric Design, และ Agile Collaboration เพื่อให้การพัฒนาระบบมีความทันสมัย รองรับปริมาณผู้ใช้งานจำนวนมาก และตอบสนองต่อขอบเขตงาน (TOR) ทุกข้ออย่างสมบูรณ์แบบ',
     conceptualDiagramCaption: 'ภาพที่ 3-1 กรอบแนวคิดสถาปัตยกรรมระบบบริการประชาชนดิจิทัลและการบูรณาการข้อมูล (Enterprise Conceptual Framework)',
+    projectApproachOverview: `การถอดกรอบแนวคิดสู่การดำเนินโครงการจริง (Project Approach & Operational Principles)
+บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด ได้ถอดกรอบแนวคิดสถาปัตยกรรมระบบ (Conceptual Framework) ในข้อ 3.1 มาสู่แนวทางการปฏิบัติงานและหลักการทำงานที่เป็นรูปธรรม โดยยึดหลักการทำงานสำคัญ 4 ประการ ดังนี้:
+
+• การออกแบบระบบที่ยึดผู้ใช้งานเป็นศูนย์กลาง (User-Centric Architecture): ออกแบบกระบวนการทำงานและหน้าจอใช้งาน (UI/UX) ให้เรียบง่าย ลดขั้นตอนซ้ำซ้อน และรองรับการเข้าถึงของผู้ใช้งานทุกกลุ่ม (Accessibility ตามมาตรฐาน WCAG 2.1 AA)
+• สถาปัตยกรรมแบบเปิดและยืดหยุ่น (Microservices & Open API Gateway): พัฒนาระบบด้วยเทคโนโลยี Cloud-Native และ Containerization เพื่อให้สามารถขยายขีดความสามารถ (Horizontal Scaling) รองรับปริมาณธุรกรรมสูง และเชื่อมโยงข้อมูลกับหน่วยงานภายนอกได้อย่างปลอดภัย
+• มาตรฐานความมั่นคงปลอดภัยและการคุ้มครองข้อมูล (Zero Trust Security & PDPA Compliance): บังคับใช้การยืนยันตัวตนหลายชั้น (MFA), การเข้ารหัสข้อมูลทั้งขณะพัก (Data at Rest) และขณะส่งผ่านเครือข่าย (Data in Transit ด้วย TLS 1.3), ตลอดจนปฏิบัติตาม พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562
+• การบริหารจัดการและส่งมอบงานแบบคล่องตัว (Agile Collaboration Methodology): แบ่งรอบการทำงานเป็น Sprint ย่อย รอบละ 2 สัปดาห์ เพื่อนำส่งชิ้นงานให้ผู้ว่าจ้างตรวจรับและทดสอบอย่างต่อเนื่อง ลดความเสี่ยงจากการคลาดเคลื่อนของขอบเขตงาน
+
+| ลำดับ | เสาหลักการดำเนินงาน | เครื่องมือและกรอบมาตรฐานที่นำมาใช้ | ผลลัพธ์และคุณค่าที่ส่งมอบ |
+| :---: | :--- | :--- | :--- |
+| 1 | การศึกษาวิเคราะห์ความต้องการ (Requirement Gathering) | Design Thinking Workshop, User Journey Mapping, MoSCoW Prioritization | รายละเอียดข้อกำหนดความต้องการระบบ (SRS) ที่ตรงใจผู้ใช้ |
+| 2 | การออกแบบสถาปัตยกรรมระบบ (System Architecture) | TOGAF 9.2, Microservices, Kubernetes, RESTful OpenAPI 3.0 | พิมพ์เขียวระบบสารสนเทศที่มีเสถียรภาพและขยายตัวได้ |
+| 3 | การพัฒนาและประกอบระบบ (Agile Engineering) | Spring Boot, React, Node.js, GitLab CI/CD, SonarQube | ซอร์สโค้ดมาตรฐานระดับสากล ปลอดภัย ไร้ช่องโหว่ |
+| 4 | การประกันคุณภาพและทดสอบ (QA & Security Testing) | JMeter, Cypress Automated Testing, OWASP Top 10, PenTest | ระบบผ่านเกณฑ์ UAT และได้รับการรับรองความปลอดภัย |
+| 5 | หลักสูตรและการถ่ายทอดความรู้ (Training & Knowledge Transfer) | Role-Based Training Curriculum, LMS Portal, VDO On-Demand | บุคลากรผู้ว่าจ้างสามารถดูแลและใช้งานระบบได้อย่างยั่งยืน |
+
+โครงสร้างเนื้อหาหลักสูตรการฝึกอบรม (Training Curriculum Framework)
+เพื่อให้บุคลากรของหน่วยงานผู้ว่าจ้างสามารถปฏิบัติงานบนระบบใหม่ได้อย่างราบรื่น บริษัทฯ ได้ออกแบบหลักสูตรฝึกอบรมแบ่งตามกลุ่มเป้าหมาย 3 ระดับ:
+• หลักสูตรสำหรับผู้บริหาร (Executive Overview): การใช้ประโยชน์จากข้อมูลสถิติ แดชบอร์ดสรุปผลเชิงบริหาร และการติดตามตัวชี้วัด (KPIs)
+• หลักสูตรสำหรับผู้ดูแลระบบและทีมเทคนิค (System & Security Administrator): การบริหารจัดการบัญชีผู้ใช้ สิทธิ์การเข้าถึง การสำรองและกู้คืนข้อมูล (Backup & DR) และการเฝ้าระวังความมั่นคงปลอดภัย
+• หลักสูตรสำหรับเจ้าหน้าที่ผู้ปฏิบัติงาน (End-User Operations): ขั้นตอนการบันทึกข้อมูล การตรวจสอบความถูกต้อง การประมวลผลคำขอ และการแก้ไขปัญหาการใช้งานเบื้องต้น
+
+ระเบียบวิธีศึกษางานและรวบรวมข้อมูลในภาพรวม (Study & Discovery Methodology)
+บริษัทฯ นำระเบียบวิธีศึกษางานแบบผสมผสาน (Hybrid Discovery Method) มาประยุกต์ใช้ ประกอบด้วย:
+1. การสัมภาษณ์เชิงลึก (In-depth Interviews) กับผู้มีส่วนได้ส่วนเสียทุกระดับ เพื่อทำความเข้าใจ Pain Points และความคาดหวัง
+2. การสำรวจกระบวนการทำงานปัจจุบัน (As-Is Process Mapping) ร่วมกับการสังเกตการณ์หน้างานจริง (Contextual Inquiry)
+3. การศึกษาเปรียบเทียบมาตรฐานสากล (Benchmarking & Best Practices) กับระบบงานชั้นนำทั้งในและต่างประเทศ
+4. การประชุมเชิงปฏิบัติการเพื่อกำหนดกระบวนการทำงานเป้าหมาย (To-Be Workflow Design Workshop)`,
+    projectApproachImageBlocks: [],
   },
   section4: {
     teamOverview: 'บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด ได้คัดสรรบุคลากรที่มีความรู้ ความเชี่ยวชาญ และประสบการณ์ตรงในโครงการพัฒนาระบบภาครัฐขนาดใหญ่ บุคลากรทุกคนมีคุณวุฒิตรงตามที่ขอบเขตงานกำหนดและมีใบรับรองมาตรฐานวิชาชีพระดับสากล พร้อมทุ่มเทเวลาให้กับการดำเนินงานตลอดทั้งโครงการ',
@@ -1197,6 +1258,8 @@ export function createBlankProposalData(
     section3: {
       frameworkOverview: '',
       conceptualDiagramCaption: '',
+      projectApproachOverview: '',
+      projectApproachImageBlocks: [],
     },
     section4: {
       teamOverview: '',

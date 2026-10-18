@@ -1010,6 +1010,234 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                           </div>
                         );
                       }
+                      if (h.id === 's3_approach') {
+                        const approachLines = (section3.projectApproachOverview || '')
+                          .split('\n')
+                          .map((l) => l.trim())
+                          .filter(Boolean);
+
+                        const parsedElements: React.ReactNode[] = [];
+                        let lineIdx = 0;
+                        while (lineIdx < approachLines.length) {
+                          const line = approachLines[lineIdx];
+                          if (line.startsWith('|') && line.endsWith('|')) {
+                            const tableLines: string[] = [];
+                            while (lineIdx < approachLines.length && approachLines[lineIdx].startsWith('|') && approachLines[lineIdx].endsWith('|')) {
+                              tableLines.push(approachLines[lineIdx]);
+                              lineIdx++;
+                            }
+                            const contentRows = tableLines.filter((tl) => !/^\|[\s\-:|]+\|$/.test(tl));
+                            if (contentRows.length > 0) {
+                              const parsedRows = contentRows.map((r) =>
+                                r.split('|').slice(1, -1).map((c) => c.trim())
+                              );
+                              const headerRow = parsedRows[0];
+                              const dataRows = parsedRows.slice(1);
+                              const firstColTitle = (headerRow[0] || '').trim();
+                              const isSeqCol = /^(ลำดับ|ขั้นตอน|ที่|ข้อ|ลำดับที่|no\.?|#)$/i.test(firstColTitle) || (headerRow.length > 2 && dataRows.every((r) => !r[0] || r[0].length <= 4));
+
+                              parsedElements.push(
+                                <table
+                                  key={`tbl-${lineIdx}`}
+                                  style={{
+                                    width: '100%',
+                                    borderCollapse: 'collapse',
+                                    fontSize: '0.825rem',
+                                    margin: '0.5rem 0 0.75rem 0',
+                                    border: '1px solid var(--slate-300)',
+                                  }}
+                                >
+                                  <thead>
+                                    <tr style={{ backgroundColor: 'var(--primary-800)', color: 'white' }}>
+                                      {headerRow.map((head, hColIdx) => {
+                                        const isCol0Seq = isSeqCol && hColIdx === 0;
+                                        return (
+                                          <th
+                                            key={hColIdx}
+                                            style={{
+                                              padding: '6px 8px',
+                                              border: '1px solid var(--slate-300)',
+                                              textAlign: isCol0Seq ? 'center' : 'left',
+                                              width: isCol0Seq ? '10%' : undefined,
+                                            }}
+                                          >
+                                            {head}
+                                          </th>
+                                        );
+                                      })}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {dataRows.map((row, rIdx) => (
+                                      <tr key={rIdx} style={{ backgroundColor: rIdx % 2 === 0 ? '#FFFFFF' : '#F8FAFC' }}>
+                                        {row.map((cell, cIdx) => {
+                                          const isCol0Seq = isSeqCol && cIdx === 0;
+                                          return (
+                                            <td
+                                              key={cIdx}
+                                              style={{
+                                                padding: '6px 8px',
+                                                border: '1px solid var(--slate-300)',
+                                                textAlign: isCol0Seq ? 'center' : 'left',
+                                                fontWeight: isCol0Seq ? 600 : 400,
+                                              }}
+                                            >
+                                              {cell}
+                                            </td>
+                                          );
+                                        })}
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              );
+                            }
+                            continue;
+                          }
+
+                          const isBullet = line.startsWith('-') || line.startsWith('•') || line.startsWith('*');
+                          if (isBullet) {
+                            const cleanLine = line.replace(/^[-•*]\s*/, '');
+                            parsedElements.push(
+                              <div
+                                key={`bullet-${lineIdx}`}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'flex-start',
+                                  gap: '6px',
+                                  marginLeft: '1rem',
+                                  marginBottom: '0.25rem',
+                                }}
+                              >
+                                <span style={{ color: 'var(--primary-700)', fontWeight: 700 }}>•</span>
+                                <span>{cleanLine}</span>
+                              </div>
+                            );
+                            lineIdx++;
+                            continue;
+                          }
+
+                          parsedElements.push(
+                            <p
+                              key={`p-${lineIdx}`}
+                              style={{
+                                margin: '0 0 0.5rem 0',
+                                textIndent: '1.5rem',
+                                textAlign: 'justify',
+                                lineHeight: 1.5,
+                              }}
+                            >
+                              {line}
+                            </p>
+                          );
+                          lineIdx++;
+                        }
+
+                        return (
+                          <div key={h.id} style={{ marginBottom: '1.5rem' }}>
+                            <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--primary-900)' }}>
+                              {numPrefix} {h.title}
+                            </h3>
+                            {parsedElements.length > 0 ? (
+                              <div style={{ marginBottom: '1rem' }}>{parsedElements}</div>
+                            ) : (
+                              <p style={{ color: 'var(--slate-400)', fontStyle: 'italic', marginBottom: '1rem' }}>
+                                (ยังไม่ได้ระบุแนวคิดการดำเนินโครงการ)
+                              </p>
+                            )}
+
+                            {/* ภาพประกอบแนวคิดการดำเนินโครงการ */}
+                            {section3.projectApproachImageBlocks && section3.projectApproachImageBlocks.map((block, bIdx) => {
+                              if (block.type === 'single' && block.url) {
+                                return (
+                                  <div
+                                    key={block.id || bIdx}
+                                    style={{
+                                      textAlign: 'center',
+                                      backgroundColor: '#F8FAFC',
+                                      padding: '1rem',
+                                      borderRadius: '6px',
+                                      border: '1px solid var(--slate-200)',
+                                      marginBottom: '1rem',
+                                    }}
+                                  >
+                                    <img
+                                      src={block.url}
+                                      alt="ภาพประกอบแนวคิดโครงการ 6 นิ้ว"
+                                      style={{
+                                        maxWidth: '100%',
+                                        width: '100%',
+                                        maxHeight: '340px',
+                                        objectFit: 'contain',
+                                        borderRadius: '4px',
+                                        margin: '0 auto',
+                                        display: 'block',
+                                      }}
+                                    />
+                                    {block.caption && (
+                                      <div style={{ fontSize: '0.82rem', color: 'var(--slate-700)', fontStyle: 'italic', marginTop: '0.45rem', fontWeight: 500 }}>
+                                        {block.caption}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              }
+
+                              if (block.type === 'pair' && (block.leftUrl || block.rightUrl)) {
+                                return (
+                                  <div
+                                    key={block.id || bIdx}
+                                    style={{
+                                      display: 'grid',
+                                      gridTemplateColumns: '1fr 1fr',
+                                      gap: '0.5rem',
+                                      backgroundColor: '#F8FAFC',
+                                      padding: '0.65rem',
+                                      borderRadius: '6px',
+                                      border: '1px solid var(--slate-200)',
+                                      marginBottom: '1rem',
+                                    }}
+                                  >
+                                    <div style={{ textAlign: 'center' }}>
+                                      {block.leftUrl ? (
+                                        <>
+                                          <img
+                                            src={block.leftUrl}
+                                            alt="ภาพซ้าย 3 นิ้ว"
+                                            style={{ maxWidth: '100%', maxHeight: '180px', objectFit: 'contain', borderRadius: '4px' }}
+                                          />
+                                          {block.leftCaption && (
+                                            <div style={{ fontSize: '0.75rem', color: 'var(--slate-600)', fontStyle: 'italic', marginTop: '0.25rem' }}>
+                                              {block.leftCaption}
+                                            </div>
+                                          )}
+                                        </>
+                                      ) : null}
+                                    </div>
+                                    <div style={{ textAlign: 'center' }}>
+                                      {block.rightUrl ? (
+                                        <>
+                                          <img
+                                            src={block.rightUrl}
+                                            alt="ภาพขวา 3 นิ้ว"
+                                            style={{ maxWidth: '100%', maxHeight: '180px', objectFit: 'contain', borderRadius: '4px' }}
+                                          />
+                                          {block.rightCaption && (
+                                            <div style={{ fontSize: '0.75rem', color: 'var(--slate-600)', fontStyle: 'italic', marginTop: '0.25rem' }}>
+                                              {block.rightCaption}
+                                            </div>
+                                          )}
+                                        </>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })}
+                          </div>
+                        );
+                      }
                       if (h.id === 's3_methodology') {
                         return (
                           <div key={h.id} style={{ marginBottom: '1.5rem' }}>

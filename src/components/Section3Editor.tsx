@@ -4,7 +4,18 @@ import { TorMapper } from './TorMapper';
 import { ReportImageManager } from './ReportImageManager';
 import { generateDefaultConceptualDiagram } from '../utils/ganttRenderer';
 import { compressImageFile } from '../utils/imageCompressor';
-import { Layers, Image as ImageIcon, Upload, Trash2, Sparkles } from 'lucide-react';
+import {
+  Layers,
+  Image as ImageIcon,
+  Upload,
+  Trash2,
+  Sparkles,
+  Plus,
+  Table as TableIcon,
+  BookOpen,
+  Compass,
+  FileText,
+} from 'lucide-react';
 
 interface Section3EditorProps {
   section3: Section3Methodology;
@@ -27,6 +38,60 @@ export const Section3Editor: React.FC<Section3EditorProps> = ({
 
   const handleCaptionChange = (text: string) => {
     onChangeSection3({ ...section3, conceptualDiagramCaption: text });
+  };
+
+  const handleProjectApproachChange = (text: string) => {
+    onChangeSection3({ ...section3, projectApproachOverview: text });
+  };
+
+  const handleInsertApproachBullet = () => {
+    const bullet = '\n• ';
+    const current = section3.projectApproachOverview || '';
+    onChangeSection3({
+      ...section3,
+      projectApproachOverview: current + bullet,
+    });
+  };
+
+  const handleInsertApproachTable = () => {
+    const tableTemplate = `\n\n| ลำดับ | เสาหลักการดำเนินงาน | เครื่องมือและกรอบมาตรฐานที่นำมาใช้ | ผลลัพธ์และคุณค่าที่ส่งมอบ |
+| :---: | :--- | :--- | :--- |
+| 1 | การศึกษาวิเคราะห์ความต้องการ (Requirement Gathering) | Design Thinking Workshop, User Journey Mapping | ข้อกำหนดความต้องการระบบ (SRS) ที่ตรงใจผู้ใช้ |
+| 2 | การออกแบบสถาปัตยกรรมระบบ (System Architecture) | TOGAF 9.2, Microservices, OpenAPI 3.0 | พิมพ์เขียวระบบที่มีเสถียรภาพและปลอดภัย |\n`;
+    const current = section3.projectApproachOverview || '';
+    onChangeSection3({
+      ...section3,
+      projectApproachOverview: current + tableTemplate,
+    });
+  };
+
+  const handleInsertTemplate = (type: 'principles' | 'curriculum' | 'study') => {
+    let templateText = '';
+    if (type === 'principles') {
+      templateText = `\n\nการถอดกรอบแนวคิดสู่การดำเนินโครงการจริง (Project Approach & Operational Principles)
+บริษัทฯ ได้ถอดกรอบแนวคิดสถาปัตยกรรมระบบในข้อ 3.1 มาสู่แนวทางการปฏิบัติงานที่เป็นรูปธรรม 4 มิติ:
+• การออกแบบระบบที่ยึดผู้ใช้งานเป็นศูนย์กลาง (User-Centric Architecture): ออกแบบ UI/UX ให้ใช้งานง่าย เข้าถึงได้ทุกคนตามมาตรฐาน WCAG 2.1 AA
+• สถาปัตยกรรมแบบเปิดและยืดหยุ่น (Microservices & Open API): รองรับการขยายขีดความสามารถและเชื่อมต่อระบบภายนอกอย่างปลอดภัย
+• มาตรฐานความมั่นคงปลอดภัยและการคุ้มครองข้อมูล (Zero Trust Security & PDPA): เข้ารหัสข้อมูลและปฏิบัติตามกฎหมายคุ้มครองข้อมูลส่วนบุคคล
+• การส่งมอบงานแบบคล่องตัว (Agile Collaboration): พัฒนาและตรวจรับชิ้นงานเป็นรอบ Sprint ย่อย เพื่อความโปร่งใสและตรงตามเป้าหมาย`;
+    } else if (type === 'curriculum') {
+      templateText = `\n\nโครงสร้างเนื้อหาหลักสูตรการฝึกอบรม (Training Curriculum Framework)
+• หลักสูตรสำหรับผู้บริหาร (Executive Overview): การใช้ประโยชน์จากข้อมูลสถิติ แดชบอร์ดสรุปผลเชิงบริหาร และการติดตามตัวชี้วัด (KPIs)
+• หลักสูตรสำหรับผู้ดูแลระบบและทีมเทคนิค (System & Security Administrator): การบริหารจัดการบัญชีผู้ใช้ สิทธิ์การเข้าถึง การสำรองและกู้คืนข้อมูล (Backup & DR)
+• หลักสูตรสำหรับเจ้าหน้าที่ผู้ปฏิบัติงาน (End-User Operations): ขั้นตอนการบันทึกข้อมูล การตรวจสอบความถูกต้อง และการแก้ไขปัญหาการใช้งานเบื้องต้น`;
+    } else if (type === 'study') {
+      templateText = `\n\nระเบียบวิธีศึกษางานและรวบรวมข้อมูลในภาพรวม (Study & Discovery Methodology)
+1. การสัมภาษณ์เชิงลึก (In-depth Interviews) กับผู้มีส่วนได้ส่วนเสียทุกระดับ เพื่อทำความเข้าใจ Pain Points และความคาดหวัง
+2. การสำรวจกระบวนการทำงานปัจจุบัน (As-Is Process Mapping) ร่วมกับการสังเกตการณ์หน้างานจริง (Contextual Inquiry)
+3. การศึกษาเปรียบเทียบมาตรฐานสากล (Benchmarking & Best Practices) กับระบบงานชั้นนำ
+4. การประชุมเชิงปฏิบัติการเพื่อกำหนดกระบวนการทำงานเป้าหมาย (To-Be Workflow Design Workshop)`;
+    }
+
+    const current = section3.projectApproachOverview || '';
+    onChangeSection3({
+      ...section3,
+      projectApproachOverview: current ? `${current}${templateText}` : templateText.trimStart(),
+    });
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -55,26 +120,56 @@ export const Section3Editor: React.FC<Section3EditorProps> = ({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
+      {/* Section 3 Header Card */}
+      <div className="card" style={{ background: 'linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%)', border: '1px solid var(--primary-200)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+          <div
+            style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '10px',
+              backgroundColor: 'var(--primary-800)',
+              color: '#FFFFFF',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 4px 6px -1px rgba(15, 39, 68, 0.2)',
+            }}
+          >
+            <Layers size={24} />
+          </div>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--primary-900)', fontWeight: 700 }}>
+              ส่วนที่ 3: แนวคิดและวิธีการดำเนินงาน
+            </h2>
+            <div style={{ fontSize: '0.875rem', color: 'var(--slate-600)', marginTop: '2px' }}>
+              โครงสร้างมาตรฐาน 3 หัวข้อย่อย: 3.1 กรอบแนวคิดการดำเนินงาน, 3.2 แนวคิดการดำเนินโครงการ (ถอดกรอบ/หลักการ/หลักสูตร), และ 3.3 วิธีการดำเนินงานตามขอบเขตงาน TOR
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* 3.1 Framework & Diagram Card */}
       <div className="card">
         <div className="card-header">
           <div className="card-title-group">
-            <h2>
-              <Layers size={20} color="var(--primary-700)" />
-              ส่วนที่ 3: กรอบแนวคิดและวิธีการดำเนินงาน (Conceptual Framework & TOR Methodology)
+            <h2 style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Compass size={18} color="var(--primary-700)" />
+              3.1 กรอบแนวคิดการดำเนินงาน (Conceptual Framework)
             </h2>
-            <p>แทรกแผนภาพกรอบแนวคิดสถาปัตยกรรมระบบ และตอบสนองข้อกำหนดขอบเขตงาน TOR ทีละข้ออย่างละเอียด</p>
+            <p>อัพโหลดภาพแนวคิดและพรรณาภาพรวมสถาปัตยกรรมระบบและกรอบการดำเนินงานโครงการ</p>
           </div>
         </div>
 
         <div className="form-group">
           <label className="form-label">
-            3.1 กรอบแนวคิดและหลักการดำเนินงานภาพรวม (Conceptual Framework Overview)
+            คำบรรยายภาพรวมกรอบแนวคิด (Framework Overview)
           </label>
           <textarea
             className="form-textarea"
-            style={{ minHeight: '85px' }}
+            style={{ minHeight: '90px' }}
+            placeholder="อธิบายกรอบแนวคิด มิติการทำงาน หรือภาพรวมสถาปัตยกรรมของโครงการ..."
             value={section3.frameworkOverview}
             onChange={(e) => handleOverviewChange(e.target.value)}
           />
@@ -194,12 +289,105 @@ export const Section3Editor: React.FC<Section3EditorProps> = ({
         </div>
       </div>
 
-      {/* 3.2 TOR Item-by-item Mapper Card */}
+      {/* 3.2 Project Approach & Operational Principles Card */}
       <div className="card">
         <div className="card-header">
           <div className="card-title-group">
-            <h2 style={{ fontSize: '1.1rem' }}>
-              3.2 วิธีการดำเนินงาน
+            <h2 style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <BookOpen size={18} color="var(--primary-700)" />
+              3.2 แนวคิดการดำเนินโครงการ (Project Approach & Principles)
+            </h2>
+            <p>ถอดกรอบแนวคิด อธิบายหลักการทำงานเชิงลึก เนื้อหาหลักสูตรการฝึกอบรม และระเบียบวิธีศึกษางานในภาพรวม</p>
+          </div>
+        </div>
+
+        <div className="form-group">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <label className="form-label" style={{ marginBottom: 0 }}>
+              เนื้อหาแนวคิดการดำเนินโครงการ (ข้อความ, บูลเล็ตพ้อยต์, และตาราง Markdown)
+            </label>
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn btn-outline"
+                style={{ fontSize: '0.75rem', padding: '0.25rem 0.55rem' }}
+                onClick={handleInsertApproachBullet}
+                title="แทรกหัวข้อบูลเล็ต"
+              >
+                <Plus size={12} /> บูลเล็ตพ้อยต์
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                style={{ fontSize: '0.75rem', padding: '0.25rem 0.55rem' }}
+                onClick={handleInsertApproachTable}
+                title="แทรกตาราง Markdown สำหรับตารางหลักการทำงาน"
+              >
+                <TableIcon size={12} /> แทรกตารางตัวอย่าง
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                style={{ fontSize: '0.75rem', padding: '0.25rem 0.55rem', color: 'var(--primary-700)' }}
+                onClick={() => handleInsertTemplate('principles')}
+                title="แทรกเทมเพลต: ถอดกรอบและหลักการทำงาน"
+              >
+                <FileText size={12} /> + ถอดกรอบ/หลักการ
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                style={{ fontSize: '0.75rem', padding: '0.25rem 0.55rem', color: 'var(--primary-700)' }}
+                onClick={() => handleInsertTemplate('curriculum')}
+                title="แทรกเทมเพลต: โครงสร้างหลักสูตรการอบรม"
+              >
+                <BookOpen size={12} /> + โครงสร้างหลักสูตร
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                style={{ fontSize: '0.75rem', padding: '0.25rem 0.55rem', color: 'var(--primary-700)' }}
+                onClick={() => handleInsertTemplate('study')}
+                title="แทรกเทมเพลต: วิธีศึกษางานรวมๆ"
+              >
+                <Compass size={12} /> + วิธีศึกษางานรวมๆ
+              </button>
+            </div>
+          </div>
+
+          <textarea
+            className="form-textarea"
+            style={{ minHeight: '220px', fontFamily: 'inherit', lineHeight: '1.6' }}
+            placeholder="ระบุการถอดกรอบแนวคิดสู่หลักการทำงานจริง, เนื้อหาหลักสูตรการฝึกอบรม, และระเบียบวิธีศึกษางานในภาพรวม..."
+            value={section3.projectApproachOverview || ''}
+            onChange={(e) => handleProjectApproachChange(e.target.value)}
+          />
+          <div className="form-hint" style={{ marginTop: '0.4rem', fontSize: '0.78rem', color: 'var(--slate-500)' }}>
+            💡 <strong>คำแนะนำการจัดรูปแบบ:</strong> สามารถเขียนข้อความพรรณา, ขึ้นบรรทัดใหม่, แทรกบูลเล็ตด้วยเครื่องหมาย <code>•</code> หรือ <code>-</code> และแทรกตารางรูปแบบ Markdown (<code>| ลำดับ | รายละเอียด |</code>) โดยตอน Export ระบบจะจัดย่อหน้าและจัดตาราง Word แท้ๆ ให้อัตโนมัติ
+          </div>
+        </div>
+
+        {/* ภาพประกอบแนวคิดการดำเนินโครงการ (ภาพเดี่ยว 6 นิ้ว หรือ ภาพคู่ 3 นิ้ว) */}
+        <div style={{ marginTop: '1rem', borderTop: '1px solid var(--slate-200)', paddingTop: '1.25rem' }}>
+          <ReportImageManager
+            title="ภาพประกอบแนวคิดการดำเนินโครงการ (ภาพเดี่ยว 6 นิ้ว หรือ ภาพคู่ 3 นิ้ว 2 คอลัมน์)"
+            subtitle="สามารถอัปโหลดภาพผังขั้นตอนการทำงาน แผนผังหลักสูตร หรือภาพประกอบแนวคิดโครงการได้ไม่จำกัดจำนวน โดยระบบจัดสัดส่วนให้อัตโนมัติ"
+            imageBlocks={section3.projectApproachImageBlocks || []}
+            defaultCaptionPrefix="ภาพที่ 3.2-"
+            onChange={(newBlocks) =>
+              onChangeSection3({ ...section3, projectApproachImageBlocks: newBlocks })
+            }
+          />
+        </div>
+      </div>
+
+      {/* 3.3 TOR Item-by-item Mapper Card */}
+      <div className="card">
+        <div className="card-header">
+          <div className="card-title-group">
+            <h2 style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Layers size={18} color="var(--primary-700)" />
+              3.3 วิธีการดำเนินงาน (การทำงานตามขอบเขตงานแต่ละข้อ)
             </h2>
             <p>
               ระบุวิธีการดำเนินงานเชิงพรรณา, สร้างหัวข้อบูลเล็ตพ้อยต์ หรือแทรกตารางขั้นตอนการทำงาน พร้อมแทรกภาพประกอบ (เดี่ยว 6 นิ้ว, 2 คอลัมน์ 3 นิ้ว หรือทั้งสองแบบ) ตอบสนองข้อกำหนด TOR ทีละข้อ

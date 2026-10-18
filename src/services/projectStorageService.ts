@@ -207,6 +207,12 @@ export function restoreImagesFromSource(targetProposal: ProposalData, sourceProp
     target.section3 = {
       ...target.section3,
       conceptualDiagramImage: target.section3?.conceptualDiagramImage || sourceProposal.section3.conceptualDiagramImage,
+      imageBlocks: (target.section3?.imageBlocks && target.section3.imageBlocks.length > 0)
+        ? target.section3.imageBlocks
+        : sourceProposal.section3.imageBlocks,
+      projectApproachImageBlocks: (target.section3?.projectApproachImageBlocks && target.section3.projectApproachImageBlocks.length > 0)
+        ? target.section3.projectApproachImageBlocks
+        : sourceProposal.section3.projectApproachImageBlocks,
     };
   }
 

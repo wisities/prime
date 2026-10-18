@@ -107,6 +107,9 @@ export interface Section3Methodology {
   conceptualDiagramImage?: string; // base64
   conceptualDiagramCaption: string;
   imageBlocks?: ReportImageBlock[]; // ภาพประกอบกรอบแนวคิดเพิ่มเติมในส่วนที่ 3.1 ไม่จำกัดจำนวน
+  // 3.2 แนวคิดการดำเนินโครงการ
+  projectApproachOverview?: string; // ถอดกรอบ อธิบายหลักการทำงาน เนื้อหาหลักสูตร วิธีศึกษางานรวมๆ
+  projectApproachImageBlocks?: ReportImageBlock[]; // ภาพประกอบแนวคิดการดำเนินโครงการ (เดี่ยว 6 นิ้ว หรือคู่ 3 นิ้ว)
 }
 
 export interface TeamMember {

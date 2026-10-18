@@ -1750,7 +1750,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
   const s3Config = docStructure.sections.find((s) => s.id === 'section3');
   if (s3Config && s3Config.enabled) {
     part3Children.push(
-      createSectionHeader('ส่วนที่ 3', 'กรอบแนวคิดและวิธีการดำเนินงานตามข้อกำหนด (TOR Mapping)', true)
+      createSectionHeader('ส่วนที่ 3', s3Config.title || 'แนวคิดและวิธีการดำเนินงาน', true)
     );
 
     const activeS3Headings = s3Config.headings
@@ -1761,7 +1761,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
       const numPrefix = autoRenumber ? `3.${hIdx + 1}` : h.originalCode;
       if (h.id === 's3_framework') {
         part3Children.push(
-          createH2(`${numPrefix} แผนภาพกรอบแนวคิดการดำเนินงาน (Conceptual Framework Diagram)`),
+          createH2(`${numPrefix} ${h.title || 'กรอบแนวคิดการดำเนินงาน (Conceptual Framework)'}`),
           ...createBodyParagraphs(section3.frameworkOverview)
         );
 
@@ -1883,9 +1883,25 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
             }
           });
         }
+      } else if (h.id === 's3_approach') {
+        part3Children.push(
+          createH2(`${numPrefix} ${h.title || 'แนวคิดการดำเนินโครงการ (Project Approach & Principles)'}`)
+        );
+
+        if (section3.projectApproachOverview && section3.projectApproachOverview.trim().length > 0) {
+          part3Children.push(
+            ...renderMethodologyParagraphsAndTables(section3.projectApproachOverview)
+          );
+        }
+
+        if (section3.projectApproachImageBlocks && section3.projectApproachImageBlocks.length > 0) {
+          part3Children.push(
+            ...renderImageBlocksToDocx(section3.projectApproachImageBlocks, `ภาพที่ ${numPrefix}`)
+          );
+        }
       } else if (h.id === 's3_methodology') {
         part3Children.push(
-          createH2(`${numPrefix} วิธีการดำเนินงาน`)
+          createH2(`${numPrefix} ${h.title || 'วิธีการดำเนินงาน (การทำงานตามขอบเขตงานแต่ละข้อ)'}`)
         );
 
         (section1.scopeItems || []).forEach((item, idx) => {

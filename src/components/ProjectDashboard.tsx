@@ -103,11 +103,11 @@ export const computeProjectCompletion = (project?: BiddingProject | null): Proje
   const scopeItems = Array.isArray(pData?.section1?.scopeItems) ? pData.section1.scopeItems : [];
 
   const clausesList: ClauseCompletionInfo[] = scopeItems.map((item) => {
-    // เกณฑ์ความสมบูรณ์ของข้อ 3.2: ต้องมีอย่างน้อยเป็นข้อความในช่องรายละเอียดวิธีการดำเนินงาน (ส่วนรูปภาพจะมีหรือไม่ก็ได้)
+    // เกณฑ์ความสมบูรณ์ของข้อ 3.3: ต้องมีอย่างน้อยเป็นข้อความในช่องรายละเอียดวิธีการดำเนินงาน (ส่วนรูปภาพจะมีหรือไม่ก็ได้)
     const hasMeth = Boolean(item && (item.proposedMethodology || '').trim().length > 0);
 
     const missing: string[] = [];
-    if (!hasMeth) missing.push('รายละเอียดวิธีดำเนินงาน (ข้อ 3.2)');
+    if (!hasMeth) missing.push('รายละเอียดวิธีดำเนินงาน (ข้อ 3.3)');
 
     return {
       id: item?.id || '',
