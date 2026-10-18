@@ -2072,7 +2072,7 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
             ],
           });
 
-          const rightInfoParagraphs: Paragraph[] = [
+          const rightInfoParagraphs: (Paragraph | Table)[] = [
             new Paragraph({
               spacing: { before: 40, after: 60 },
               children: [
