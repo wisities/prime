@@ -182,6 +182,110 @@ export function isSampleProject(id?: string, code?: string, client?: string): bo
 }
 
 /**
+ * รวมและกู้คืนรูปภาพจาก sourceProposal กลับเข้า targetProposal
+ * ป้องกันไม่ให้รูปภาพที่บันทึกไว้ใน IndexedDB สูญหายเมื่อโหลดฉบับร่างจาก LocalStorage หรือ Cloud
+ */
+export function restoreImagesFromSource(targetProposal: ProposalData, sourceProposal: ProposalData): ProposalData {
+  if (!targetProposal) return sourceProposal;
+  if (!sourceProposal) return targetProposal;
+
+  const target = { ...targetProposal };
+
+  // 1. Cover
+  if (sourceProposal.cover) {
+    target.cover = {
+      ...target.cover,
+      coverImage: target.cover?.coverImage || sourceProposal.cover.coverImage,
+      backCoverImage: target.cover?.backCoverImage || sourceProposal.cover.backCoverImage,
+      portraitBgImage: target.cover?.portraitBgImage || sourceProposal.cover.portraitBgImage,
+      landscapeBgImage: target.cover?.landscapeBgImage || sourceProposal.cover.landscapeBgImage,
+    };
+  }
+
+  // 2. Section 3
+  if (sourceProposal.section3) {
+    target.section3 = {
+      ...target.section3,
+      conceptualDiagramImage: target.section3?.conceptualDiagramImage || sourceProposal.section3.conceptualDiagramImage,
+    };
+  }
+
+  // Section 1 Scope items (TOR image blocks)
+  if (Array.isArray(target.section1?.scopeItems) && Array.isArray(sourceProposal.section1?.scopeItems)) {
+    const srcMap = new Map(sourceProposal.section1.scopeItems.map((s) => [s.id, s]));
+    target.section1 = {
+      ...target.section1,
+      scopeItems: target.section1.scopeItems.map((tItem) => {
+        const sItem = srcMap.get(tItem.id);
+        if (sItem && Array.isArray(sItem.imageBlocks) && sItem.imageBlocks.length > 0) {
+          if (!Array.isArray(tItem.imageBlocks) || tItem.imageBlocks.length === 0) {
+            return { ...tItem, imageBlocks: sItem.imageBlocks };
+          }
+        }
+        return tItem;
+      }),
+    };
+  }
+
+  // 3. Section 4
+  if (sourceProposal.section4) {
+    const srcTeam = Array.isArray(sourceProposal.section4.teamMembers) ? sourceProposal.section4.teamMembers : [];
+    const srcTeamMap = new Map(srcTeam.map((m) => [m.id, m]));
+    const targetTeam = Array.isArray(target.section4?.teamMembers) ? target.section4.teamMembers : [];
+
+    const restoredTeam = targetTeam.map((m) => {
+      const s = srcTeamMap.get(m.id);
+      return {
+        ...m,
+        photoUrl: m.photoUrl || s?.photoUrl,
+      };
+    });
+
+    const mgmtBlocks = (Array.isArray(target.section4?.projectManagementImageBlocks) && target.section4.projectManagementImageBlocks.length > 0)
+      ? target.section4.projectManagementImageBlocks
+      : sourceProposal.section4.projectManagementImageBlocks;
+
+    const imgBlocks = (Array.isArray(target.section4?.imageBlocks) && target.section4.imageBlocks.length > 0)
+      ? target.section4.imageBlocks
+      : sourceProposal.section4.imageBlocks;
+
+    target.section4 = {
+      ...target.section4,
+      teamMembers: restoredTeam,
+      projectManagementImageBlocks: mgmtBlocks,
+      imageBlocks: imgBlocks,
+    };
+  }
+
+  // 4. Section 5
+  if (sourceProposal.section5) {
+    const srcPast = Array.isArray(sourceProposal.section5.pastProjects) ? sourceProposal.section5.pastProjects : [];
+    const srcPastMap = new Map(srcPast.map((p) => [p.id, p]));
+    const targetPast = Array.isArray(target.section5?.pastProjects) ? target.section5.pastProjects : [];
+
+    const restoredPast = targetPast.map((p) => {
+      const s = srcPastMap.get(p.id);
+      return {
+        ...p,
+        clientLogoUrl: p.clientLogoUrl || s?.clientLogoUrl,
+        projectImageUrl: p.projectImageUrl || s?.projectImageUrl,
+        certificateFileUrl: p.certificateFileUrl || s?.certificateFileUrl,
+        imageBlocks: (Array.isArray(p.imageBlocks) && p.imageBlocks.length > 0) ? p.imageBlocks : s?.imageBlocks,
+      };
+    });
+
+    target.section5 = {
+      ...target.section5,
+      companyLogoUrl: target.section5?.companyLogoUrl || sourceProposal.section5.companyLogoUrl,
+      companyOfficeImageUrl: target.section5?.companyOfficeImageUrl || sourceProposal.section5.companyOfficeImageUrl,
+      pastProjects: restoredPast,
+    };
+  }
+
+  return target;
+}
+
+/**
  * โหลดข้อมูลโครงการทั้งหมด
  * - กวาดล้างและตัดโครงการตัวอย่างออกจากระบบอย่างถาวร
  * - หากเชื่อมต่อ Supabase สำเร็จ: โหลดจากฐานข้อมูล Cloud PostgreSQL
@@ -289,7 +393,11 @@ export async function loadAllProjects(): Promise<{
                 const singleTime = new Date(parsedSingle.updatedAt || 0).getTime();
                 const lpTime = new Date(lp.updatedAt || 0).getTime();
                 if (singleTime >= lpTime) {
-                  localMap.set(id, { ...lp, ...parsedSingle });
+                  localMap.set(id, {
+                    ...lp,
+                    ...parsedSingle,
+                    proposalData: restoreImagesFromSource(parsedSingle.proposalData, lp.proposalData),
+                  });
                 }
               }
             }
@@ -426,7 +534,12 @@ export async function loadAllProjects(): Promise<{
                 const singleTime = new Date(parsedSingle.updatedAt || 0).getTime();
                 const listTime = new Date(normalizedList[i].updatedAt || 0).getTime();
                 if (singleTime >= listTime) {
-                  normalizedList[i] = normalizeProjectBudget({ ...normalizedList[i], ...parsedSingle });
+                  const restoredProposal = restoreImagesFromSource(parsedSingle.proposalData, normalizedList[i].proposalData);
+                  normalizedList[i] = normalizeProjectBudget({
+                    ...normalizedList[i],
+                    ...parsedSingle,
+                    proposalData: restoredProposal,
+                  });
                 }
               }
             }
@@ -503,22 +616,28 @@ export async function saveProject(rawProject: BiddingProject): Promise<boolean> 
     console.warn('IndexedDB project save error:', e);
   }
 
-  // 2. บันทึกลง LocalStorage: เก็บทั้งคีย์เฉพาะโครงการ (ขนาดเบา <100KB) และคีย์รวมสรุป (ขนาดเบา <10KB)
+  // 2. บันทึกลง LocalStorage: เก็บทั้งคีย์เฉพาะโครงการ (เก็บภาพครบถ้วน) และคีย์รวมสรุป (ขนาดเบา <10KB)
   try {
     const sanitizedProject: BiddingProject = {
       ...project,
-      proposalData: stripAllLargeBase64(project.proposalData),
       attachments: (project.attachments || []).map((att) => ({
         ...att,
         dataUrl: att.dataUrl && !att.dataUrl.startsWith('data:') ? att.dataUrl : (att.dataUrl ? `idb://${att.id}` : undefined),
       })),
     };
 
-    // 2.1 บันทึกคีย์เฉพาะโครงการนี้โดยตรง (ขนาดเล็กเพียง 30-100KB ไม่มีทางเกินโควตา 5MB)
+    // 2.1 บันทึกคีย์เฉพาะโครงการนี้ (เก็บภาพฉบับเต็มไว้เสมอ หากพื้นที่ LocalStorage ไม่พอจึงตัดภาพออกเป็น Fallback)
     try {
       localStorage.setItem(`prime_active_draft_${project.id}`, JSON.stringify(sanitizedProject));
-    } catch (singleErr) {
-      console.warn('Dedicated draft save warning:', singleErr);
+    } catch {
+      try {
+        localStorage.setItem(`prime_active_draft_${project.id}`, JSON.stringify({
+          ...sanitizedProject,
+          proposalData: stripAllLargeBase64(sanitizedProject.proposalData),
+        }));
+      } catch (singleErr) {
+        console.warn('Dedicated draft save warning:', singleErr);
+      }
     }
 
     // 2.2 บันทึกเข้าอาร์เรย์รายการโครงการรวมเฉพาะ Metadata สรุป (ประหยัด RAM และ LocalStorage ไม่เกิน 10KB เสมอ)

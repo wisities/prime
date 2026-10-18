@@ -172,8 +172,9 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
 
   const handleFileUpload = async (file: File, callback: (base64: string, fileName: string) => void) => {
     try {
-      if (!file.type.startsWith('image/')) {
-        alert('กรุณาเลือกไฟล์รูปภาพ (JPG, PNG, WebP) เท่านั้น เพื่อให้ระบบแทรกลงในรายงาน Word (.docx) ได้อย่างถูกต้องและประหยัด RAM');
+      const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp|jfif)$/i.test(file.name);
+      if (!isImage) {
+        alert('กรุณาเลือกไฟล์รูปภาพ (JPG, PNG, WebP) เท่านั้น เพื่อให้ระบบแทรกลงในรายงาน Word (.docx) ได้อย่างถูกต้อง');
         return;
       }
       if (file.size > 8 * 1024 * 1024) {

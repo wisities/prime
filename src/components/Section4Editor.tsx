@@ -234,7 +234,8 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
   };
 
   const handlePhotoUpload = async (id: string, file: File) => {
-    if (!file.type.startsWith('image/')) {
+    const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp|jfif)$/i.test(file.name);
+    if (!isImage) {
       alert('กรุณาเลือกไฟล์รูปภาพที่ถูกต้อง (JPG, PNG, WebP)');
       return;
     }

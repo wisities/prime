@@ -12,7 +12,7 @@ export function compressImageFile(
 ): Promise<string> {
   return new Promise((resolve) => {
     // If SVG, allow small SVGs only (< 500KB)
-    if (file.type === 'image/svg+xml') {
+    if (file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg')) {
       if (file.size > 500 * 1024) {
         console.warn('SVG file too large, rejected to prevent memory bloat');
         resolve('');
@@ -25,8 +25,9 @@ export function compressImageFile(
       return;
     }
 
-    // If not an image, reject immediately - do not allow PDFs or docs to become huge base64 strings
-    if (!file.type.startsWith('image/')) {
+    // Verify image format via mime type OR file extension (critical on Windows where file.type can be empty)
+    const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp|jfif)$/i.test(file.name);
+    if (!isImage) {
       console.warn('Non-image file rejected in compressImageFile:', file.name, file.type);
       resolve('');
       return;
