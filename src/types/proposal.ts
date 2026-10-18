@@ -121,6 +121,9 @@ export interface TeamMember {
   highlightProjects: string;
   photoUrl?: string; // base64 รูปถ่ายหน้าตรงขนาด 1.5 นิ้ว
   personalBio?: string; // ประวัติส่วนตัว / ข้อมูลสรุปประวัติการทำงาน
+  bioImageBlocks?: ReportImageBlock[]; // ภาพประกอบประวัติย่อ/ความเชี่ยวชาญ (เดี่ยว 6 นิ้ว หรือคู่ 3 นิ้ว)
+  highlightImageBlocks?: ReportImageBlock[]; // ภาพประกอบผลงานโครงการเด่น (เดี่ยว 6 นิ้ว หรือคู่ 3 นิ้ว)
+  imageBlocks?: ReportImageBlock[]; // ภาพประกอบผลงาน/บุคลากรทั่วไป (backward compatibility)
 }
 
 export interface RiskItem {

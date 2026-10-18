@@ -250,6 +250,104 @@ const renderMarkdownContentPreview = (
   return parsedElements;
 };
 
+const renderCvTextWithSpacingPreview = (
+  text: string,
+  keyPrefix: string = 'cv'
+): React.ReactNode[] => {
+  if (!text || text.trim() === '') return [<span key="empty">-</span>];
+
+  const lines = text.split(/\r?\n/);
+  const elements: React.ReactNode[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const rawLine = lines[i];
+    const trimmed = rawLine.trim();
+
+    // 1. Table
+    if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+      const tableLines: string[] = [];
+      while (i < lines.length && lines[i].trim().startsWith('|') && lines[i].trim().endsWith('|')) {
+        tableLines.push(lines[i].trim());
+        i++;
+      }
+      const contentRows = tableLines.filter((tl) => !/^\|[\s\-:|]+\|$/.test(tl));
+      if (contentRows.length > 0) {
+        const parsedRows = contentRows.map((r) =>
+          r.split('|').slice(1, -1).map((c) => c.trim())
+        );
+        const headerRow = parsedRows[0];
+        const dataRows = parsedRows.slice(1);
+        elements.push(
+          <table
+            key={`${keyPrefix}-tbl-${i}`}
+            style={{
+              width: '100%',
+              borderCollapse: 'collapse',
+              fontSize: '0.785rem',
+              margin: '0.35rem 0',
+              border: '1px solid var(--slate-300)',
+            }}
+          >
+            <thead>
+              <tr style={{ backgroundColor: 'var(--primary-800)', color: 'white' }}>
+                {headerRow.map((head, hIdx) => (
+                  <th key={hIdx} style={{ padding: '4px 6px', border: '1px solid var(--slate-300)', textAlign: 'left' }}>
+                    {head}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {dataRows.map((row, rIdx) => (
+                <tr key={rIdx} style={{ backgroundColor: rIdx % 2 === 0 ? '#FFFFFF' : '#F8FAFC' }}>
+                  {row.map((cell, cIdx) => (
+                    <td key={cIdx} style={{ padding: '4px 6px', border: '1px solid var(--slate-300)' }}>
+                      {cell}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        );
+      }
+      continue;
+    }
+
+    // 2. Blank line (เว้นบรรทัด)
+    if (trimmed.length === 0) {
+      elements.push(<div key={`${keyPrefix}-br-${i}`} style={{ height: '0.6rem' }} />);
+      i++;
+      continue;
+    }
+
+    // 3. Bullet (บูลเล็ต)
+    const isBullet = trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*');
+    if (isBullet) {
+      const cleanLine = trimmed.replace(/^[-•*]\s*/, '');
+      elements.push(
+        <div key={`${keyPrefix}-bullet-${i}`} style={{ display: 'flex', gap: '6px', marginLeft: '0.75rem', marginBottom: '0.2rem' }}>
+          <span style={{ color: 'var(--primary-700)', fontWeight: 700 }}>•</span>
+          <span style={{ whiteSpace: 'pre-wrap' }}>{cleanLine}</span>
+        </div>
+      );
+      i++;
+      continue;
+    }
+
+    // 4. Normal line (รักษาระยะเว้นวรรค)
+    elements.push(
+      <div key={`${keyPrefix}-line-${i}`} style={{ whiteSpace: 'pre-wrap', marginBottom: '0.2rem' }}>
+        {rawLine}
+      </div>
+    );
+    i++;
+  }
+
+  return elements;
+};
+
 export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
 
   data,
@@ -1191,17 +1289,51 @@ export const LiveDocxPreviewModal: React.FC<LiveDocxPreviewModalProps> = ({
                                       <span>{m.certifications || '-'}</span>
                                     </div>
                                     <div style={{ backgroundColor: '#F8FAFC', padding: '0.5rem 0.75rem', borderRadius: '6px', borderLeft: '3px solid var(--primary-600)', marginTop: '2px' }}>
-                                      <strong>ประวัติส่วนตัว: </strong>
-                                      <span>{m.personalBio || 'มีความรู้ความสามารถและประสบการณ์ตรงในการพัฒนาระบบเทคโนโลยีสารสนเทศภาครัฐ'}</span>
+                                      <div style={{ fontWeight: 700, color: 'var(--primary-900)', marginBottom: '3px' }}>
+                                        ประวัติย่อ / ประสบการณ์และความเชี่ยวชาญสำคัญ:
+                                      </div>
+                                      <div style={{ fontSize: '0.825rem', color: 'var(--slate-800)' }}>
+                                        {renderCvTextWithSpacingPreview(
+                                          m.personalBio || '',
+                                          `bio-${m.id}`
+                                        )}
+                                      </div>
                                     </div>
                                     <div>
                                       <strong>หน้าที่ความรับผิดชอบในโครงการ: </strong>
-                                      <span>{m.responsibilities}</span>
+                                      <span style={{ whiteSpace: 'pre-wrap' }}>{m.responsibilities || '-'}</span>
                                     </div>
-                                    <div>
-                                      <strong>ประสบการณ์และผลงานเด่น: </strong>
-                                      <span>{m.highlightProjects}</span>
+                                    <div style={{ backgroundColor: '#F8FAFC', padding: '0.5rem 0.75rem', borderRadius: '6px', borderLeft: '3px solid var(--gold-600)', marginTop: '2px' }}>
+                                      <div style={{ fontWeight: 700, color: 'var(--primary-900)', marginBottom: '3px' }}>
+                                        ผลงานโครงการสำคัญในอดีต (Highlight Projects):
+                                      </div>
+                                      <div style={{ fontSize: '0.825rem', color: 'var(--slate-800)' }}>
+                                        {renderCvTextWithSpacingPreview(
+                                          m.highlightProjects || '',
+                                          `high-${m.id}`
+                                        )}
+                                      </div>
                                     </div>
+
+                                    {/* ภาพประกอบประวัติย่อและความเชี่ยวชาญ (เดี่ยว 6 นิ้ว / คู่ 3 นิ้ว) */}
+                                    {m.bioImageBlocks && m.bioImageBlocks.length > 0 && (
+                                      <div style={{ marginTop: '0.5rem', borderTop: '1px dashed var(--slate-300)', paddingTop: '0.5rem' }}>
+                                        <div style={{ fontSize: '0.775rem', fontWeight: 600, color: 'var(--primary-800)', marginBottom: '2px' }}>
+                                          📷 ภาพประกอบประวัติและความเชี่ยวชาญ — {m.name}
+                                        </div>
+                                        {renderImageBlocksPreview(m.bioImageBlocks, `ภาพที่ 4.${idx + 1} ก`)}
+                                      </div>
+                                    )}
+
+                                    {/* ภาพประกอบผลงานโครงการเด่น (Highlight Projects - เดี่ยว 6 นิ้ว / คู่ 3 นิ้ว) */}
+                                    {(m.highlightImageBlocks || m.imageBlocks) && (m.highlightImageBlocks || m.imageBlocks)!.length > 0 && (
+                                      <div style={{ marginTop: '0.5rem', borderTop: '1px dashed var(--slate-300)', paddingTop: '0.5rem' }}>
+                                        <div style={{ fontSize: '0.775rem', fontWeight: 600, color: 'var(--primary-800)', marginBottom: '2px' }}>
+                                          📷 ภาพประกอบผลงานโครงการสำคัญ (Highlight Projects) — {m.name}
+                                        </div>
+                                        {renderImageBlocksPreview(m.highlightImageBlocks || m.imageBlocks, `ภาพที่ 4.${idx + 1} ข`)}
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               ))}

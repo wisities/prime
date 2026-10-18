@@ -49,6 +49,8 @@ import {
   Filter,
   Paperclip,
   CheckCircle2,
+  List,
+  Table as TableIcon,
 } from 'lucide-react';
 
 interface MasterLibraryManagementModalProps {
@@ -218,24 +220,56 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
   // Team Tab Actions
   // -------------------------------------------------------------------------
   const handleOpenAddMember = () => {
+    const defaultStart = currentYearBE - 5;
     setMemberFormData({
       id: `lib-team-${Date.now()}`,
       name: '',
       proposedRole: '',
       education: '',
       certifications: '',
-      experienceYears: 5,
-      startWorkYearBE: currentYearBE - 5,
+      startWorkYearBE: defaultStart,
+      experienceYears: Math.max(0, currentYearBE - defaultStart),
       responsibilities: '',
       highlightProjects: '',
       personalBio: '',
+      bioImageBlocks: [],
+      highlightImageBlocks: [],
+      imageBlocks: [],
     });
     setIsEditingMember(true);
   };
 
   const handleOpenEditMember = (member: TeamMember) => {
-    setMemberFormData({ ...member });
+    const startYear = member.startWorkYearBE;
+    const computedExp = (startYear && !isNaN(Number(startYear)))
+      ? Math.max(0, currentYearBE - Number(startYear))
+      : (member.experienceYears || 0);
+    setMemberFormData({
+      ...member,
+      experienceYears: computedExp,
+      bioImageBlocks: member.bioImageBlocks || [],
+      highlightImageBlocks: member.highlightImageBlocks || member.imageBlocks || [],
+      imageBlocks: member.imageBlocks || member.highlightImageBlocks || [],
+    });
     setIsEditingMember(true);
+  };
+
+  const handleStartWorkYearChange = (yearVal: string) => {
+    const yearNum = parseInt(yearVal, 10);
+    if (!isNaN(yearNum) && yearNum >= 2400 && yearNum <= currentYearBE + 1) {
+      const calculated = Math.max(0, currentYearBE - yearNum);
+      setMemberFormData((prev) => ({
+        ...prev,
+        startWorkYearBE: yearNum,
+        experienceYears: calculated,
+      }));
+    } else {
+      setMemberFormData((prev) => ({
+        ...prev,
+        startWorkYearBE: isNaN(yearNum) ? undefined : yearNum,
+        experienceYears: isNaN(yearNum) ? 0 : prev.experienceYears,
+      }));
+    }
   };
 
   const handleSaveMemberForm = (e: React.FormEvent) => {
@@ -245,18 +279,25 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
       return;
     }
 
+    const calculatedExp = memberFormData.startWorkYearBE
+      ? Math.max(0, currentYearBE - Number(memberFormData.startWorkYearBE))
+      : (Number(memberFormData.experienceYears) || 0);
+
     const memberToSave: TeamMember = {
       id: memberFormData.id || `lib-team-${Date.now()}`,
       name: memberFormData.name.trim(),
       proposedRole: memberFormData.proposedRole || '',
       education: memberFormData.education || '',
       certifications: memberFormData.certifications || '',
-      experienceYears: Number(memberFormData.experienceYears) || 0,
       startWorkYearBE: memberFormData.startWorkYearBE ? Number(memberFormData.startWorkYearBE) : undefined,
+      experienceYears: calculatedExp,
       responsibilities: memberFormData.responsibilities || '',
       highlightProjects: memberFormData.highlightProjects || '',
       personalBio: memberFormData.personalBio || '',
       photoUrl: memberFormData.photoUrl,
+      bioImageBlocks: memberFormData.bioImageBlocks || [],
+      highlightImageBlocks: memberFormData.highlightImageBlocks || memberFormData.imageBlocks || [],
+      imageBlocks: memberFormData.highlightImageBlocks || memberFormData.imageBlocks || [],
     };
 
     const updated = saveMemberToMasterLibrary(memberToSave);
@@ -952,27 +993,55 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                     </div>
 
                     <div className="form-group">
-                      <label className="form-label">ประสบการณ์ทำงานรวม (ปี)</label>
-                      <input
-                        type="number"
-                        className="form-input"
-                        value={memberFormData.experienceYears || 0}
-                        onChange={(e) => setMemberFormData({ ...memberFormData, experienceYears: parseInt(e.target.value) || 0 })}
-                      />
-                    </div>
-
-                    <div className="form-group">
                       <label className="form-label">ปีที่เริ่มทำงาน (พ.ศ.)</label>
                       <input
                         type="number"
                         className="form-input"
-                        value={memberFormData.startWorkYearBE || (currentYearBE - 5)}
-                        onChange={(e) => setMemberFormData({ ...memberFormData, startWorkYearBE: parseInt(e.target.value) || undefined })}
+                        placeholder={`เช่น ${currentYearBE - 10}`}
+                        value={memberFormData.startWorkYearBE || ''}
+                        onChange={(e) => handleStartWorkYearChange(e.target.value)}
+                        title="ระบุปี พ.ศ. ที่เริ่มทำงาน ระบบจะคำนวณปีประสบการณ์ให้อัตโนมัติ"
                       />
                     </div>
 
+                    <div className="form-group">
+                      <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>ประสบการณ์ทำงานรวม (ปี)</span>
+                        <span style={{ fontSize: '0.725rem', color: '#2563EB', fontWeight: 600 }}>
+                          = {memberFormData.experienceYears || 0} ปี (คำนวณอัตโนมัติ)
+                        </span>
+                      </label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <input
+                          type="number"
+                          className="form-input"
+                          disabled
+                          readOnly
+                          value={memberFormData.experienceYears || 0}
+                          style={{ backgroundColor: '#F1F5F9', color: '#1E293B', cursor: 'not-allowed', fontWeight: 600 }}
+                          title="ระบบคำนวณให้อัตโนมัติจากปีที่เริ่มทำงาน ไม่ต้องกรอก"
+                        />
+                        <div
+                          style={{
+                            padding: '0.45rem 0.75rem',
+                            backgroundColor: '#EFF6FF',
+                            border: '1px solid #BFDBFE',
+                            borderRadius: '6px',
+                            fontSize: '0.825rem',
+                            fontWeight: 700,
+                            color: '#1D4ED8',
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0,
+                          }}
+                          title={`คำนวณจากปี พ.ศ. ปัจจุบัน (${currentYearBE}) - ${memberFormData.startWorkYearBE || currentYearBE}`}
+                        >
+                          {memberFormData.experienceYears || 0} ปี
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                      <label className="form-label">ภาพถ่ายบุคลากร</label>
+                      <label className="form-label">ภาพถ่ายบุคลากร (รูปถ่ายติดบัตร/หน้าตรง 1.5 นิ้ว)</label>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                         {memberFormData.photoUrl ? (
                           <img
@@ -1028,25 +1097,115 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">ประวัติย่อ / ประสบการณ์และความเชี่ยวชาญสำคัญ</label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', flexWrap: 'wrap', gap: '0.35rem' }}>
+                      <label className="form-label" style={{ marginBottom: 0, fontWeight: 600, color: 'var(--primary-900)' }}>
+                        ประวัติย่อ / ประสบการณ์และความเชี่ยวชาญสำคัญ (รองรับเว้นวรรค เว้นบรรทัด บูลเล็ต และช่องตาราง)
+                      </label>
+                      <div style={{ display: 'flex', gap: '0.35rem' }}>
+                        <button
+                          type="button"
+                          className="btn btn-outline"
+                          style={{ padding: '0.2rem 0.55rem', fontSize: '0.725rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          onClick={() => {
+                            const bulletSnippet = (memberFormData.personalBio && !memberFormData.personalBio.endsWith('\n') ? '\n' : '') + '• [ระบุความเชี่ยวชาญ/ทักษะสำคัญ]';
+                            setMemberFormData({ ...memberFormData, personalBio: (memberFormData.personalBio || '') + bulletSnippet });
+                          }}
+                          title="แทรกบูลเล็ตพ้อยต์"
+                        >
+                          <List size={12} /> + บูลเล็ตพ้อยต์
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-outline"
+                          style={{ padding: '0.2rem 0.55rem', fontSize: '0.725rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          onClick={() => {
+                            const tableSnippet = (memberFormData.personalBio && !memberFormData.personalBio.endsWith('\n') ? '\n\n' : '') +
+                              '| ลำดับ | รายละเอียดความเชี่ยวชาญ / ทักษะ | ผลงาน / การรับรอง |\n' +
+                              '| 1 | การออกแบบระบบ Cloud Architecture | AWS Solutions Architect Pro |\n' +
+                              '| 2 | การพัฒนาระบบ Enterprise API | ระบบบริการประชาชนภาครัฐ |';
+                            setMemberFormData({ ...memberFormData, personalBio: (memberFormData.personalBio || '') + tableSnippet });
+                          }}
+                          title="แทรกตารางแสดงความเชี่ยวชาญหรือรายละเอียด"
+                        >
+                          <TableIcon size={12} /> + แทรกช่องตาราง
+                        </button>
+                      </div>
+                    </div>
                     <textarea
                       className="form-textarea"
-                      style={{ minHeight: '75px' }}
-                      placeholder="เขียนประวัติย่อและจุดเด่นของบุคลากรท่านนี้..."
+                      style={{ minHeight: '85px', lineHeight: 1.5 }}
+                      placeholder="เขียนประวัติย่อและความเชี่ยวชาญสำคัญ สามารถเว้นวรรค เว้นบรรทัด แทรกบูลเล็ต (• หรือ -) หรือตาราง (|...|) ได้ตามต้องการ..."
                       value={memberFormData.personalBio || ''}
                       onChange={(e) => setMemberFormData({ ...memberFormData, personalBio: e.target.value })}
                     />
+                    <div className="form-hint" style={{ fontSize: '0.75rem', color: 'var(--slate-500)', marginTop: '4px' }}>
+                      💡 <strong>รูปแบบข้อความ:</strong> สามารถเว้นวรรคและเว้นบรรทัดได้อย่างอิสระ ระบบจะรักษาระยะเว้นวรรค เว้นบรรทัด บูลเล็ต และช่องตารางในเอกสาร Word (.docx) ให้ตรงตามที่วางไว้
+                    </div>
+                    {/* ภาพประกอบประวัติย่อ / ความเชี่ยวชาญ (เดี่ยว 6 นิ้ว / คู่ 3 นิ้ว) */}
+                    <div style={{ marginTop: '0.75rem' }}>
+                      <ReportImageManager
+                        title="ภาพประกอบประวัติย่อและความเชี่ยวชาญ (ขนาด 6 นิ้ว หรือ 3 นิ้วคู่)"
+                        subtitle="รองรับทั้งภาพเดี่ยว 6 นิ้ว กึ่งกลาง และภาพคู่ 2 คอลัมน์ ขนาดละ 3 นิ้ว เช่น ภาพวุฒิบัตร ใบประกาศนียบัตร หรือภาพการปฏิบัติงาน"
+                        imageBlocks={memberFormData.bioImageBlocks || []}
+                        onChange={(newBlocks) => setMemberFormData({ ...memberFormData, bioImageBlocks: newBlocks })}
+                      />
+                    </div>
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">ผลงานโครงการสำคัญในอดีต (Highlight Projects)</label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', flexWrap: 'wrap', gap: '0.35rem' }}>
+                      <label className="form-label" style={{ marginBottom: 0, fontWeight: 600, color: 'var(--primary-900)' }}>
+                        ผลงานโครงการสำคัญในอดีต (Highlight Projects) (รองรับเว้นวรรค เว้นบรรทัด บูลเล็ต และช่องตาราง)
+                      </label>
+                      <div style={{ display: 'flex', gap: '0.35rem' }}>
+                        <button
+                          type="button"
+                          className="btn btn-outline"
+                          style={{ padding: '0.2rem 0.55rem', fontSize: '0.725rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          onClick={() => {
+                            const bulletSnippet = (memberFormData.highlightProjects && !memberFormData.highlightProjects.endsWith('\n') ? '\n' : '') + '• [ระบุชื่อโครงการ บทบาทหน้าที่ และมูลค่า/เทคโนโลยีที่ใช้]';
+                            setMemberFormData({ ...memberFormData, highlightProjects: (memberFormData.highlightProjects || '') + bulletSnippet });
+                          }}
+                          title="แทรกบูลเล็ตพ้อยต์"
+                        >
+                          <List size={12} /> + บูลเล็ตพ้อยต์
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-outline"
+                          style={{ padding: '0.2rem 0.55rem', fontSize: '0.725rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          onClick={() => {
+                            const tableSnippet = (memberFormData.highlightProjects && !memberFormData.highlightProjects.endsWith('\n') ? '\n\n' : '') +
+                              '| ลำดับ | ชื่อโครงการสำคัญที่ผ่านมา | บทบาทหน้าที่ | หน่วยงาน / ผู้ว่าจ้าง |\n' +
+                              '| 1 | โครงการพัฒนาระบบบริการดิจิทัล | ผู้จัดการโครงการ | สำนักงานปลัดกระทรวงฯ |\n' +
+                              '| 2 | โครงการบูรณาการฐานข้อมูลภาครัฐ | สถาปนิกผู้ออกแบบระบบ | กรมสารสนเทศฯ |';
+                            setMemberFormData({ ...memberFormData, highlightProjects: (memberFormData.highlightProjects || '') + tableSnippet });
+                          }}
+                          title="แทรกตารางแสดงผลงานโครงการสำคัญ"
+                        >
+                          <TableIcon size={12} /> + แทรกช่องตาราง
+                        </button>
+                      </div>
+                    </div>
                     <textarea
                       className="form-textarea"
-                      style={{ minHeight: '65px' }}
-                      placeholder="ระบุโครงการเด่นที่เคยรับผิดชอบ..."
+                      style={{ minHeight: '85px', lineHeight: 1.5 }}
+                      placeholder="ระบุโครงการเด่นที่เคยรับผิดชอบ สามารถเว้นวรรค เว้นบรรทัด แทรกบูลเล็ต (• หรือ -) หรือตาราง (|...|) ได้ตามต้องการ..."
                       value={memberFormData.highlightProjects || ''}
                       onChange={(e) => setMemberFormData({ ...memberFormData, highlightProjects: e.target.value })}
                     />
+                    <div className="form-hint" style={{ fontSize: '0.75rem', color: 'var(--slate-500)', marginTop: '4px' }}>
+                      💡 <strong>รูปแบบข้อความ:</strong> สามารถเว้นวรรคและเว้นบรรทัดได้อย่างอิสระ ระบบจะรักษาระยะเว้นวรรค เว้นบรรทัด บูลเล็ต และช่องตารางในเอกสาร Word (.docx) ให้ตรงตามที่วางไว้
+                    </div>
+                    {/* ภาพประกอบผลงานโครงการเด่น (Highlight Projects - เดี่ยว 6 นิ้ว / คู่ 3 นิ้ว) */}
+                    <div style={{ marginTop: '0.75rem' }}>
+                      <ReportImageManager
+                        title="ภาพประกอบผลงานโครงการสำคัญ (Highlight Projects - ขนาด 6 นิ้ว หรือ 3 นิ้วคู่)"
+                        subtitle="รองรับทั้งภาพเดี่ยว 6 นิ้ว กึ่งกลาง และภาพคู่ 2 คอลัมน์ ขนาดละ 3 นิ้ว เช่น ภาพหน้าจอระบบ แผนผังสถาปัตยกรรม หรือหนังสือชมเชย/รับรองผลงาน"
+                        imageBlocks={memberFormData.highlightImageBlocks || memberFormData.imageBlocks || []}
+                        onChange={(newBlocks) => setMemberFormData({ ...memberFormData, highlightImageBlocks: newBlocks, imageBlocks: newBlocks })}
+                      />
+                    </div>
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem', borderTop: '1px solid var(--slate-200)', paddingTop: '0.75rem' }}>

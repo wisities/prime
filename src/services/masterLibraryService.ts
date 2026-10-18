@@ -109,6 +109,9 @@ function cloudRowToTeamMember(row: any): TeamMember {
       highlightProjects: row.highlight_projects || row.data.highlightProjects || '',
       personalBio: row.personal_bio || row.data.personalBio || '',
       photoUrl: row.photo_url || row.data.photoUrl || undefined,
+      bioImageBlocks: row.data.bioImageBlocks || undefined,
+      highlightImageBlocks: row.data.highlightImageBlocks || row.data.imageBlocks || undefined,
+      imageBlocks: row.data.imageBlocks || row.data.highlightImageBlocks || undefined,
     };
   }
   return {

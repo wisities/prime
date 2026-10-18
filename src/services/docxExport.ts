@@ -1113,6 +1113,169 @@ function renderMethodologyParagraphsAndTables(text: string): (Paragraph | Table)
   return result;
 }
 
+function createCvTableCell(text: string, widthPercent: number, isHeader: boolean = false): TableCell {
+  return new TableCell({
+    width: { size: widthPercent, type: WidthType.PERCENTAGE },
+    shading: isHeader ? { fill: '0F2744' } : { fill: 'FFFFFF' },
+    margins: { top: 60, bottom: 60, left: 100, right: 100 },
+    borders: {
+      top: { style: BorderStyle.SINGLE, size: 2, color: 'CBD5E1' },
+      bottom: { style: BorderStyle.SINGLE, size: 2, color: 'CBD5E1' },
+      left: { style: BorderStyle.SINGLE, size: 2, color: 'CBD5E1' },
+      right: { style: BorderStyle.SINGLE, size: 2, color: 'CBD5E1' },
+    },
+    children: [
+      new Paragraph({
+        alignment: isHeader ? AlignmentType.CENTER : AlignmentType.LEFT,
+        spacing: { line: 240, lineRule: LineRuleType.AUTO },
+        children: [
+          new TextRun({
+            text,
+            font: FONT_FAMILY,
+            size: isHeader ? 22 : 20,
+            bold: isHeader,
+            color: isHeader ? 'FFFFFF' : COLOR_TEXT,
+          }),
+        ],
+      }),
+    ],
+  });
+}
+
+function renderCvContentToDocxElements(
+  title: string,
+  rawContent: string,
+  defaultContent: string = '-'
+): (Paragraph | Table)[] {
+  const elements: (Paragraph | Table)[] = [];
+
+  // หัวข้อกำกับ
+  elements.push(
+    new Paragraph({
+      spacing: { before: 40, after: 20 },
+      children: [
+        new TextRun({
+          text: `• ${title}:`,
+          font: FONT_FAMILY,
+          size: 24,
+          bold: true,
+          color: COLOR_TEXT,
+        }),
+      ],
+    })
+  );
+
+  const textToProcess = (rawContent || '').trim() ? rawContent : defaultContent;
+  const lines = textToProcess.split(/\r?\n/);
+
+  let i = 0;
+  while (i < lines.length) {
+    const rawLine = lines[i];
+    const trimmedLine = rawLine.trim();
+
+    // 1. ตาราง Markdown (ขึ้นต้นและลงท้ายด้วย |)
+    if (trimmedLine.startsWith('|') && trimmedLine.endsWith('|')) {
+      const tableLines: string[] = [];
+      while (i < lines.length && lines[i].trim().startsWith('|') && lines[i].trim().endsWith('|')) {
+        tableLines.push(lines[i].trim());
+        i++;
+      }
+
+      const contentRows = tableLines.filter((tl) => !/^\|[\s\-:|]+\|$/.test(tl));
+      if (contentRows.length > 0) {
+        const parsedRows = contentRows.map((r) =>
+          r.split('|').slice(1, -1).map((c) => c.trim())
+        );
+        const colCount = Math.max(...parsedRows.map((r) => r.length), 1);
+        const colWidth = Math.floor(100 / colCount);
+
+        const docxRows: TableRow[] = parsedRows.map((rowCells, rIdx) => {
+          const isHeader = rIdx === 0;
+          const cells: TableCell[] = [];
+          for (let c = 0; c < colCount; c++) {
+            const cellText = rowCells[c] || '';
+            cells.push(createCvTableCell(cellText, colWidth, isHeader));
+          }
+          return new TableRow({
+            tableHeader: isHeader,
+            cantSplit: true,
+            children: cells,
+          });
+        });
+
+        elements.push(
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            margins: { top: 60, bottom: 60 },
+            rows: docxRows,
+          })
+        );
+      }
+      continue;
+    }
+
+    // 2. เว้นบรรทัด (ถ้าบรรทัดว่างเปล่า รักษาระยะเว้นบรรทัดตามที่วางเนื้อหาไว้)
+    if (trimmedLine.length === 0) {
+      elements.push(
+        new Paragraph({
+          spacing: { before: 40, after: 40 },
+          children: [new TextRun({ text: '', font: FONT_FAMILY, size: 24 })],
+        })
+      );
+      i++;
+      continue;
+    }
+
+    // 3. บูลเล็ตพ้อยต์ (ขึ้นต้นด้วย •, -, *)
+    const isBullet = trimmedLine.startsWith('•') || trimmedLine.startsWith('-') || trimmedLine.startsWith('*');
+    if (isBullet) {
+      const cleanLine = trimmedLine.replace(/^[-•*]\s*/, '');
+      const preservedText = cleanLine.replace(/  /g, ' \u00A0');
+      elements.push(
+        new Paragraph({
+          bullet: { level: 0 },
+          spacing: { before: 20, after: 20, line: 240, lineRule: LineRuleType.AUTO },
+          children: [
+            new TextRun({
+              text: preservedText,
+              font: FONT_FAMILY,
+              size: 24,
+              color: COLOR_TEXT,
+            }),
+          ],
+        })
+      );
+      i++;
+      continue;
+    }
+
+    // 4. บรรทัดข้อความทั่วไป: รักษาระยะเว้นวรรค (Indent หรือ Multiple spaces)
+    const leadingSpaces = rawLine.match(/^\s+/)?.[0]?.length || 0;
+    const indentTwips = leadingSpaces > 0 ? Math.min(leadingSpaces * 140, 720) : 0;
+    const preservedLine = rawLine.replace(/  /g, ' \u00A0');
+
+    elements.push(
+      new Paragraph({
+        alignment: AlignmentType.LEFT,
+        indent: indentTwips > 0 ? { left: indentTwips } : undefined,
+        spacing: { before: 20, after: 20, line: 240, lineRule: LineRuleType.AUTO },
+        children: [
+          new TextRun({
+            text: preservedLine,
+            font: FONT_FAMILY,
+            size: 24,
+            color: COLOR_TEXT,
+          }),
+        ],
+      })
+    );
+
+    i++;
+  }
+
+  return elements;
+}
+
 export async function exportProposalToDocx(data: ProposalData): Promise<void> {
   const { cover, section1, section2, section3, section4, section5 } = data;
   const docStructure = normalizeDocumentStructure(data.documentStructure);
@@ -1955,32 +2118,23 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
                 new TextRun({ text: member.certifications || '-', font: FONT_FAMILY, size: 24, color: COLOR_TEXT }),
               ],
             }),
+            ...renderCvContentToDocxElements(
+              'ประวัติย่อ / ประสบการณ์และความเชี่ยวชาญสำคัญ',
+              member.personalBio || '',
+              'มีความรู้ความสามารถและประสบการณ์ตรงในการพัฒนาระบบเทคโนโลยีสารสนเทศภาครัฐ'
+            ),
             new Paragraph({
-              spacing: { before: 40, after: 30 },
-              children: [
-                new TextRun({ text: '• ประวัติส่วนตัว: ', font: FONT_FAMILY, size: 24, bold: true, color: COLOR_TEXT }),
-                new TextRun({
-                  text: member.personalBio || 'มีความรู้ความสามารถและประสบการณ์ตรงในการพัฒนาระบบเทคโนโลยีสารสนเทศภาครัฐ',
-                  font: FONT_FAMILY,
-                  size: 24,
-                  color: COLOR_TEXT,
-                }),
-              ],
-            }),
-            new Paragraph({
-              spacing: { before: 30, after: 30 },
+              spacing: { before: 30, after: 20 },
               children: [
                 new TextRun({ text: '• หน้าที่ความรับผิดชอบในโครงการ: ', font: FONT_FAMILY, size: 24, bold: true, color: COLOR_TEXT }),
-                new TextRun({ text: member.responsibilities, font: FONT_FAMILY, size: 24, color: COLOR_TEXT }),
+                new TextRun({ text: member.responsibilities || '-', font: FONT_FAMILY, size: 24, color: COLOR_TEXT }),
               ],
             }),
-            new Paragraph({
-              spacing: { before: 30, after: 30 },
-              children: [
-                new TextRun({ text: '• ประสบการณ์และผลงานเด่น: ', font: FONT_FAMILY, size: 24, bold: true, color: COLOR_TEXT }),
-                new TextRun({ text: member.highlightProjects, font: FONT_FAMILY, size: 24, color: COLOR_TEXT }),
-              ],
-            }),
+            ...renderCvContentToDocxElements(
+              'ผลงานโครงการสำคัญในอดีต (Highlight Projects)',
+              member.highlightProjects || '',
+              '-'
+            ),
           ];
 
           const rightInfoCell = new TableCell({
@@ -2004,8 +2158,48 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
             ],
           });
 
+          part4Children.push(cvCardTable);
+
+          // ภาพประกอบประวัติย่อ / ความเชี่ยวชาญ (เดี่ยว 6 นิ้ว กึ่งกลาง หรือคู่ 3 นิ้ว 2 คอลัมน์)
+          if (member.bioImageBlocks && member.bioImageBlocks.length > 0) {
+            part4Children.push(
+              new Paragraph({
+                spacing: { before: 100, after: 40 },
+                children: [
+                  new TextRun({
+                    text: `ภาพประกอบประวัติและความเชี่ยวชาญ — ${member.name}`,
+                    font: FONT_FAMILY,
+                    size: 22,
+                    italics: true,
+                    color: COLOR_MUTED,
+                  }),
+                ],
+              }),
+              ...renderImageBlocksToDocx(member.bioImageBlocks, `ภาพที่ 4.${idx + 1} ก`)
+            );
+          }
+
+          // ภาพประกอบผลงานโครงการสำคัญ (Highlight Projects) (เดี่ยว 6 นิ้ว กึ่งกลาง หรือคู่ 3 นิ้ว 2 คอลัมน์)
+          const highlightImgs = member.highlightImageBlocks || member.imageBlocks;
+          if (highlightImgs && highlightImgs.length > 0) {
+            part4Children.push(
+              new Paragraph({
+                spacing: { before: 100, after: 40 },
+                children: [
+                  new TextRun({
+                    text: `ภาพประกอบผลงานโครงการสำคัญ (Highlight Projects) — ${member.name}`,
+                    font: FONT_FAMILY,
+                    size: 22,
+                    italics: true,
+                    color: COLOR_MUTED,
+                  }),
+                ],
+              }),
+              ...renderImageBlocksToDocx(highlightImgs, `ภาพที่ 4.${idx + 1} ข`)
+            );
+          }
+
           part4Children.push(
-            cvCardTable,
             new Paragraph({ spacing: { after: 180 }, children: [] })
           );
         });

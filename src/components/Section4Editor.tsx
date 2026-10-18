@@ -16,7 +16,7 @@ import {
   importMasterTeamFromJson,
 } from '../services/masterLibraryService';
 import { isSupabaseConfigured } from '../services/supabaseClient';
-import { Users, ShieldAlert, Plus, Trash2, Library, ChevronDown, ChevronUp, TableProperties, CheckCheck, Sparkles, RotateCcw, Clock, ArrowUp, ArrowDown, BookmarkPlus, BookmarkCheck, Check, Camera, Upload, User, Database, Download, Briefcase } from 'lucide-react';
+import { Users, ShieldAlert, Plus, Trash2, Library, ChevronDown, ChevronUp, TableProperties, CheckCheck, Sparkles, RotateCcw, Clock, ArrowUp, ArrowDown, BookmarkPlus, BookmarkCheck, Check, Camera, Upload, User, Database, Download, Briefcase, List, Table as TableIcon } from 'lucide-react';
 
 interface Section4EditorProps {
   section4: Section4TeamAndRisk;
@@ -769,36 +769,126 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
 
                   {/* Personal Bio */}
                   <div>
-                    <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>ประวัติส่วนตัวและประสบการณ์ทำงานโดยสรุป</span>
-                      <span style={{ fontSize: '0.725rem', color: '#64748B' }}>(ใช้สำหรับแสดงในหัวข้อประวัติส่วนตัวรายบุคคล)</span>
-                    </label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', flexWrap: 'wrap', gap: '0.35rem' }}>
+                      <label className="form-label" style={{ marginBottom: 0, fontWeight: 600, color: 'var(--primary-900)' }}>
+                        ประวัติส่วนตัวและประสบการณ์ทำงานโดยสรุป
+                      </label>
+                      <div style={{ display: 'flex', gap: '0.35rem' }}>
+                        <button
+                          type="button"
+                          className="btn btn-outline"
+                          style={{ padding: '0.2rem 0.55rem', fontSize: '0.725rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          onClick={() => {
+                            const bulletSnippet = (member.personalBio && !member.personalBio.endsWith('\n') ? '\n' : '') + '• [ระบุความเชี่ยวชาญ/ทักษะสำคัญ]';
+                            handleTeamMemberChange(member.id, 'personalBio', (member.personalBio || '') + bulletSnippet);
+                          }}
+                          title="แทรกบูลเล็ตพ้อยต์"
+                        >
+                          <List size={12} /> + บูลเล็ตพ้อยต์
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-outline"
+                          style={{ padding: '0.2rem 0.55rem', fontSize: '0.725rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          onClick={() => {
+                            const tableSnippet = (member.personalBio && !member.personalBio.endsWith('\n') ? '\n\n' : '') +
+                              '| ลำดับ | รายละเอียดความเชี่ยวชาญ / ทักษะ | ผลงาน / การรับรอง |\n' +
+                              '| 1 | การออกแบบระบบ Cloud Architecture | AWS Solutions Architect Pro |\n' +
+                              '| 2 | การพัฒนาระบบ Enterprise API | ระบบบริการประชาชนภาครัฐ |';
+                            handleTeamMemberChange(member.id, 'personalBio', (member.personalBio || '') + tableSnippet);
+                          }}
+                          title="แทรกตารางแสดงความเชี่ยวชาญ"
+                        >
+                          <TableIcon size={12} /> + แทรกช่องตาราง
+                        </button>
+                      </div>
+                    </div>
                     <textarea
                       className="form-textarea"
-                      style={{ minHeight: '65px' }}
-                      placeholder="สรุปประวัติส่วนตัว ความเชี่ยวชาญ และความพร้อมในการปฏิบัติงานตามตำแหน่ง..."
+                      style={{ minHeight: '80px', lineHeight: 1.5 }}
+                      placeholder="สรุปประวัติส่วนตัว ความเชี่ยวชาญ และความพร้อมในการปฏิบัติงานตามตำแหน่ง (รองรับเว้นวรรค เว้นบรรทัด บูลเล็ต • และตาราง |...|)..."
                       value={member.personalBio || ''}
                       onChange={(e) => handleTeamMemberChange(member.id, 'personalBio', e.target.value)}
                     />
-                  </div>
-
-                  <div className="grid-2">
-                    <div>
-                      <label className="form-label">บทบาทหน้าที่ในโครงการ</label>
-                      <textarea
-                        className="form-textarea"
-                        style={{ minHeight: '60px' }}
-                        value={member.responsibilities}
-                        onChange={(e) => handleTeamMemberChange(member.id, 'responsibilities', e.target.value)}
+                    <div className="form-hint" style={{ fontSize: '0.75rem', color: 'var(--slate-500)', marginTop: '4px' }}>
+                      💡 สามารถเว้นวรรคและเว้นบรรทัดได้อย่างอิสระ ระบบจะรักษาระยะเว้นวรรค เว้นบรรทัด บูลเล็ต และตารางใน Word (.docx) ให้ตรงตามที่วางไว้
+                    </div>
+                    {/* ภาพประกอบประวัติย่อและความเชี่ยวชาญ (เดี่ยว 6 นิ้ว / คู่ 3 นิ้ว) */}
+                    <div style={{ marginTop: '0.75rem' }}>
+                      <ReportImageManager
+                        title={`ภาพประกอบประวัติและความเชี่ยวชาญ: ${member.name} (ขนาด 6 นิ้ว หรือ 3 นิ้วคู่)`}
+                        subtitle="รองรับทั้งภาพเดี่ยว 6 นิ้ว กึ่งกลาง และภาพคู่ 2 คอลัมน์ ขนาดละ 3 นิ้ว เช่น ภาพวุฒิบัตร ใบประกาศนียบัตร หรือภาพการปฏิบัติงาน"
+                        imageBlocks={member.bioImageBlocks || []}
+                        onChange={(newBlocks) => handleTeamMemberChange(member.id, 'bioImageBlocks', newBlocks)}
                       />
                     </div>
-                    <div>
-                      <label className="form-label">ผลงานหรือโครงการเด่นที่ผ่านมา</label>
-                      <textarea
-                        className="form-textarea"
-                        style={{ minHeight: '60px' }}
-                        value={member.highlightProjects}
-                        onChange={(e) => handleTeamMemberChange(member.id, 'highlightProjects', e.target.value)}
+                  </div>
+
+                  <div>
+                    <label className="form-label">บทบาทหน้าที่ในโครงการ</label>
+                    <textarea
+                      className="form-textarea"
+                      style={{ minHeight: '60px' }}
+                      value={member.responsibilities}
+                      onChange={(e) => handleTeamMemberChange(member.id, 'responsibilities', e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', flexWrap: 'wrap', gap: '0.35rem' }}>
+                      <label className="form-label" style={{ marginBottom: 0, fontWeight: 600, color: 'var(--primary-900)' }}>
+                        ผลงานหรือโครงการเด่นที่ผ่านมา (Highlight Projects)
+                      </label>
+                      <div style={{ display: 'flex', gap: '0.35rem' }}>
+                        <button
+                          type="button"
+                          className="btn btn-outline"
+                          style={{ padding: '0.2rem 0.55rem', fontSize: '0.725rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          onClick={() => {
+                            const bulletSnippet = (member.highlightProjects && !member.highlightProjects.endsWith('\n') ? '\n' : '') + '• [ระบุชื่อโครงการ บทบาทหน้าที่ และมูลค่า/เทคโนโลยีที่ใช้]';
+                            handleTeamMemberChange(member.id, 'highlightProjects', (member.highlightProjects || '') + bulletSnippet);
+                          }}
+                          title="แทรกบูลเล็ตพ้อยต์"
+                        >
+                          <List size={12} /> + บูลเล็ตพ้อยต์
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-outline"
+                          style={{ padding: '0.2rem 0.55rem', fontSize: '0.725rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          onClick={() => {
+                            const tableSnippet = (member.highlightProjects && !member.highlightProjects.endsWith('\n') ? '\n\n' : '') +
+                              '| ลำดับ | ชื่อโครงการสำคัญที่ผ่านมา | บทบาทหน้าที่ | หน่วยงาน / ผู้ว่าจ้าง |\n' +
+                              '| 1 | โครงการพัฒนาระบบบริการดิจิทัล | ผู้จัดการโครงการ | สำนักงานปลัดกระทรวงฯ |\n' +
+                              '| 2 | โครงการบูรณาการฐานข้อมูลภาครัฐ | สถาปนิกผู้ออกแบบระบบ | กรมสารสนเทศฯ |';
+                            handleTeamMemberChange(member.id, 'highlightProjects', (member.highlightProjects || '') + tableSnippet);
+                          }}
+                          title="แทรกตารางผลงานโครงการสำคัญ"
+                        >
+                          <TableIcon size={12} /> + แทรกช่องตาราง
+                        </button>
+                      </div>
+                    </div>
+                    <textarea
+                      className="form-textarea"
+                      style={{ minHeight: '80px', lineHeight: 1.5 }}
+                      placeholder="ระบุโครงการเด่นที่เคยรับผิดชอบ (รองรับเว้นวรรค เว้นบรรทัด บูลเล็ต • และตาราง |...|)..."
+                      value={member.highlightProjects}
+                      onChange={(e) => handleTeamMemberChange(member.id, 'highlightProjects', e.target.value)}
+                    />
+                    <div className="form-hint" style={{ fontSize: '0.75rem', color: 'var(--slate-500)', marginTop: '4px' }}>
+                      💡 สามารถเว้นวรรคและเว้นบรรทัดได้อย่างอิสระ ระบบจะรักษาระยะเว้นวรรค เว้นบรรทัด บูลเล็ต และตารางใน Word (.docx) ให้ตรงตามที่วางไว้
+                    </div>
+                    {/* ภาพประกอบผลงานโครงการเด่น (Highlight Projects - เดี่ยว 6 นิ้ว / คู่ 3 นิ้ว) */}
+                    <div style={{ marginTop: '0.75rem' }}>
+                      <ReportImageManager
+                        title={`ภาพประกอบผลงานโครงการเด่น: ${member.name} (ขนาด 6 นิ้ว หรือ 3 นิ้วคู่)`}
+                        subtitle="รองรับทั้งภาพเดี่ยว 6 นิ้ว กึ่งกลาง และภาพคู่ 2 คอลัมน์ ขนาดละ 3 นิ้ว เช่น ภาพหน้าจอระบบ แผนผังสถาปัตยกรรม หรือหนังสือชมเชย/รับรองผลงาน"
+                        imageBlocks={member.highlightImageBlocks || member.imageBlocks || []}
+                        onChange={(newBlocks) => {
+                          handleTeamMemberChange(member.id, 'highlightImageBlocks', newBlocks);
+                          handleTeamMemberChange(member.id, 'imageBlocks', newBlocks);
+                        }}
                       />
                     </div>
                   </div>
