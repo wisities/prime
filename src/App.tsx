@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ProposalData, BiddingProject, ProposalStatus } from './types/proposal';
 import { INITIAL_PROPOSAL_DATA, createDefaultBlankProject } from './data/defaultData';
 import { exportProposalToDocx } from './services/docxExport';
+import { exportProjectPackage, importProjectPackage } from './services/projectPackageService';
 import { runRuleBasedAudit } from './services/proposalAuditor';
 
 import { ProjectDashboard, computeProjectCompletion } from './components/ProjectDashboard';
@@ -16,6 +17,7 @@ import { LiveDocxPreviewModal } from './components/LiveDocxPreviewModal';
 import { DocumentStructureModal } from './components/DocumentStructureModal';
 import { BomExportModal } from './components/BomExportModal';
 import { TorImportModal } from './components/TorImportModal';
+import { ExportDocxModal } from './components/ExportDocxModal';
 import { LoginPage } from './components/LoginPage';
 import { AccessDeniedPage } from './components/AccessDeniedPage';
 import { UserManagementModal } from './components/UserManagementModal';
@@ -39,6 +41,7 @@ import {
   Eye,
   Save,
   Upload,
+  Download,
   RotateCcw,
   Sparkles,
   CheckCircle,
@@ -484,6 +487,8 @@ export const App: React.FC = () => {
   const [hasGeminiKey, setHasGeminiKey] = useState(isGeminiAvailable());
   const [activeTorAttachmentId, setActiveTorAttachmentId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [showExportDocxModal, setShowExportDocxModal] = useState(false);
+  const [isExportingPrimePackage, setIsExportingPrimePackage] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -503,14 +508,41 @@ export const App: React.FC = () => {
   const auditBadgeCount = auditIssues.length;
 
   const handleExportDocx = async () => {
+    const hasCerts = (proposal.section5?.pastProjects || []).some(
+      (p) => p.isSelected && !!p.certificateFileUrl
+    );
+    if (hasCerts) {
+      setShowExportDocxModal(true);
+    } else {
+      try {
+        setIsExporting(true);
+        await exportProposalToDocx(proposal);
+      } catch (error) {
+        console.error('Export docx error', error);
+        alert('เกิดข้อผิดพลาดในการสร้างไฟล์ Word โปรดตรวจสอบความสมบูรณ์ของข้อมูล');
+      } finally {
+        setIsExporting(false);
+      }
+    }
+  };
+
+  const handleExportPrimePackage = async () => {
     try {
-      setIsExporting(true);
-      await exportProposalToDocx(proposal);
-    } catch (error) {
-      console.error('Export docx error', error);
-      alert('เกิดข้อผิดพลาดในการสร้างไฟล์ Word โปรดตรวจสอบความสมบูรณ์ของข้อมูล');
+      setIsExportingPrimePackage(true);
+      const targetProj: BiddingProject = currentProject
+        ? { ...currentProject, proposalData: proposal }
+        : {
+            ...createDefaultBlankProject(),
+            proposalData: proposal,
+            projectTitle: proposal.cover.projectTitle || 'ข้อเสนอโครงการ',
+            projectCode: proposal.cover.projectCode || 'Draft',
+          };
+      await exportProjectPackage(targetProj);
+    } catch (err: any) {
+      console.error('Prime export error:', err);
+      alert('เกิดข้อผิดพลาดในการส่งออกแพ็กเกจโครงการ: ' + (err?.message || ''));
     } finally {
-      setIsExporting(false);
+      setIsExportingPrimePackage(false);
     }
   };
 
@@ -535,9 +567,24 @@ export const App: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  const handleImportJson = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportProjectFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (file.name.toLowerCase().endsWith('.prime')) {
+      try {
+        const importedProj = await importProjectPackage(file);
+        if (importedProj.proposalData) {
+          updateProposalAndProject(() => importedProj.proposalData);
+          alert(`✓ นำเข้าแพ็กเกจโครงการ "${importedProj.projectTitle}" พร้อมไฟล์แนบและสัญญาเรียบร้อยแล้ว!`);
+        }
+      } catch (err: any) {
+        console.error('Import .prime error:', err);
+        alert('เกิดข้อผิดพลาดในการนำเข้าไฟล์ .prime: ' + (err?.message || 'ไฟล์ชำรุด'));
+      }
+      if (e.target) e.target.value = '';
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -545,6 +592,9 @@ export const App: React.FC = () => {
         const parsed = JSON.parse(event.target?.result as string);
         if (parsed.cover && parsed.section1 && parsed.section3) {
           updateProposalAndProject(() => parsed);
+          alert('นำเข้าข้อมูลโครงการเรียบร้อยแล้ว');
+        } else if (parsed.proposalData) {
+          updateProposalAndProject(() => parsed.proposalData);
           alert('นำเข้าข้อมูลโครงการเรียบร้อยแล้ว');
         } else {
           alert('ไฟล์ JSON ไม่ตรงกับรูปแบบข้อมูลข้อเสนอโครงการ');
@@ -768,24 +818,41 @@ export const App: React.FC = () => {
 
           <div className="header-actions">
 
-            {/* Hidden JSON file input */}
+            {/* Hidden JSON / Prime package file input */}
             <input
               type="file"
               ref={fileInputRef}
-              accept=".json"
+              accept=".prime,.json"
               style={{ display: 'none' }}
-              onChange={handleImportJson}
+              onChange={handleImportProjectFile}
             />
 
             {currentView === 'editor' && (
               <>
                 <button
                   type="button"
+                  onClick={handleExportPrimePackage}
+                  disabled={isExportingPrimePackage}
+                  className="btn btn-secondary"
+                  style={{
+                    backgroundColor: '#EFF6FF',
+                    color: '#1D4ED8',
+                    borderColor: '#BFDBFE',
+                    fontWeight: 600,
+                  }}
+                  title="ส่งออกแพ็กเกจโครงการฉบับสมบูรณ์ (.prime) รวมสัญญา ไฟล์แนบ และรูปภาพ สำหรับส่งต่อให้เพื่อนร่วมงานทำงานต่อได้ทันที"
+                >
+                  <Download size={15} />
+                  <span>{isExportingPrimePackage ? 'กำลังส่งออก...' : '📦 ส่งต่อโครงการ (.prime)'}</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => fileInputRef.current?.click()}
                   className="btn btn-secondary"
-                  title="เปิดไฟล์โครงการที่เคยบันทึกไว้"
+                  title="เปิดไฟล์แพ็กเกจโครงการ (.prime) หรือไฟล์ร่าง (.json) ที่เคยบันทึกไว้"
                 >
-                  <Upload size={15} /> นำเข้า JSON
+                  <Upload size={15} /> นำเข้า (.prime / .json)
                 </button>
 
                 <button
@@ -1396,6 +1463,12 @@ export const App: React.FC = () => {
         projectId={currentProject?.id || activeProjectId}
         projectTitle={currentProject?.projectTitle || proposal?.cover?.projectTitle || ''}
         onRestoreDraft={handleRestoreDraft}
+      />
+
+      <ExportDocxModal
+        isOpen={showExportDocxModal}
+        proposalData={proposal}
+        onClose={() => setShowExportDocxModal(false)}
       />
     </div>
   );

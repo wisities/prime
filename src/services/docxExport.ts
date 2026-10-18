@@ -1276,7 +1276,7 @@ function renderCvContentToDocxElements(
   return elements;
 }
 
-export async function exportProposalToDocx(data: ProposalData): Promise<void> {
+export async function generateProposalDocxBlob(data: ProposalData): Promise<{ blob: Blob; fileName: string }> {
   const { cover, section1, section2, section3, section4, section5 } = data;
   const docStructure = normalizeDocumentStructure(data.documentStructure);
   const autoRenumber = docStructure.autoRenumber ?? true;
@@ -2730,35 +2730,98 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
               createP(`หน่วยงานผู้ว่าจ้าง: ${proj.clientName} | ปีที่แล้วเสร็จ: พ.ศ. ${proj.completionYearBE} | มูลค่าสัญญา: ${proj.contractValue.toLocaleString()} บาท`, { spaceAfter: 80, align: AlignmentType.LEFT })
             );
 
-            try {
-              const certBytes = base64ToUint8Array(proj.certificateFileUrl!);
+            const isPdf =
+              (proj.certificateFileUrl || '').startsWith('data:application/pdf') ||
+              (proj.certificateFileName || '').toLowerCase().endsWith('.pdf');
+
+            if (isPdf) {
               part6Children.push(
-                new Paragraph({
-                  alignment: AlignmentType.CENTER,
-                  spacing: { before: 80, after: 60 },
-                  children: [
-                    new ImageRun({
-                      data: certBytes,
-                      transformation: { width: 520, height: 420 },
-                    } as any),
-                  ],
-                }),
-                new Paragraph({
-                  alignment: AlignmentType.CENTER,
-                  spacing: { after: 200 },
-                  children: [
-                    new TextRun({
-                      text: `สำเนาสัญญาจ้างหรือหนังสือรับรองผลงาน: ${proj.projectName}`,
-                      font: FONT_FAMILY,
-                      size: 24,
-                      italics: true,
-                      color: COLOR_MUTED,
+                new Table({
+                  width: { size: 100, type: WidthType.PERCENTAGE },
+                  borders: {
+                    top: { style: BorderStyle.SINGLE, size: 2, color: '93C5FD' },
+                    bottom: { style: BorderStyle.SINGLE, size: 2, color: '93C5FD' },
+                    left: { style: BorderStyle.SINGLE, size: 6, color: '1D4ED8' },
+                    right: { style: BorderStyle.SINGLE, size: 2, color: '93C5FD' },
+                  },
+                  rows: [
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          shading: { fill: 'EFF6FF' },
+                          margins: { top: 120, bottom: 120, left: 180, right: 180 },
+                          children: [
+                            new Paragraph({
+                              alignment: AlignmentType.LEFT,
+                              spacing: { line: 240, lineRule: LineRuleType.AUTO },
+                              children: [
+                                new TextRun({
+                                  text: '📄 เอกสารแนบรูปแบบ PDF: ',
+                                  font: FONT_FAMILY,
+                                  size: 28,
+                                  bold: true,
+                                  color: '1E3A8A',
+                                }),
+                                new TextRun({
+                                  text: proj.certificateFileName || 'สำเนาสัญญาจ้าง / หนังสือรับรองผลงาน (ไฟล์ PDF)',
+                                  font: FONT_FAMILY,
+                                  size: 28,
+                                  bold: true,
+                                  color: '0F2744',
+                                }),
+                              ],
+                            }),
+                            new Paragraph({
+                              alignment: AlignmentType.LEFT,
+                              spacing: { before: 60, line: 240, lineRule: LineRuleType.AUTO },
+                              children: [
+                                new TextRun({
+                                  text: 'เอกสารฉบับนี้เป็นไฟล์ PDF ทางการ โปรดตรวจสอบและเปิดดูเอกสารฉบับสมบูรณ์ในไฟล์แนบ "ภาคผนวก_ก_สำเนาสัญญาและหนังสือรับรองผลงาน.pdf" หรือแพ็กเกจเอกสารแนบที่ส่งมอบคู่กับเล่มข้อเสนอนี้',
+                                  font: FONT_FAMILY,
+                                  size: 26,
+                                  color: '475569',
+                                }),
+                              ],
+                            }),
+                          ],
+                        }),
+                      ],
                     }),
                   ],
-                })
+                }),
+                new Paragraph({ spacing: { after: 180 }, children: [] })
               );
-            } catch (e) {
-              console.warn('Failed to embed certificate image in appendix', e);
+            } else {
+              try {
+                const certBytes = base64ToUint8Array(proj.certificateFileUrl!);
+                part6Children.push(
+                  new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    spacing: { before: 80, after: 60 },
+                    children: [
+                      new ImageRun({
+                        data: certBytes,
+                        transformation: { width: 520, height: 420 },
+                      } as any),
+                    ],
+                  }),
+                  new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    spacing: { after: 200 },
+                    children: [
+                      new TextRun({
+                        text: `สำเนาสัญญาจ้างหรือหนังสือรับรองผลงาน: ${proj.projectName}`,
+                        font: FONT_FAMILY,
+                        size: 24,
+                        italics: true,
+                        color: COLOR_MUTED,
+                      }),
+                    ],
+                  })
+                );
+              } catch (e) {
+                console.error('Failed to embed certificate image in docx', e);
+              }
             }
           });
         }
@@ -3100,5 +3163,10 @@ export async function exportProposalToDocx(data: ProposalData): Promise<void> {
 
   const blob = await Packer.toBlob(doc);
   const fileName = `ข้อเสนอโครงการ_${cover.projectTitle.replace(/[\/\\?%*:|"<>]/g, '_').substring(0, 40)}_${cover.projectCode}.docx`;
+  return { blob, fileName };
+}
+
+export async function exportProposalToDocx(data: ProposalData): Promise<void> {
+  const { blob, fileName } = await generateProposalDocxBlob(data);
   saveAs(blob, fileName);
 }

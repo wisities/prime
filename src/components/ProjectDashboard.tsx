@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { BiddingProject, ProposalStatus, ProjectAttachment } from '../types/proposal';
 import { createBlankProposalData } from '../data/defaultData';
 import { exportProposalToDocx } from '../services/docxExport';
+import { exportProjectPackage, importProjectPackage } from '../services/projectPackageService';
 import {
   uploadAttachmentFile,
   testSupabaseConnection,
@@ -13,6 +14,7 @@ import {
 } from '../services/projectStorageService';
 import { extractProjectMetadataFromFile, parseTorTextRules } from '../services/torDocReader';
 import { MasterLibraryManagementModal } from './MasterLibraryManagementModal';
+import { ExportDocxModal } from './ExportDocxModal';
 import {
   FileText,
   ExternalLink,
@@ -197,6 +199,8 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   
   // Master Library Modal State
   const [showMasterLibrariesModal, setShowMasterLibrariesModal] = useState(false);
+  const [exportDocxModalProject, setExportDocxModalProject] = useState<BiddingProject | null>(null);
+  const [isExportingPrimePackage, setIsExportingPrimePackage] = useState<string | null>(null);
 
   // Project Edit/Create Modal State
   const [editingProject, setEditingProject] = useState<BiddingProject | null>(null);
@@ -857,11 +861,31 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
   // Download DOCX directly from dashboard
   const handleExportDocx = async (project: BiddingProject) => {
+    const hasCerts = (project.proposalData?.section5?.pastProjects || []).some(
+      (p) => p.isSelected && !!p.certificateFileUrl
+    );
+    if (hasCerts) {
+      setExportDocxModalProject(project);
+    } else {
+      try {
+        await exportProposalToDocx(project.proposalData);
+      } catch (err) {
+        console.error(err);
+        alert('เกิดข้อผิดพลาดในการสร้างไฟล์ Word');
+      }
+    }
+  };
+
+  // Export full project package (.prime) with all files & attachments
+  const handleExportPrimePackage = async (project: BiddingProject) => {
     try {
-      await exportProposalToDocx(project.proposalData);
-    } catch (err) {
-      console.error(err);
-      alert('เกิดข้อผิดพลาดในการสร้างไฟล์ Word');
+      setIsExportingPrimePackage(project.id);
+      await exportProjectPackage(project);
+    } catch (err: any) {
+      console.error('Prime package export error:', err);
+      alert('เกิดข้อผิดพลาดในการสร้างไฟล์แพ็กเกจ .prime');
+    } finally {
+      setIsExportingPrimePackage(null);
     }
   };
 
@@ -891,10 +915,37 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  // Import JSON (supports both single project .json or full array backup)
-  const handleImportAllJson = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Import project (.prime archive or JSON file)
+  const handleImportProjectFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (file.name.toLowerCase().endsWith('.prime')) {
+      try {
+        const importedProj = await importProjectPackage(file);
+        const existingIdx = projects.findIndex(
+          (p) => p.id === importedProj.id || (p.projectCode && p.projectCode === importedProj.projectCode)
+        );
+        let updatedList: BiddingProject[];
+        if (existingIdx >= 0) {
+          if (window.confirm(`พบโครงการ "${importedProj.projectTitle}" (${importedProj.projectCode}) อยู่ในระบบแล้ว ต้องการแทนที่เนื้อหาด้วยแพ็กเกจที่นำเข้ามาหรือไม่?`)) {
+            updatedList = projects.map((p, idx) => (idx === existingIdx ? { ...p, ...importedProj, id: p.id } : p));
+          } else {
+            return;
+          }
+        } else {
+          updatedList = [importedProj, ...projects];
+        }
+        onUpdateProjects(updatedList);
+        alert(`✓ นำเข้าแพ็กเกจโครงการ "${importedProj.projectTitle}" พร้อมไฟล์แนบและสัญญาครบถ้วน 100%!`);
+      } catch (err: any) {
+        console.error('Import .prime error:', err);
+        alert(`เกิดข้อผิดพลาดในการนำเข้าไฟล์ .prime: ${err?.message || 'ไฟล์ชำรุด'}`);
+      } finally {
+        if (e.target) e.target.value = '';
+      }
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -945,9 +996,9 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       <input
         type="file"
         ref={jsonImportInputRef}
-        accept=".json"
+        accept=".prime,.json"
         style={{ display: 'none' }}
-        onChange={handleImportAllJson}
+        onChange={handleImportProjectFile}
       />
 
       {/* Hero / Header Section */}
@@ -1020,9 +1071,9 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             type="button"
             className="btn btn-secondary hero-btn"
             onClick={() => jsonImportInputRef.current?.click()}
-            title="นำเข้าไฟล์ร่างโครงการ (.json) ที่เพื่อนร่วมงานส่งให้ หรือนำเข้าไฟล์สำรองฐานข้อมูล"
+            title="นำเข้าไฟล์แพ็กเกจโครงการ (.prime) พร้อมสัญญา/ไฟล์แนบ หรือไฟล์ร่าง (.json) ที่เพื่อนร่วมงานส่งให้"
           >
-            <Upload size={16} /> นำเข้าไฟล์โครงการ (.json)
+            <Upload size={16} /> นำเข้าโครงการ (.prime / .json)
           </button>
           <button
             type="button"
@@ -1879,19 +1930,41 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                     <button
                       type="button"
                       className="btn btn-outline"
+                      style={{
+                        fontSize: '0.8rem',
+                        padding: '0.4rem 0.75rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        backgroundColor: '#EFF6FF',
+                        borderColor: '#BFDBFE',
+                        color: '#1D4ED8',
+                        fontWeight: 600,
+                      }}
+                      onClick={() => handleExportPrimePackage(project)}
+                      disabled={isExportingPrimePackage === project.id}
+                      title="ส่งออกแพ็กเกจโครงการฉบับสมบูรณ์ (.prime) รวมสัญญา ไฟล์แนบ และรูปภาพครบ 100% สำหรับส่งต่อให้เพื่อนร่วมงานทำงานต่อได้ทันที"
+                    >
+                      <Download size={14} />
+                      <span>{isExportingPrimePackage === project.id ? 'กำลังรวมแพ็กเกจ...' : '📦 ส่งต่อโครงการ (.prime)'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn btn-outline"
                       style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem', display: 'flex', alignItems: 'center', gap: '5px' }}
                       onClick={() => handleExportSingleProject(project)}
                       title="ส่งออกไฟล์ร่างข้อเสนอโครงการนี้ (.json) เพื่อแชร์หรือส่งต่อให้เพื่อนร่วมงานนำไปทำต่อในเครื่องตนเอง"
                     >
                       <Download size={14} />
-                      <span>ส่งออกไฟล์ร่าง (.json)</span>
+                      <span>ร่าง (.json)</span>
                     </button>
 
                     <button
                       type="button"
                       className="btn btn-outline footer-btn-export"
                       onClick={() => handleExportDocx(project)}
-                      title="สร้างและดาวน์โหลดไฟล์ข้อเสนอโครงการเป็น Microsoft Word (.docx)"
+                      title="สร้างและดาวน์โหลดไฟล์ข้อเสนอโครงการเป็น Microsoft Word (.docx) พร้อมตัวเลือกแนบเอกสารสัญญา PDF"
                     >
                       <FileDown size={14} /> ดาวน์โหลด Word
                     </button>
@@ -2751,6 +2824,15 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         isOpen={showMasterLibrariesModal}
         onClose={() => setShowMasterLibrariesModal(false)}
       />
+
+      {/* Export DOCX Confirmation / Annex Modal */}
+      {exportDocxModalProject && (
+        <ExportDocxModal
+          isOpen={!!exportDocxModalProject}
+          proposalData={exportDocxModalProject.proposalData}
+          onClose={() => setExportDocxModalProject(null)}
+        />
+      )}
     </div>
   );
 };
