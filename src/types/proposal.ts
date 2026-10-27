@@ -120,6 +120,9 @@ export interface TeamMember {
   certifications: string;
   experienceYears: number;
   startWorkYearBE?: number; // ปี พ.ศ. ที่เริ่มทำงานสำหรับนับปีประสบการณ์
+  memberCode?: string; // รหัสบุคลากร เช่น 2568-EMP-001 (ขึ้นต้นด้วยปี พ.ศ. ที่บันทึก)
+  recordedYearBE?: number; // ปี พ.ศ. ที่บันทึกข้อมูล
+  originalMasterId?: string; // รหัสอ้างอิงบุคลากรเดิมในคลังกลาง เพื่อตรวจจับการอัปเดตกลับคลัง
   responsibilities: string;
   highlightProjects: string;
   photoUrl?: string; // base64 รูปถ่ายหน้าตรงขนาด 1.5 นิ้ว
@@ -155,6 +158,9 @@ export type ProjectTrackType = 'tor_reference' | 'supplementary';
 
 export interface PastProject {
   id: string;
+  projectCode?: string; // รหัสโครงการ เช่น 2567-PRJ-001 (ขึ้นต้นด้วยปี พ.ศ. ที่ได้สัญญา)
+  contractYearBE?: number; // ปีที่ได้สัญญา พ.ศ. (ค่าเริ่มต้นเท่ากับ completionYearBE)
+  originalMasterId?: string; // รหัสอ้างอิงของโครงการเดิมในคลังกลาง เพื่อตรวจจับการอัปเดตกลับคลัง
   projectName: string;
   clientName: string;
   clientLogoUrl?: string; // ภาพโลโก้ของลูกค้า / หน่วยงานผู้ว่าจ้างที่เคยทำงานให้

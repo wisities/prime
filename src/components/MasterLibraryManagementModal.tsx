@@ -21,6 +21,8 @@ import {
   saveMasterCompanyProfile,
   resetMasterCompanyProfile,
   MASTER_COMPANY_UPDATED_EVENT,
+  generateMasterProjectCode,
+  generateMasterMemberId,
 } from '../services/masterLibraryService';
 import { sortPastProjects } from './Section5Editor';
 import { ReportImageManager } from './ReportImageManager';
@@ -178,8 +180,12 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
   // Project Tab Actions
   // -------------------------------------------------------------------------
   const handleOpenAddProject = () => {
+    const contractYr = currentYearBE;
+    const autoCode = generateMasterProjectCode(contractYr, projects);
     setProjectFormData({
       id: `lib-proj-${Date.now()}`,
+      projectCode: autoCode,
+      contractYearBE: contractYr,
       projectName: '',
       clientName: '',
       contractValue: 0,
@@ -196,7 +202,13 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
   };
 
   const handleOpenEditProject = (proj: PastProject) => {
-    setProjectFormData({ ...proj });
+    const contractYr = proj.contractYearBE || proj.completionYearBE || currentYearBE;
+    const code = proj.projectCode || generateMasterProjectCode(contractYr, projects);
+    setProjectFormData({
+      ...proj,
+      contractYearBE: contractYr,
+      projectCode: code,
+    });
     setIsEditingProject(true);
   };
 
@@ -207,8 +219,13 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
       return;
     }
 
+    const contractYr = Number(projectFormData.contractYearBE) || Number(projectFormData.completionYearBE) || currentYearBE;
+    const code = projectFormData.projectCode?.trim() || generateMasterProjectCode(contractYr, projects);
+
     const projToSave: PastProject = {
       id: projectFormData.id || `lib-proj-${Date.now()}`,
+      projectCode: code,
+      contractYearBE: contractYr,
       projectName: projectFormData.projectName.trim(),
       clientName: projectFormData.clientName || '',
       clientLogoUrl: projectFormData.clientLogoUrl,
@@ -228,7 +245,7 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
     const updated = saveProjectToMasterLibrary(projToSave);
     setProjects(updated);
     setIsEditingProject(false);
-    showToast(`บันทึกโครงการ "${projToSave.projectName}" ลงในคลังกลางสำเร็จ`);
+    showToast(`บันทึกโครงการ "${projToSave.projectName}" (รหัส: ${projToSave.projectCode}) ลงในคลังกลางสำเร็จ`);
   };
 
   const handleDeleteProject = (id: string, name: string) => {
@@ -262,8 +279,12 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
   // -------------------------------------------------------------------------
   const handleOpenAddMember = () => {
     const defaultStart = currentYearBE - 5;
+    const recYr = currentYearBE;
+    const autoCode = generateMasterMemberId(recYr, teamMembers);
     setMemberFormData({
       id: `lib-team-${Date.now()}`,
+      memberCode: autoCode,
+      recordedYearBE: recYr,
       name: '',
       proposedRole: '',
       education: '',
@@ -285,8 +306,12 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
     const computedExp = (startYear && !isNaN(Number(startYear)))
       ? Math.max(0, currentYearBE - Number(startYear))
       : (member.experienceYears || 0);
+    const recYr = member.recordedYearBE || currentYearBE;
+    const code = member.memberCode || generateMasterMemberId(recYr, teamMembers);
     setMemberFormData({
       ...member,
+      memberCode: code,
+      recordedYearBE: recYr,
       experienceYears: computedExp,
       bioImageBlocks: member.bioImageBlocks || [],
       highlightImageBlocks: member.highlightImageBlocks || member.imageBlocks || [],
@@ -324,8 +349,13 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
       ? Math.max(0, currentYearBE - Number(memberFormData.startWorkYearBE))
       : (Number(memberFormData.experienceYears) || 0);
 
+    const recYr = Number(memberFormData.recordedYearBE) || currentYearBE;
+    const code = memberFormData.memberCode?.trim() || generateMasterMemberId(recYr, teamMembers);
+
     const memberToSave: TeamMember = {
       id: memberFormData.id || `lib-team-${Date.now()}`,
+      memberCode: code,
+      recordedYearBE: recYr,
       name: memberFormData.name.trim(),
       proposedRole: memberFormData.proposedRole || '',
       education: memberFormData.education || '',
@@ -344,7 +374,7 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
     const updated = saveMemberToMasterLibrary(memberToSave);
     setTeamMembers(updated);
     setIsEditingMember(false);
-    showToast(`บันทึกบุคลากร "${memberToSave.name}" ลงในคลังกลางสำเร็จ`);
+    showToast(`บันทึกบุคลากร "${memberToSave.name}" (รหัส: ${memberToSave.memberCode}) ลงในคลังกลางสำเร็จ`);
   };
 
   const handleDeleteMember = (id: string, name: string) => {
@@ -584,6 +614,45 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                   </div>
 
                   <div className="grid-2">
+                    <div className="form-group">
+                      <label className="form-label">
+                        รหัสโครงการ (Project Code) <span className="required">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        required
+                        placeholder="เช่น 2567-PRJ-001"
+                        value={projectFormData.projectCode || ''}
+                        onChange={(e) => setProjectFormData({ ...projectFormData, projectCode: e.target.value })}
+                        title="รหัสโครงการขึ้นต้นด้วยปี พ.ศ. ที่ได้สัญญา"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">
+                        ปีที่ได้สัญญา (พ.ศ.)
+                      </label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        value={projectFormData.contractYearBE || projectFormData.completionYearBE || currentYearBE}
+                        onChange={(e) => {
+                          const yr = parseInt(e.target.value) || currentYearBE;
+                          const currentCode = projectFormData.projectCode || '';
+                          const newCode = currentCode && /^\d{4}-/.test(currentCode)
+                            ? currentCode.replace(/^\d{4}/, String(yr))
+                            : `${yr}-PRJ-001`;
+                          setProjectFormData({
+                            ...projectFormData,
+                            contractYearBE: yr,
+                            projectCode: newCode,
+                          });
+                        }}
+                        title="ปี พ.ศ. ที่ลงนามหรือได้สัญญาโครงการ"
+                      />
+                    </div>
+
                     <div className="form-group" style={{ gridColumn: 'span 2' }}>
                       <label className="form-label">
                         ชื่อโครงการ <span className="required">*</span>
@@ -1132,6 +1201,21 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                   <span
                                     style={{
+                                      fontSize: '0.72rem',
+                                      padding: '2px 7px',
+                                      borderRadius: '4px',
+                                      fontWeight: 700,
+                                      backgroundColor: '#E0F2FE',
+                                      color: '#0369A1',
+                                      border: '1px solid #BAE6FD',
+                                      letterSpacing: '0.02em',
+                                    }}
+                                    title="รหัสโครงการขึ้นต้นด้วยปี พ.ศ. ที่ได้สัญญา"
+                                  >
+                                    {item.projectCode || item.id}
+                                  </span>
+                                  <span
+                                    style={{
                                       fontSize: '0.7rem',
                                       padding: '2px 7px',
                                       borderRadius: '4px',
@@ -1225,6 +1309,45 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                   </div>
 
                   <div className="grid-2">
+                    <div className="form-group">
+                      <label className="form-label">
+                        รหัสประจำตัวบุคลากร (Member ID) <span className="required">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        required
+                        placeholder={`เช่น ${currentYearBE}-EMP-001`}
+                        value={memberFormData.memberCode || ''}
+                        onChange={(e) => setMemberFormData({ ...memberFormData, memberCode: e.target.value })}
+                        title="รหัสประจำตัวบุคลากรตามปีที่บันทึก"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">
+                        ปีที่บันทึกข้อมูล (พ.ศ.)
+                      </label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        value={memberFormData.recordedYearBE || currentYearBE}
+                        onChange={(e) => {
+                          const yr = parseInt(e.target.value) || currentYearBE;
+                          const currentCode = memberFormData.memberCode || '';
+                          const newCode = currentCode && /^\d{4}-/.test(currentCode)
+                            ? currentCode.replace(/^\d{4}/, String(yr))
+                            : `${yr}-EMP-001`;
+                          setMemberFormData({
+                            ...memberFormData,
+                            recordedYearBE: yr,
+                            memberCode: newCode,
+                          });
+                        }}
+                        title="ปี พ.ศ. ที่บันทึกประวัติบุคลากรเข้าระบบ"
+                      />
+                    </div>
+
                     <div className="form-group">
                       <label className="form-label">
                         ชื่อ-นามสกุล (พร้อมคำนำหน้า) <span className="required">*</span>
@@ -1637,6 +1760,21 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
 
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <span
+                                  style={{
+                                    fontSize: '0.72rem',
+                                    padding: '2px 7px',
+                                    borderRadius: '4px',
+                                    fontWeight: 700,
+                                    backgroundColor: '#E0F2FE',
+                                    color: '#0369A1',
+                                    border: '1px solid #BAE6FD',
+                                    letterSpacing: '0.02em',
+                                  }}
+                                  title="รหัสประจำตัวบุคลากรตามปีที่บันทึก"
+                                >
+                                  ID: {member.memberCode || member.id}
+                                </span>
                                 <span style={{ fontWeight: 700, color: 'var(--slate-900)', fontSize: '0.95rem' }}>{member.name}</span>
                                 {member.proposedRole && (
                                   <span style={{ fontSize: '0.75rem', backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>

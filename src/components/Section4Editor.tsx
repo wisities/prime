@@ -118,6 +118,9 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
         newItems.push({
           ...member,
           id: uniqueId,
+          originalMasterId: member.id,
+          memberCode: member.memberCode || member.id,
+          recordedYearBE: member.recordedYearBE || currentYearBE,
         });
       }
     });
@@ -218,8 +221,12 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
 
   const handleAddMember = () => {
     const defaultStartYear = currentYearBE - 5;
+    const newId = `member-${Date.now()}`;
+    const autoMemberCode = `${currentYearBE}-EMP-${String(section4.teamMembers.length + 1).padStart(3, '0')}`;
     const newMember: TeamMember = {
-      id: `member-${Date.now()}`,
+      id: newId,
+      memberCode: autoMemberCode,
+      recordedYearBE: currentYearBE,
       name: 'นาย/นางสาว (ระบุชื่อ-นามสกุล)',
       proposedRole: 'วิศวกรซอฟต์แวร์ / ผู้เชี่ยวชาญ',
       education: 'ปริญญาตรี วิทยาการคอมพิวเตอร์',
@@ -262,7 +269,13 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
       alert(`มีบุคลากร "${member.name}" ในโครงการนี้แล้ว`);
       return;
     }
-    const cloned = { ...member, id: `member-${Date.now()}` };
+    const cloned: TeamMember = {
+      ...member,
+      id: `member-${Date.now()}`,
+      originalMasterId: member.id,
+      memberCode: member.memberCode || member.id,
+      recordedYearBE: member.recordedYearBE || currentYearBE,
+    };
     onChange({ ...section4, teamMembers: [...section4.teamMembers, cloned] });
     setShowLibraryModal(false);
   };
@@ -285,7 +298,7 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
     }
     const updated = saveMemberToMasterLibrary(member);
     setTeamLibrary(updated);
-    setSavedMemberToast(`บันทึก "${member.name}" เข้าสู่คลังบุคลากรกลางเรียบร้อยแล้ว`);
+    setSavedMemberToast(`บันทึก/อัปเดตข้อมูล "${member.name}" (รหัส: ${member.memberCode || member.id}) ในคลังบุคลากรกลางเรียบร้อยแล้ว`);
     setTimeout(() => setSavedMemberToast(null), 3000);
   };
 
@@ -504,6 +517,27 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
                   >
                     ลำดับที่ {idx + 1}
                   </span>
+                  {(member.memberCode || member.id) && (
+                    <span
+                      style={{
+                        backgroundColor: '#E0F2FE',
+                        color: '#0369A1',
+                        border: '1px solid #BAE6FD',
+                        fontWeight: 700,
+                        padding: '0.2rem 0.5rem',
+                        borderRadius: '6px',
+                        fontSize: '0.78rem',
+                        letterSpacing: '0.02em',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                      title={`รหัส ID บุคลากร: ${member.memberCode || member.id}${member.originalMasterId ? ' (เชื่อมโยงคลังกลาง: ' + member.originalMasterId + ')' : ''}`}
+                    >
+                      ID: {member.memberCode || member.id}
+                      {member.originalMasterId && <span style={{ fontSize: '0.7rem' }}>🔗</span>}
+                    </span>
+                  )}
                   <input
                     type="text"
                     className="form-input"
@@ -700,7 +734,42 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
 
                 {/* Form Inputs Details */}
                 <div style={{ flex: 1, minWidth: '300px', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                  <div className="grid-4">
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+                    <div>
+                      <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>รหัสประจำตัว (Member ID)</span>
+                        {member.originalMasterId && (
+                          <span style={{ fontSize: '0.68rem', color: '#0284C7', fontWeight: 600 }}>🔗 คลังกลาง</span>
+                        )}
+                      </label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder={`เช่น ${currentYearBE}-EMP-001`}
+                        value={member.memberCode || ''}
+                        onChange={(e) => handleTeamMemberChange(member.id, 'memberCode', e.target.value)}
+                        title="รหัสประจำตัวบุคลากรตามปีที่บันทึก"
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">ปีที่บันทึกข้อมูล (พ.ศ.)</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        value={member.recordedYearBE || currentYearBE}
+                        onChange={(e) => {
+                          const yr = parseInt(e.target.value) || currentYearBE;
+                          const updatedCode = member.memberCode && /^\d{4}-/.test(member.memberCode)
+                            ? member.memberCode.replace(/^\d{4}/, String(yr))
+                            : (member.memberCode || `${yr}-EMP-001`);
+                          const updated = section4.teamMembers.map((m) =>
+                            m.id === member.id ? { ...m, recordedYearBE: yr, memberCode: updatedCode } : m
+                          );
+                          onChange({ ...section4, teamMembers: updated });
+                        }}
+                        title="ปี พ.ศ. ที่บันทึกประวัติบุคลากรเข้าระบบ"
+                      />
+                    </div>
                     <div>
                       <label className="form-label">ตำแหน่งที่เสนอในโครงการ</label>
                       <input

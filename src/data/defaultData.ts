@@ -26,6 +26,8 @@ export const DEFAULT_MASTER_COMPANY_PROFILE: MasterCompanyProfile = {
 export const MASTER_PROJECTS_LIBRARY: PastProject[] = [
   {
     id: 'proj-1',
+    projectCode: '2567-PRJ-001',
+    contractYearBE: 2567,
     projectName: 'โครงการพัฒนาระบบบริหารจัดการข้อมูลสารสนเทศภาครัฐและการบูรณาการข้อมูลขนาดใหญ่ (Big Data Platform)',
     clientName: 'สำนักงานพัฒนารัฐบาลดิจิทัล (องค์การมหาชน)',
     contractValue: 12500000,
@@ -39,6 +41,8 @@ export const MASTER_PROJECTS_LIBRARY: PastProject[] = [
   },
   {
     id: 'proj-2',
+    projectCode: '2567-PRJ-002',
+    contractYearBE: 2567,
     projectName: 'โครงการจ้างที่ปรึกษาและพัฒนาระบบบริการประชาชนดิจิทัล (Citizen Portal & e-Service)',
     clientName: 'กรมการปกครอง กระทรวงมหาดไทย',
     contractValue: 8900000,
@@ -52,6 +56,8 @@ export const MASTER_PROJECTS_LIBRARY: PastProject[] = [
   },
   {
     id: 'proj-3',
+    projectCode: '2566-PRJ-001',
+    contractYearBE: 2566,
     projectName: 'โครงการพัฒนาระบบจัดซื้อจัดจ้างและบริหารพัสดุอิเล็กทรอนิกส์อัจฉริยะ',
     clientName: 'การไฟฟ้าฝ่ายผลิตแห่งประเทศไทย (กฟผ.)',
     contractValue: 6400000,
@@ -65,6 +71,8 @@ export const MASTER_PROJECTS_LIBRARY: PastProject[] = [
   },
   {
     id: 'proj-4',
+    projectCode: '2566-PRJ-002',
+    contractYearBE: 2566,
     projectName: 'โครงการจ้างที่ปรึกษาพัฒนาระบบความมั่นคงปลอดภัยไซเบอร์และประเมินช่องโหว่ (Cybersecurity Assessment)',
     clientName: 'สำนักงานคณะกรรมการการรักษาความมั่นคงปลอดภัยไซเบอร์แห่งชาติ (สกมช.)',
     contractValue: 4500000,
@@ -78,6 +86,8 @@ export const MASTER_PROJECTS_LIBRARY: PastProject[] = [
   },
   {
     id: 'proj-5',
+    projectCode: '2565-PRJ-001',
+    contractYearBE: 2565,
     projectName: 'โครงการออกแบบและพัฒนาคลังข้อมูลอัจฉริยะสำหรับงานวิจัยและสถิติ',
     clientName: 'สำนักงานการวิจัยแห่งชาติ (วช.)',
     contractValue: 5800000,
@@ -91,6 +101,8 @@ export const MASTER_PROJECTS_LIBRARY: PastProject[] = [
   },
   {
     id: 'proj-6',
+    projectCode: '2564-PRJ-001',
+    contractYearBE: 2564,
     projectName: 'โครงการพัฒนาระบบสารสนเทศเพื่อการวางแผนยุทธศาสตร์องค์กร',
     clientName: 'กระทรวงอุตสาหกรรม',
     contractValue: 3800000,
@@ -107,6 +119,8 @@ export const MASTER_PROJECTS_LIBRARY: PastProject[] = [
 export const MASTER_TEAM_LIBRARY: TeamMember[] = [
   {
     id: 'team-1',
+    memberCode: '2568-EMP-001',
+    recordedYearBE: 2568,
     name: 'ดร. นรินทร์ เกียรติวรชัย',
     proposedRole: 'ผู้จัดการโครงการ (Project Manager)',
     education: 'ปริญญาเอก วิศวกรรมคอมพิวเตอร์ (จุฬาลงกรณ์มหาวิทยาลัย)',
@@ -119,6 +133,8 @@ export const MASTER_TEAM_LIBRARY: TeamMember[] = [
   },
   {
     id: 'team-2',
+    memberCode: '2568-EMP-002',
+    recordedYearBE: 2568,
     name: 'นายศุภกร รัตนเดชาภิรมย์',
     proposedRole: 'สถาปนิกและผู้ออกแบบระบบ (System / Solution Architect)',
     education: 'ปริญญาโท วิทยาการสารสนเทศ (มหาวิทยาลัยมหิดล)',
@@ -131,6 +147,8 @@ export const MASTER_TEAM_LIBRARY: TeamMember[] = [
   },
   {
     id: 'team-3',
+    memberCode: '2568-EMP-003',
+    recordedYearBE: 2568,
     name: 'นางสาวพิมพาภรณ์ วงศ์ศิริ',
     proposedRole: 'นักวิเคราะห์ระบบอาวุโส (Senior System Analyst)',
     education: 'ปริญญาโท การจัดการเทคโนโลยีสารสนเทศ (นิด้า NIDA)',
@@ -143,6 +161,8 @@ export const MASTER_TEAM_LIBRARY: TeamMember[] = [
   },
   {
     id: 'team-4',
+    memberCode: '2568-EMP-004',
+    recordedYearBE: 2568,
     name: 'นายกิตติธัช วราศิริกุล',
     proposedRole: 'หัวหน้าทีมพัฒนาระบบ (Lead Software Engineer)',
     education: 'ปริญญาตรี วิศวกรรมคอมพิวเตอร์ (มหาวิทยาลัยเกษตรศาสตร์)',
@@ -155,6 +175,8 @@ export const MASTER_TEAM_LIBRARY: TeamMember[] = [
   },
   {
     id: 'team-5',
+    memberCode: '2568-EMP-005',
+    recordedYearBE: 2568,
     name: 'นางสาวกุลธิดา โชคประสิทธิ์',
     proposedRole: 'ผู้เชี่ยวชาญการประกันคุณภาพระบบและการทดสอบ (Senior QA & Test Lead)',
     education: 'ปริญญาตรี วิทยาการคอมพิวเตอร์ (มหาวิทยาลัยธรรมศาสตร์)',

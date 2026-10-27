@@ -80,6 +80,8 @@ function teamMemberToCloudRow(m: TeamMember) {
   return {
     id: m.id,
     name: m.name,
+    member_code: m.memberCode || m.id,
+    recorded_year_be: m.recordedYearBE || null,
     proposed_role: m.proposedRole || null,
     education: m.education || null,
     certifications: m.certifications || null,
@@ -99,6 +101,8 @@ function cloudRowToTeamMember(row: any): TeamMember {
     return {
       ...row.data,
       id: row.id,
+      memberCode: row.member_code || row.data.memberCode || row.id,
+      recordedYearBE: row.recorded_year_be ? Number(row.recorded_year_be) : row.data.recordedYearBE,
       name: row.name || row.data.name,
       proposedRole: row.proposed_role || row.data.proposedRole || '',
       education: row.education || row.data.education || '',
@@ -116,6 +120,8 @@ function cloudRowToTeamMember(row: any): TeamMember {
   }
   return {
     id: row.id,
+    memberCode: row.member_code || row.id,
+    recordedYearBE: row.recorded_year_be ? Number(row.recorded_year_be) : undefined,
     name: row.name,
     proposedRole: row.proposed_role || '',
     education: row.education || '',
@@ -132,6 +138,8 @@ function cloudRowToTeamMember(row: any): TeamMember {
 function pastProjectToCloudRow(p: PastProject) {
   return {
     id: p.id,
+    project_code: p.projectCode || null,
+    contract_year_be: Number(p.contractYearBE || p.completionYearBE) || null,
     project_name: p.projectName,
     client_name: p.clientName || null,
     contract_value: Number(p.contractValue) || 0,
@@ -157,6 +165,8 @@ function cloudRowToPastProject(row: any): PastProject {
     return {
       ...row.data,
       id: row.id,
+      projectCode: row.project_code || row.data.projectCode,
+      contractYearBE: row.contract_year_be ? Number(row.contract_year_be) : (row.data.contractYearBE || Number(row.completion_year_be) || 2567),
       projectName: row.project_name || row.data.projectName,
       clientName: row.client_name || row.data.clientName || '',
       clientLogoUrl: row.client_logo_url !== undefined ? (row.client_logo_url || undefined) : (row.data?.clientLogoUrl || undefined),
@@ -177,6 +187,8 @@ function cloudRowToPastProject(row: any): PastProject {
   }
   return {
     id: row.id,
+    projectCode: row.project_code || undefined,
+    contractYearBE: row.contract_year_be ? Number(row.contract_year_be) : (Number(row.completion_year_be) || 2567),
     projectName: row.project_name,
     clientName: row.client_name || '',
     clientLogoUrl: row.client_logo_url || undefined,
@@ -346,39 +358,120 @@ function saveLocalCompanyProfile(profile: MasterCompanyProfile): void {
 }
 
 // ==============================================================================
+// Code & ID Auto-Generation Helpers
+// ==============================================================================
+
+/**
+ * ฟังก์ชันสร้างรหัสโครงการอัตโนมัติ ขึ้นต้นด้วยปี พ.ศ. ที่ได้สัญญา เช่น 2567-PRJ-001
+ */
+export function generateMasterProjectCode(yearBE: number, existingProjects: PastProject[]): string {
+  const y = Number(yearBE) || (new Date().getFullYear() + 543);
+  const prefix = `${y}-PRJ-`;
+  let maxNum = 0;
+  for (const p of existingProjects) {
+    const code = p.projectCode || '';
+    if (code.startsWith(prefix)) {
+      const numPart = parseInt(code.substring(prefix.length), 10);
+      if (!isNaN(numPart) && numPart > maxNum) {
+        maxNum = numPart;
+      }
+    }
+  }
+  return `${prefix}${String(maxNum + 1).padStart(3, '0')}`;
+}
+
+/**
+ * ฟังก์ชันสร้างรหัส ID บุคลากรอัตโนมัติ ขึ้นต้นด้วยปี พ.ศ. ที่มีการบันทึก เช่น 2568-EMP-001
+ */
+export function generateMasterMemberId(yearBE: number, existingMembers: TeamMember[]): string {
+  const y = Number(yearBE) || (new Date().getFullYear() + 543);
+  const prefix = `${y}-EMP-`;
+  let maxNum = 0;
+  for (const m of existingMembers) {
+    const code = m.memberCode || (m.id && m.id.startsWith(prefix) ? m.id : '');
+    if (code.startsWith(prefix)) {
+      const numPart = parseInt(code.substring(prefix.length), 10);
+      if (!isNaN(numPart) && numPart > maxNum) {
+        maxNum = numPart;
+      }
+    }
+  }
+  return `${prefix}${String(maxNum + 1).padStart(3, '0')}`;
+}
+
+/**
+ * ปรับปรุงข้อมูลโครงการในคลังกลางให้มีรหัสโครงการขึ้นต้นด้วยปี พ.ศ. เสมอ
+ */
+export function normalizeMasterProjects(projects: PastProject[]): PastProject[] {
+  return projects.map((p, idx) => {
+    const contractYear = p.contractYearBE || p.completionYearBE || 2568;
+    let code = p.projectCode?.trim();
+    if (!code) {
+      code = generateMasterProjectCode(contractYear, projects.slice(0, idx));
+    }
+    return {
+      ...p,
+      contractYearBE: contractYear,
+      projectCode: code,
+    };
+  });
+}
+
+/**
+ * ปรับปรุงข้อมูลบุคลากรในคลังกลางให้มีรหัส ID บุคลากรขึ้นต้นด้วยปี พ.ศ. ที่บันทึกเสมอ
+ */
+export function normalizeMasterTeam(members: TeamMember[]): TeamMember[] {
+  const currentYearBE = new Date().getFullYear() + 543;
+  return members.map((m, idx) => {
+    const recordedYear = m.recordedYearBE || currentYearBE;
+    let code = m.memberCode?.trim();
+    if (!code) {
+      code = generateMasterMemberId(recordedYear, members.slice(0, idx));
+    }
+    return {
+      ...m,
+      recordedYearBE: recordedYear,
+      memberCode: code,
+      id: m.id || code,
+    };
+  });
+}
+
+// ==============================================================================
 // Public API: Team Library (Section 4)
 // ==============================================================================
 
 export function getMasterTeamLibrary(): TeamMember[] {
-  if (cachedTeam && cachedTeam.length > 0) return cachedTeam;
+  if (cachedTeam && cachedTeam.length > 0) return normalizeMasterTeam(cachedTeam);
   try {
     const raw = localStorage.getItem(TEAM_LIBRARY_KEY);
     if (raw !== null) {
-      cachedTeam = JSON.parse(raw);
+      cachedTeam = normalizeMasterTeam(JSON.parse(raw));
       return cachedTeam!;
     }
   } catch (e) {}
-  cachedTeam = [...MASTER_TEAM_LIBRARY];
+  cachedTeam = normalizeMasterTeam([...MASTER_TEAM_LIBRARY]);
   return cachedTeam;
 }
 
 export async function fetchMasterTeamLibraryFromCloud(): Promise<TeamMember[]> {
   const fromIDB = await idbGet<TeamMember[]>(IDB_STORES.MASTER_TEAM, 'current');
   if (fromIDB && Array.isArray(fromIDB) && fromIDB.length > 0) {
-    cachedTeam = fromIDB;
-    return fromIDB;
+    cachedTeam = normalizeMasterTeam(fromIDB);
+    return cachedTeam;
   }
   return getMasterTeamLibrary();
 }
 
 export function saveMasterTeamLibrary(items: TeamMember[]): void {
-  saveLocalTeamLibrary(items);
-  dispatchTeamUpdatedEvent(items);
+  const normalized = normalizeMasterTeam(items);
+  saveLocalTeamLibrary(normalized);
+  dispatchTeamUpdatedEvent(normalized);
 }
 
 export function deleteMasterTeamMember(id: string): TeamMember[] {
   const current = getMasterTeamLibrary();
-  const updated = current.filter((m) => m.id !== id);
+  const updated = current.filter((m) => m.id !== id && m.memberCode !== id);
   saveLocalTeamLibrary(updated);
   dispatchTeamUpdatedEvent(updated);
   return updated;
@@ -394,7 +487,7 @@ export function resetMasterTeamLibrary(): TeamMember[] {
   try {
     localStorage.removeItem(TEAM_LIBRARY_KEY);
   } catch (e) {}
-  const defaults = [...MASTER_TEAM_LIBRARY];
+  const defaults = normalizeMasterTeam([...MASTER_TEAM_LIBRARY]);
   saveLocalTeamLibrary(defaults);
   dispatchTeamUpdatedEvent(defaults);
   return defaults;
@@ -402,16 +495,50 @@ export function resetMasterTeamLibrary(): TeamMember[] {
 
 export function saveMemberToMasterLibrary(member: TeamMember): TeamMember[] {
   const current = getMasterTeamLibrary();
-  const existingIdx = current.findIndex((m) => m.id === member.id || m.name.trim() === member.name.trim());
+  const currentYearBE = new Date().getFullYear() + 543;
+  const recordedYear = member.recordedYearBE || currentYearBE;
+
+  // ตรวจจับบุคลากรซ้ำ:
+  // 1. ตรวจจาก originalMasterId ที่ดึงมาจากคลังกลาง
+  // 2. ตรวจจาก id เดิม
+  // 3. ตรวจจาก memberCode เดียวกัน
+  // 4. ตรวจจาก name เดียวกัน
+  const existingIdx = current.findIndex((m) => {
+    if (member.originalMasterId && (m.id === member.originalMasterId || m.memberCode === member.originalMasterId)) return true;
+    if (m.id === member.id) return true;
+    if (member.memberCode && m.memberCode && member.memberCode.trim() === m.memberCode.trim()) return true;
+    if (member.name && m.name && member.name.trim().toLowerCase() === member.name.trim().toLowerCase()) return true;
+    return false;
+  });
+
   let updatedMember: TeamMember;
   let updated: TeamMember[];
 
   if (existingIdx >= 0) {
-    updatedMember = { ...member, id: current[existingIdx].id };
+    // ซ้ำกัน: ให้อัปเดตข้อมูลแทนการบันทึกเป็นคนใหม่
+    const target = current[existingIdx];
+    const finalCode = member.memberCode?.trim() || target.memberCode || generateMasterMemberId(recordedYear, current);
+    updatedMember = {
+      ...target,
+      ...member,
+      id: target.id,
+      memberCode: finalCode,
+      recordedYearBE: recordedYear,
+      originalMasterId: target.id,
+    };
     updated = [...current];
     updated[existingIdx] = updatedMember;
   } else {
-    updatedMember = { ...member, id: member.id && !member.id.startsWith('member-') ? member.id : `lib-team-${Date.now()}` };
+    // บุคลากรใหม่: สร้าง ID / Member Code ขึ้นต้นด้วยปีที่มีการบันทึก
+    const finalCode = member.memberCode?.trim() || generateMasterMemberId(recordedYear, current);
+    const newId = member.id && !member.id.startsWith('member-') ? member.id : finalCode;
+    updatedMember = {
+      ...member,
+      id: newId,
+      memberCode: finalCode,
+      recordedYearBE: recordedYear,
+      originalMasterId: newId,
+    };
     updated = [...current, updatedMember];
   }
 
@@ -421,15 +548,41 @@ export function saveMemberToMasterLibrary(member: TeamMember): TeamMember[] {
 }
 
 export function saveMultipleMembersToMasterLibrary(members: TeamMember[]): TeamMember[] {
-  const current = [...getMasterTeamLibrary()];
+  let current = [...getMasterTeamLibrary()];
+  const currentYearBE = new Date().getFullYear() + 543;
 
   for (const m of members) {
     if (!m.name || m.name.trim() === '' || m.name.includes('(ระบุชื่อ-นามสกุล)')) continue;
-    const existingIdx = current.findIndex((item) => item.id === m.id || item.name.trim() === m.name.trim());
+    const recordedYear = m.recordedYearBE || currentYearBE;
+
+    const existingIdx = current.findIndex((item) => {
+      if (m.originalMasterId && (item.id === m.originalMasterId || item.memberCode === m.originalMasterId)) return true;
+      if (item.id === m.id) return true;
+      if (m.memberCode && item.memberCode && m.memberCode.trim() === item.memberCode.trim()) return true;
+      if (item.name.trim().toLowerCase() === m.name.trim().toLowerCase()) return true;
+      return false;
+    });
+
     if (existingIdx >= 0) {
-      current[existingIdx] = { ...m, id: current[existingIdx].id };
+      const target = current[existingIdx];
+      const finalCode = m.memberCode?.trim() || target.memberCode || generateMasterMemberId(recordedYear, current);
+      current[existingIdx] = {
+        ...target,
+        ...m,
+        id: target.id,
+        memberCode: finalCode,
+        recordedYearBE: recordedYear,
+        originalMasterId: target.id,
+      };
     } else {
-      current.push({ ...m, id: `lib-team-${Date.now()}-${Math.random().toString(36).substr(2, 4)}` });
+      const finalCode = m.memberCode?.trim() || generateMasterMemberId(recordedYear, current);
+      current.push({
+        ...m,
+        id: m.id && !m.id.startsWith('member-') ? m.id : finalCode,
+        memberCode: finalCode,
+        recordedYearBE: recordedYear,
+        originalMasterId: finalCode,
+      });
     }
   }
 
@@ -443,35 +596,36 @@ export function saveMultipleMembersToMasterLibrary(members: TeamMember[]): TeamM
 // ==============================================================================
 
 export function getMasterProjectsLibrary(): PastProject[] {
-  if (cachedProjects && cachedProjects.length > 0) return cachedProjects;
+  if (cachedProjects && cachedProjects.length > 0) return normalizeMasterProjects(cachedProjects);
   try {
     const raw = localStorage.getItem(PROJECTS_LIBRARY_KEY);
     if (raw !== null) {
-      cachedProjects = JSON.parse(raw);
+      cachedProjects = normalizeMasterProjects(JSON.parse(raw));
       return cachedProjects!;
     }
   } catch (e) {}
-  cachedProjects = [...MASTER_PROJECTS_LIBRARY];
+  cachedProjects = normalizeMasterProjects([...MASTER_PROJECTS_LIBRARY]);
   return cachedProjects;
 }
 
 export async function fetchMasterProjectsLibraryFromCloud(): Promise<PastProject[]> {
   const fromIDB = await idbGet<PastProject[]>(IDB_STORES.MASTER_PROJECTS, 'current');
   if (fromIDB && Array.isArray(fromIDB) && fromIDB.length > 0) {
-    cachedProjects = fromIDB;
-    return fromIDB;
+    cachedProjects = normalizeMasterProjects(fromIDB);
+    return cachedProjects;
   }
   return getMasterProjectsLibrary();
 }
 
 export function saveMasterProjectsLibrary(items: PastProject[]): void {
-  saveLocalProjectsLibrary(items);
-  dispatchProjectsUpdatedEvent(items);
+  const normalized = normalizeMasterProjects(items);
+  saveLocalProjectsLibrary(normalized);
+  dispatchProjectsUpdatedEvent(normalized);
 }
 
 export function deleteMasterProject(id: string): PastProject[] {
   const current = getMasterProjectsLibrary();
-  const updated = current.filter((p) => p.id !== id);
+  const updated = current.filter((p) => p.id !== id && p.projectCode !== id);
   saveLocalProjectsLibrary(updated);
   dispatchProjectsUpdatedEvent(updated);
   return updated;
@@ -487,7 +641,7 @@ export function resetMasterProjectsLibrary(): PastProject[] {
   try {
     localStorage.removeItem(PROJECTS_LIBRARY_KEY);
   } catch (e) {}
-  const defaults = [...MASTER_PROJECTS_LIBRARY];
+  const defaults = normalizeMasterProjects([...MASTER_PROJECTS_LIBRARY]);
   saveLocalProjectsLibrary(defaults);
   dispatchProjectsUpdatedEvent(defaults);
   return defaults;
@@ -495,17 +649,50 @@ export function resetMasterProjectsLibrary(): PastProject[] {
 
 export function saveProjectToMasterLibrary(project: PastProject): PastProject[] {
   const current = getMasterProjectsLibrary();
-  const existingIdx = current.findIndex((p) => p.id === project.id || p.projectName.trim() === project.projectName.trim());
+  const contractYear = project.contractYearBE || project.completionYearBE || 2568;
+
+  // ตรวจจับโครงการซ้ำ:
+  // 1. ตรวจจาก originalMasterId ที่ดึงมาจากคลังกลาง
+  // 2. ตรวจจาก id เดิม
+  // 3. ตรวจจาก projectCode เดียวกัน
+  // 4. ตรวจจาก projectName เดียวกัน
+  const existingIdx = current.findIndex((p) => {
+    if (project.originalMasterId && (p.id === project.originalMasterId || p.projectCode === project.originalMasterId)) return true;
+    if (p.id === project.id) return true;
+    if (project.projectCode && p.projectCode && project.projectCode.trim() === p.projectCode.trim()) return true;
+    if (project.projectName && p.projectName && project.projectName.trim().toLowerCase() === p.projectName.trim().toLowerCase()) return true;
+    return false;
+  });
+
   let updatedProject: PastProject;
   let updated: PastProject[];
 
   if (existingIdx >= 0) {
-    updatedProject = { ...project, id: current[existingIdx].id };
+    // ซ้ำกัน: ให้อัปเดตข้อมูลเดิมในคลังกลาง แทนการบันทึกเป็นโครงการใหม่
+    const target = current[existingIdx];
+    const finalCode = project.projectCode?.trim() || target.projectCode || generateMasterProjectCode(contractYear, current);
+    updatedProject = {
+      ...target,
+      ...project,
+      id: target.id, // คง ID เดิมของคลังกลางไว้
+      projectCode: finalCode,
+      contractYearBE: contractYear,
+      originalMasterId: target.id,
+    };
     updated = [...current];
     updated[existingIdx] = updatedProject;
   } else {
-    updatedProject = { ...project, id: project.id && !project.id.startsWith('proj-') ? project.id : `lib-proj-${Date.now()}` };
-    updated = [...current, updatedProject];
+    // โครงการใหม่: สร้างรหัสโครงการขึ้นต้นด้วยปี พ.ศ. ที่ได้สัญญา
+    const finalCode = project.projectCode?.trim() || generateMasterProjectCode(contractYear, current);
+    const newId = project.id && !project.id.startsWith('proj-') ? project.id : `lib-proj-${Date.now()}`;
+    updatedProject = {
+      ...project,
+      id: newId,
+      projectCode: finalCode,
+      contractYearBE: contractYear,
+      originalMasterId: newId,
+    };
+    updated = [updatedProject, ...current];
   }
 
   saveLocalProjectsLibrary(updated);
@@ -514,15 +701,41 @@ export function saveProjectToMasterLibrary(project: PastProject): PastProject[] 
 }
 
 export function saveMultipleProjectsToMasterLibrary(projects: PastProject[]): PastProject[] {
-  const current = [...getMasterProjectsLibrary()];
+  let current = [...getMasterProjectsLibrary()];
 
   for (const p of projects) {
     if (!p.projectName || p.projectName.trim() === '') continue;
-    const existingIdx = current.findIndex((item) => item.id === p.id || item.projectName.trim() === p.projectName.trim());
+    const contractYear = p.contractYearBE || p.completionYearBE || 2568;
+
+    const existingIdx = current.findIndex((item) => {
+      if (p.originalMasterId && (item.id === p.originalMasterId || item.projectCode === p.originalMasterId)) return true;
+      if (item.id === p.id) return true;
+      if (p.projectCode && item.projectCode && p.projectCode.trim() === item.projectCode.trim()) return true;
+      if (item.projectName.trim().toLowerCase() === p.projectName.trim().toLowerCase()) return true;
+      return false;
+    });
+
     if (existingIdx >= 0) {
-      current[existingIdx] = { ...p, id: current[existingIdx].id };
+      const target = current[existingIdx];
+      const finalCode = p.projectCode?.trim() || target.projectCode || generateMasterProjectCode(contractYear, current);
+      current[existingIdx] = {
+        ...target,
+        ...p,
+        id: target.id,
+        projectCode: finalCode,
+        contractYearBE: contractYear,
+        originalMasterId: target.id,
+      };
     } else {
-      current.push({ ...p, id: `lib-proj-${Date.now()}-${Math.random().toString(36).substr(2, 4)}` });
+      const finalCode = p.projectCode?.trim() || generateMasterProjectCode(contractYear, current);
+      const newId = p.id && !p.id.startsWith('proj-') ? p.id : `lib-proj-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+      current.push({
+        ...p,
+        id: newId,
+        projectCode: finalCode,
+        contractYearBE: contractYear,
+        originalMasterId: newId,
+      });
     }
   }
 

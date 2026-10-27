@@ -48,6 +48,13 @@ const COLOR_SECONDARY = '1E3A8A';
 const COLOR_TEXT = '1E293B';
 const COLOR_MUTED = '64748B';
 
+// Thai language metadata for Word OpenXML (activates Word's native Thai dictionary word-breaking and suppresses spellcheck wavy red lines)
+const THAI_LANGUAGE = {
+  value: 'th-TH',
+  bidirectional: 'th-TH',
+  eastAsia: 'th-TH',
+};
+
 // Helper function to extract natural image dimensions from byte array (PNG, JPEG, GIF, WEBP)
 function getImageDimensionsFromBytes(bytes: Uint8Array): { width: number; height: number } | null {
   if (!bytes || bytes.length < 16) return null;
@@ -315,7 +322,7 @@ function renderImageBlocksToDocx(
   return elements;
 }
 
-// Helper for Thai standard body paragraphs (มีย่อหน้า 0.5 นิ้ว / 720 twips, AlignmentType.LEFT ป้องกันตัวอักษรยืด, Line Spacing = Single)
+// Helper for Thai standard body paragraphs (มีย่อหน้า 0.5 นิ้ว / 720 twips, AlignmentType.THAI_DISTRIBUTE กระจายแบบไทย, Line Spacing = Single)
 function createBodyParagraphs(
   text: string,
   options?: {
@@ -339,7 +346,7 @@ function createBodyParagraphs(
 
   return lines.map((line) => {
     return new Paragraph({
-      alignment: options?.align ?? AlignmentType.LEFT,
+      alignment: options?.align ?? AlignmentType.THAI_DISTRIBUTE,
       indent: {
         firstLine: options?.firstLineIndent ?? 720, // ย่อหน้ามาตรฐาน 0.5 นิ้ว (1.27 ซม.)
       },
@@ -357,6 +364,7 @@ function createBodyParagraphs(
           bold: options?.bold ?? false,
           italics: options?.italic ?? false,
           color: options?.color ?? COLOR_TEXT,
+          language: THAI_LANGUAGE,
         }),
       ],
     });
@@ -398,6 +406,7 @@ function createP(
         bold: options?.bold ?? false,
         italics: options?.italic ?? false,
         color: options?.color ?? COLOR_TEXT,
+        language: THAI_LANGUAGE,
       }),
     ],
   });
@@ -420,6 +429,7 @@ function createSectionHeader(
         size: 40, // 20pt
         bold: true,
         color: COLOR_PRIMARY,
+        language: THAI_LANGUAGE,
       }),
       new TextRun({
         text: sectionTitle,
@@ -428,6 +438,7 @@ function createSectionHeader(
         bold: true,
         color: COLOR_PRIMARY,
         break: 1, // Shift+Enter to next line
+        language: THAI_LANGUAGE,
       }),
     ],
   });
@@ -451,6 +462,7 @@ function createH1(title: string): Paragraph {
         size: 38, // 19pt
         bold: true,
         color: COLOR_PRIMARY,
+        language: THAI_LANGUAGE,
       }),
     ],
   });
@@ -467,6 +479,7 @@ function createH2(title: string): Paragraph {
         size: 34, // 17pt
         bold: true,
         color: COLOR_SECONDARY,
+        language: THAI_LANGUAGE,
       }),
     ],
   });
@@ -482,6 +495,7 @@ function createH3(title: string): Paragraph {
         size: 32, // 16pt
         bold: true,
         color: COLOR_SECONDARY,
+        language: THAI_LANGUAGE,
       }),
     ],
   });
@@ -504,6 +518,7 @@ function createHeaderCell(text: string, widthPercent: number): TableCell {
             size: 28, // 14pt
             bold: true,
             color: 'FFFFFF',
+            language: THAI_LANGUAGE,
           }),
         ],
       }),
@@ -562,6 +577,7 @@ function createDataCell(
             size: 28, // 14pt
             bold: options?.bold ?? false,
             color: options?.color || COLOR_TEXT,
+            language: THAI_LANGUAGE,
           }),
         ],
       })
@@ -1086,15 +1102,16 @@ function renderMethodologyParagraphsAndTables(text: string): (Paragraph | Table)
               text: cleanLine,
               font: FONT_FAMILY,
               size: 32,
+              language: THAI_LANGUAGE,
             }),
           ],
         })
       );
     } else {
-      // ย่อหน้าข้อความพรรณาตามปกติ (มีย่อหน้า AlignmentType.LEFT ป้องกันตัวอักษรยืดผิดปกติ Line Spacing = Single)
+      // ย่อหน้าข้อความพรรณาตามปกติ (มีย่อหน้า AlignmentType.THAI_DISTRIBUTE กระจายแบบไทย Line Spacing = Single)
       result.push(
         new Paragraph({
-          alignment: AlignmentType.LEFT,
+          alignment: AlignmentType.THAI_DISTRIBUTE,
           indent: { firstLine: 720 },
           spacing: { before: 40, after: 80, line: 240, lineRule: LineRuleType.AUTO },
           children: [
@@ -1102,6 +1119,7 @@ function renderMethodologyParagraphsAndTables(text: string): (Paragraph | Table)
               text: line,
               font: FONT_FAMILY,
               size: 32,
+              language: THAI_LANGUAGE,
             }),
           ],
         })
@@ -1135,6 +1153,7 @@ function createCvTableCell(text: string, widthPercent: number, isHeader: boolean
             size: isHeader ? 22 : 20,
             bold: isHeader,
             color: isHeader ? 'FFFFFF' : COLOR_TEXT,
+            language: THAI_LANGUAGE,
           }),
         ],
       }),
@@ -3148,8 +3167,10 @@ export async function generateProposalDocxBlob(data: ProposalData): Promise<{ bl
             font: FONT_FAMILY,
             size: 32,
             color: COLOR_TEXT,
+            language: THAI_LANGUAGE,
           },
           paragraph: {
+            alignment: AlignmentType.THAI_DISTRIBUTE,
             spacing: {
               line: 240,
               lineRule: LineRuleType.AUTO,

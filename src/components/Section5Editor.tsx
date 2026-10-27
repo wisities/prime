@@ -246,8 +246,11 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
 
   const handleAddProject = () => {
     const newId = `proj-${Date.now()}`;
+    const autoCode = `${currentYearBE}-PRJ-${String(section5.pastProjects.length + 1).padStart(3, '0')}`;
     const newProj: PastProject = {
       id: newId,
+      projectCode: autoCode,
+      contractYearBE: currentYearBE,
       projectName: '',
       clientName: '',
       contractValue: 0,
@@ -307,6 +310,9 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
         newItems.push({
           ...proj,
           id: uniqueId,
+          originalMasterId: proj.id, // เก็บอ้างอิง ID ของคลังกลาง เพื่อให้อัปเดตข้อมูลกลับคลังได้ถูกต้อง
+          projectCode: proj.projectCode,
+          contractYearBE: proj.contractYearBE || proj.completionYearBE,
           isSelected: true,
         });
       }
@@ -343,7 +349,14 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
       return;
     }
     const newId = `proj-${Date.now()}`;
-    const cloned = { ...project, id: newId, isSelected: true };
+    const cloned = {
+      ...project,
+      id: newId,
+      originalMasterId: project.id, // เก็บอ้างอิง ID ของคลังกลาง
+      projectCode: project.projectCode,
+      contractYearBE: project.contractYearBE || project.completionYearBE,
+      isSelected: true,
+    };
     const combined = [...section5.pastProjects, cloned];
     const sorted = sortPastProjects(combined);
     onChange({ ...section5, pastProjects: sorted });
@@ -376,8 +389,8 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
     }
     const updated = saveProjectToMasterLibrary(project);
     setProjectsLibrary(updated);
-    setSavedProjectToast(`บันทึกโครงการ "${project.projectName}" เข้าสู่คลังผลงานกลางเรียบร้อยแล้ว`);
-    setTimeout(() => setSavedProjectToast(null), 3000);
+    setSavedProjectToast(`✓ บันทึกข้อมูลโครงการ "${project.projectCode ? project.projectCode + ' ' : ''}${project.projectName}" เข้าสู่คลังผลงานกลางเรียบร้อยแล้ว (อัปเดตข้อมูลอัตโนมัติหากมีอยู่แล้ว)`);
+    setTimeout(() => setSavedProjectToast(null), 3500);
   };
 
   const handleSaveAllProjectsToLibrary = () => {
@@ -1040,6 +1053,26 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                       #{idx + 1}
                     </span>
 
+                    {p.projectCode && (
+                      <span
+                        style={{
+                          backgroundColor: '#FEF3C7',
+                          color: '#92400E',
+                          border: '1px solid #FDE68A',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          flexShrink: 0,
+                          fontFamily: 'monospace',
+                          letterSpacing: '0.3px',
+                        }}
+                        title={`รหัสโครงการ: ${p.projectCode}${p.originalMasterId ? ' (เชื่อมโยงคลังผลงานกลาง)' : ''}`}
+                      >
+                        {p.projectCode}
+                      </span>
+                    )}
+
                     <input
                       type="text"
                       className="form-input"
@@ -1218,7 +1251,61 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                   <>
 
                 {/* Project Details Grid */}
-                <div className="grid-4" style={{ marginBottom: '0.75rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                  <div>
+                    <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>รหัสโครงการ (Project Code) <span className="required">*</span></span>
+                      {p.originalMasterId && (
+                        <span style={{ fontSize: '0.68rem', color: '#0284C7', fontWeight: 600 }}>🔗 คลังกลาง</span>
+                      )}
+                    </label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      style={{ fontWeight: 600, color: 'var(--primary-800)' }}
+                      placeholder="เช่น 2567-PRJ-001"
+                      value={p.projectCode || ''}
+                      onChange={(e) => handleProjectChange(p.id, 'projectCode', e.target.value)}
+                      title="รหัสโครงการขึ้นต้นด้วยปี พ.ศ. ที่ได้สัญญา"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="form-label">
+                      <Calendar size={13} style={{ display: 'inline', marginRight: '3px' }} />
+                      ปีที่ได้สัญญา (พ.ศ.)
+                    </label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={p.contractYearBE || p.completionYearBE || currentYearBE}
+                      onChange={(e) => {
+                        const yr = parseInt(e.target.value) || currentYearBE;
+                        handleProjectFieldsChange(p.id, {
+                          contractYearBE: yr,
+                          // If projectCode matches old year format or is empty, update prefix
+                          projectCode: p.projectCode && /^\d{4}-/.test(p.projectCode)
+                            ? p.projectCode.replace(/^\d{4}/, String(yr))
+                            : (p.projectCode || `${yr}-PRJ-001`),
+                        });
+                      }}
+                      title="ปี พ.ศ. ที่ลงนามหรือได้สัญญาโครงการ"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="form-label">
+                      <Calendar size={13} style={{ display: 'inline', marginRight: '3px' }} />
+                      ปีที่แล้วเสร็จ (พ.ศ.) <span className="required">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={p.completionYearBE}
+                      onChange={(e) => handleProjectChange(p.id, 'completionYearBE', parseInt(e.target.value) || currentYearBE)}
+                    />
+                  </div>
+
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2rem' }}>
                       <label className="form-label" style={{ marginBottom: 0 }}>หน่วยงานผู้ว่าจ้าง</label>
@@ -1316,19 +1403,6 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                         onChange={(e) => handleProjectChange(p.id, 'clientName', e.target.value)}
                       />
                     </div>
-                  </div>
-
-                  <div>
-                    <label className="form-label">
-                      <Calendar size={13} style={{ display: 'inline', marginRight: '3px' }} />
-                      ปีที่แล้วเสร็จ (พ.ศ.) <span className="required">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      value={p.completionYearBE}
-                      onChange={(e) => handleProjectChange(p.id, 'completionYearBE', parseInt(e.target.value) || currentYearBE)}
-                    />
                   </div>
 
                   <div>
