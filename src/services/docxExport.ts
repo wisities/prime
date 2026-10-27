@@ -423,7 +423,7 @@ function createSectionHeader(
     heading: HeadingLevel.HEADING_1,
     alignment: AlignmentType.CENTER,
     pageBreakBefore,
-    keepWithNext: true,
+    keepNext: true,
     spacing: { before: 260, after: 180, line: 240, lineRule: LineRuleType.AUTO },
     children: [
       new TextRun({
@@ -460,7 +460,7 @@ function createH1(title: string): Paragraph {
   return new Paragraph({
     heading: HeadingLevel.HEADING_1,
     alignment: AlignmentType.LEFT,
-    keepWithNext: true,
+    keepNext: true,
     spacing: { before: 240, after: 140, line: 240, lineRule: LineRuleType.AUTO },
     children: [
       new TextRun({
@@ -480,7 +480,7 @@ function createH2(title: string): Paragraph {
   return new Paragraph({
     heading: HeadingLevel.HEADING_2,
     alignment: AlignmentType.LEFT,
-    keepWithNext: true,
+    keepNext: true,
     spacing: { before: 180, after: 100, line: 240, lineRule: LineRuleType.AUTO },
     children: [
       new TextRun({
@@ -499,7 +499,7 @@ function createH3(title: string): Paragraph {
   return new Paragraph({
     heading: HeadingLevel.HEADING_3,
     alignment: AlignmentType.LEFT,
-    keepWithNext: true,
+    keepNext: true,
     spacing: { before: 160, after: 80, line: 240, lineRule: LineRuleType.AUTO },
     children: [
       new TextRun({
@@ -1990,7 +1990,7 @@ export async function generateProposalDocxBlob(data: ProposalData): Promise<{ bl
             new Paragraph({
               heading: HeadingLevel.HEADING_3,
               alignment: AlignmentType.LEFT,
-              keepWithNext: true,
+              keepNext: true,
               spacing: { before: 220, after: 80, line: 240, lineRule: LineRuleType.AUTO },
               children: [
                 new TextRun({
