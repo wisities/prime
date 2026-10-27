@@ -322,7 +322,7 @@ function renderImageBlocksToDocx(
   return elements;
 }
 
-// Helper for Thai standard body paragraphs (มีย่อหน้า 0.5 นิ้ว / 720 twips, AlignmentType.THAI_DISTRIBUTE กระจายแบบไทย, Line Spacing = Single)
+// Helper for Thai standard body paragraphs (มีย่อหน้า 0.5 นิ้ว / 720 twips, AlignmentType.LEFT ป้องกันตัวอักษรยืด, Line Spacing = Single)
 function createBodyParagraphs(
   text: string,
   options?: {
@@ -346,7 +346,7 @@ function createBodyParagraphs(
 
   return lines.map((line) => {
     return new Paragraph({
-      alignment: options?.align ?? AlignmentType.THAI_DISTRIBUTE,
+      alignment: options?.align ?? AlignmentType.LEFT,
       indent: {
         firstLine: options?.firstLineIndent ?? 720, // ย่อหน้ามาตรฐาน 0.5 นิ้ว (1.27 ซม.)
       },
@@ -365,6 +365,7 @@ function createBodyParagraphs(
           italics: options?.italic ?? false,
           color: options?.color ?? COLOR_TEXT,
           language: THAI_LANGUAGE,
+          noProof: true,
         }),
       ],
     });
@@ -407,6 +408,7 @@ function createP(
         italics: options?.italic ?? false,
         color: options?.color ?? COLOR_TEXT,
         language: THAI_LANGUAGE,
+        noProof: true,
       }),
     ],
   });
@@ -421,6 +423,7 @@ function createSectionHeader(
     heading: HeadingLevel.HEADING_1,
     alignment: AlignmentType.CENTER,
     pageBreakBefore,
+    keepWithNext: true,
     spacing: { before: 260, after: 180, line: 240, lineRule: LineRuleType.AUTO },
     children: [
       new TextRun({
@@ -430,6 +433,7 @@ function createSectionHeader(
         bold: true,
         color: COLOR_PRIMARY,
         language: THAI_LANGUAGE,
+        noProof: true,
       }),
       new TextRun({
         text: sectionTitle,
@@ -439,6 +443,7 @@ function createSectionHeader(
         color: COLOR_PRIMARY,
         break: 1, // Shift+Enter to next line
         language: THAI_LANGUAGE,
+        noProof: true,
       }),
     ],
   });
@@ -446,7 +451,7 @@ function createSectionHeader(
 
 function formatTorClauseNumber(clause: string): string {
   const trimmed = (clause || '').trim();
-  if (!trimmed) return 'ข้อ ';
+  if (!trimmed) return '';
   if (trimmed.startsWith('ข้อ')) return trimmed;
   return `ข้อ ${trimmed}`;
 }
@@ -454,6 +459,8 @@ function formatTorClauseNumber(clause: string): string {
 function createH1(title: string): Paragraph {
   return new Paragraph({
     heading: HeadingLevel.HEADING_1,
+    alignment: AlignmentType.LEFT,
+    keepWithNext: true,
     spacing: { before: 240, after: 140, line: 240, lineRule: LineRuleType.AUTO },
     children: [
       new TextRun({
@@ -463,6 +470,7 @@ function createH1(title: string): Paragraph {
         bold: true,
         color: COLOR_PRIMARY,
         language: THAI_LANGUAGE,
+        noProof: true,
       }),
     ],
   });
@@ -471,6 +479,8 @@ function createH1(title: string): Paragraph {
 function createH2(title: string): Paragraph {
   return new Paragraph({
     heading: HeadingLevel.HEADING_2,
+    alignment: AlignmentType.LEFT,
+    keepWithNext: true,
     spacing: { before: 180, after: 100, line: 240, lineRule: LineRuleType.AUTO },
     children: [
       new TextRun({
@@ -480,6 +490,7 @@ function createH2(title: string): Paragraph {
         bold: true,
         color: COLOR_SECONDARY,
         language: THAI_LANGUAGE,
+        noProof: true,
       }),
     ],
   });
@@ -487,6 +498,8 @@ function createH2(title: string): Paragraph {
 function createH3(title: string): Paragraph {
   return new Paragraph({
     heading: HeadingLevel.HEADING_3,
+    alignment: AlignmentType.LEFT,
+    keepWithNext: true,
     spacing: { before: 160, after: 80, line: 240, lineRule: LineRuleType.AUTO },
     children: [
       new TextRun({
@@ -496,6 +509,7 @@ function createH3(title: string): Paragraph {
         bold: true,
         color: COLOR_SECONDARY,
         language: THAI_LANGUAGE,
+        noProof: true,
       }),
     ],
   });
@@ -519,6 +533,7 @@ function createHeaderCell(text: string, widthPercent: number): TableCell {
             bold: true,
             color: 'FFFFFF',
             language: THAI_LANGUAGE,
+            noProof: true,
           }),
         ],
       }),
@@ -578,6 +593,7 @@ function createDataCell(
             bold: options?.bold ?? false,
             color: options?.color || COLOR_TEXT,
             language: THAI_LANGUAGE,
+            noProof: true,
           }),
         ],
       })
@@ -1088,31 +1104,74 @@ function renderMethodologyParagraphsAndTables(text: string): (Paragraph | Table)
       continue;
     }
 
-    // ตรวจสอบว่าเป็นหัวข้อย่อยหรือบูลเล็ต
+    // ตรวจสอบประเภทของบรรทัด
     const isBullet = line.startsWith('-') || line.startsWith('•') || line.startsWith('*');
+    const isNumbered = /^(\d+[\.\)]|\(?\d+\))\s/.test(line);
+    const isRoleOrMeta = /^\(?(ผู้รับผิดชอบ|ทีมงาน|ระยะเวลา|ผลลัพธ์)[:\s]/.test(line);
+
     if (isBullet) {
       const cleanLine = line.replace(/^[-•*]\s*/, '');
       result.push(
         new Paragraph({
           bullet: { level: 0 },
           alignment: AlignmentType.LEFT,
-          spacing: { before: 40, after: 40, line: 240, lineRule: LineRuleType.AUTO },
+          spacing: { before: 30, after: 30, line: 240, lineRule: LineRuleType.AUTO },
           children: [
             new TextRun({
               text: cleanLine,
               font: FONT_FAMILY,
               size: 32,
               language: THAI_LANGUAGE,
+              noProof: true,
+            }),
+          ],
+        })
+      );
+    } else if (isNumbered) {
+      // รายการข้อความแบบตัวเลข เช่น 1. , 2. (ใช้ AlignmentType.LEFT เพื่อไม่ให้ตัวหนังสือยืด)
+      result.push(
+        new Paragraph({
+          alignment: AlignmentType.LEFT,
+          indent: { left: 450 },
+          spacing: { before: 30, after: 40, line: 240, lineRule: LineRuleType.AUTO },
+          children: [
+            new TextRun({
+              text: line,
+              font: FONT_FAMILY,
+              size: 32,
+              language: THAI_LANGUAGE,
+              noProof: true,
+            }),
+          ],
+        })
+      );
+    } else if (isRoleOrMeta) {
+      // ข้อความระบุผู้รับผิดชอบหรือแท็ก
+      result.push(
+        new Paragraph({
+          alignment: AlignmentType.LEFT,
+          indent: { left: 450 },
+          spacing: { before: 20, after: 60, line: 240, lineRule: LineRuleType.AUTO },
+          children: [
+            new TextRun({
+              text: line,
+              font: FONT_FAMILY,
+              size: 30,
+              color: COLOR_MUTED,
+              italics: true,
+              language: THAI_LANGUAGE,
+              noProof: true,
             }),
           ],
         })
       );
     } else {
-      // ย่อหน้าข้อความพรรณาตามปกติ (มีย่อหน้า AlignmentType.THAI_DISTRIBUTE กระจายแบบไทย Line Spacing = Single)
+      // ย่อหน้าข้อความพรรณาตามปกติ (ใช้ AlignmentType.LEFT เพื่อไม่ให้ตัวหนังสือยืดแยกเป็นตัวๆ)
+      const isShortLine = line.length < 60;
       result.push(
         new Paragraph({
-          alignment: AlignmentType.THAI_DISTRIBUTE,
-          indent: { firstLine: 720 },
+          alignment: AlignmentType.LEFT,
+          indent: isShortLine ? undefined : { firstLine: 720 },
           spacing: { before: 40, after: 80, line: 240, lineRule: LineRuleType.AUTO },
           children: [
             new TextRun({
@@ -1120,6 +1179,7 @@ function renderMethodologyParagraphsAndTables(text: string): (Paragraph | Table)
               font: FONT_FAMILY,
               size: 32,
               language: THAI_LANGUAGE,
+              noProof: true,
             }),
           ],
         })
@@ -1154,6 +1214,7 @@ function createCvTableCell(text: string, widthPercent: number, isHeader: boolean
             bold: isHeader,
             color: isHeader ? 'FFFFFF' : COLOR_TEXT,
             language: THAI_LANGUAGE,
+            noProof: true,
           }),
         ],
       }),
@@ -1924,17 +1985,22 @@ export async function generateProposalDocxBlob(data: ProposalData): Promise<{ bl
         );
 
         (section1.scopeItems || []).forEach((item, idx) => {
+          const clausePart = item.clauseNumber && item.clauseNumber.trim() ? ` ${formatTorClauseNumber(item.clauseNumber)}` : '';
           part3Children.push(
             new Paragraph({
               heading: HeadingLevel.HEADING_3,
-              spacing: { before: 200, after: 100, line: 240, lineRule: LineRuleType.AUTO },
+              alignment: AlignmentType.LEFT,
+              keepWithNext: true,
+              spacing: { before: 220, after: 80, line: 240, lineRule: LineRuleType.AUTO },
               children: [
                 new TextRun({
-                  text: `${numPrefix}.${idx + 1} ${formatTorClauseNumber(item.clauseNumber)}: ${item.title}`,
+                  text: `${numPrefix}.${idx + 1}${clausePart}: ${item.title}`,
                   font: FONT_FAMILY,
                   size: 32,
                   bold: true,
                   color: COLOR_PRIMARY,
+                  language: THAI_LANGUAGE,
+                  noProof: true,
                 }),
               ],
             })
@@ -1952,8 +2018,6 @@ export async function generateProposalDocxBlob(data: ProposalData): Promise<{ bl
               ...renderImageBlocksToDocx(itemBlocks, `ภาพที่ ${numPrefix}.${idx + 1}`)
             );
           }
-
-          part3Children.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
         });
       }
     });
@@ -3168,9 +3232,10 @@ export async function generateProposalDocxBlob(data: ProposalData): Promise<{ bl
             size: 32,
             color: COLOR_TEXT,
             language: THAI_LANGUAGE,
+            noProof: true,
           },
           paragraph: {
-            alignment: AlignmentType.THAI_DISTRIBUTE,
+            alignment: AlignmentType.LEFT,
             spacing: {
               line: 240,
               lineRule: LineRuleType.AUTO,
