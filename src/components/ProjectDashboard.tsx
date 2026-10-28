@@ -15,6 +15,7 @@ import {
 import { extractProjectMetadataFromFile, parseTorTextRules } from '../services/torDocReader';
 import { MasterLibraryManagementModal } from './MasterLibraryManagementModal';
 import { ExportDocxModal } from './ExportDocxModal';
+import { GoogleSyncModal } from './GoogleSyncModal';
 import {
   FileText,
   ExternalLink,
@@ -51,6 +52,7 @@ import {
   Maximize2,
   Minimize2,
   Library,
+  CloudUpload,
 } from 'lucide-react';
 
 export interface ClauseCompletionInfo {
@@ -200,6 +202,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   // Master Library Modal State
   const [showMasterLibrariesModal, setShowMasterLibrariesModal] = useState(false);
   const [exportDocxModalProject, setExportDocxModalProject] = useState<BiddingProject | null>(null);
+  const [syncGoogleModalProject, setSyncGoogleModalProject] = useState<BiddingProject | null>(null);
   const [isExportingPrimePackage, setIsExportingPrimePackage] = useState<string | null>(null);
 
   // Project Edit/Create Modal State
@@ -1150,6 +1153,32 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
           </button>
           <button
             type="button"
+            className="btn btn-secondary hero-btn"
+            onClick={() => {
+              const target = projects.find((p) => p.id === (editingProject?.id)) || projects[0];
+              if (target) {
+                setSyncGoogleModalProject(target);
+              } else {
+                alert('กรุณาสร้างหรือเลือกโครงการอย่างน้อย 1 โครงการก่อนซิงค์');
+              }
+            }}
+            title="ซิงค์ข้อมูลโครงการทั้งเล่มและเอกสารสัญญาขึ้น Google Drive & Sheets"
+            style={{
+              backgroundColor: '#EFF6FF',
+              color: '#1D4ED8',
+              borderColor: '#BFDBFE',
+              fontWeight: 700,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <CloudUpload size={16} color="#2563EB" />
+            <span>ซิงค์ Google Drive & Sheets</span>
+          </button>
+
+          <button
+            type="button"
             className="btn btn-primary hero-btn-cta"
             onClick={handleOpenCreateModal}
           >
@@ -1967,6 +1996,27 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                       title="สร้างและดาวน์โหลดไฟล์ข้อเสนอโครงการเป็น Microsoft Word (.docx) พร้อมตัวเลือกแนบเอกสารสัญญา PDF"
                     >
                       <FileDown size={14} /> ดาวน์โหลด Word
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn btn-outline"
+                      style={{
+                        fontSize: '0.8rem',
+                        padding: '0.4rem 0.75rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        backgroundColor: '#EFF6FF',
+                        borderColor: '#BFDBFE',
+                        color: '#1D4ED8',
+                        fontWeight: 600,
+                      }}
+                      onClick={() => setSyncGoogleModalProject(project)}
+                      title="ซิงค์ข้อมูลทั้งโครงการขึ้น Google Sheet และอัปโหลดไฟล์สัญญา/TOR ขึ้น Google Drive"
+                    >
+                      <CloudUpload size={14} color="#2563EB" />
+                      <span>ซิงค์ Google</span>
                     </button>
                   </div>
 
@@ -2831,6 +2881,15 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
           isOpen={!!exportDocxModalProject}
           proposalData={exportDocxModalProject.proposalData}
           onClose={() => setExportDocxModalProject(null)}
+        />
+      )}
+
+      {/* Google Drive & Sheets Sync Modal */}
+      {syncGoogleModalProject && (
+        <GoogleSyncModal
+          isOpen={!!syncGoogleModalProject}
+          project={syncGoogleModalProject}
+          onClose={() => setSyncGoogleModalProject(null)}
         />
       )}
     </div>

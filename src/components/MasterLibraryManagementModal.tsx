@@ -56,7 +56,11 @@ import {
   Table as TableIcon,
   ExternalLink,
   FileCheck,
+  CloudUpload,
+  Loader2,
+  FolderOpen,
 } from 'lucide-react';
+import { syncMasterLibraryToGoogle, MasterLibrarySyncResult } from '../services/googleSyncService';
 
 interface MasterLibraryManagementModalProps {
   isOpen: boolean;
@@ -90,6 +94,11 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
   // Feedback Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Google Sync state
+  const [isSyncingGoogle, setIsSyncingGoogle] = useState(false);
+  const [syncGoogleProgress, setSyncGoogleProgress] = useState('');
+  const [googleSyncResult, setGoogleSyncResult] = useState<MasterLibrarySyncResult | null>(null);
+
   const fileInputProjectsRef = useRef<HTMLInputElement>(null);
   const fileInputTeamRef = useRef<HTMLInputElement>(null);
   const currentYearBE = 2568;
@@ -97,6 +106,27 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleSyncToGoogle = async () => {
+    try {
+      setIsSyncingGoogle(true);
+      setGoogleSyncResult(null);
+      setSyncGoogleProgress('กำลังเริ่มต้นการซิงค์...');
+      const res = await syncMasterLibraryToGoogle({
+        onProgress: (msg) => setSyncGoogleProgress(msg),
+      });
+      setGoogleSyncResult(res);
+      if (res.success) {
+        showToast(res.message);
+      } else {
+        alert(res.message || res.error || 'เกิดข้อผิดพลาดในการซิงค์ข้อมูลกลาง');
+      }
+    } catch (err: any) {
+      alert(err?.message || 'การเชื่อมต่อขัดข้อง');
+    } finally {
+      setIsSyncingGoogle(false);
+    }
   };
 
   useEffect(() => {
@@ -467,15 +497,120 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
               สร้างและจัดการข้อมูลหลักของผลงานโครงการ บุคลากร และข้อมูลนิติบุคคล ไว้ล่วงหน้าก่อนเลือกนำไปใช้ในแต่ละเล่มข้อเสนอ
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handleClose}
-            style={{ background: 'none', border: 'none', fontSize: '1.3rem', cursor: 'pointer', padding: '4px', color: 'var(--slate-500)' }}
-            title="ปิดหน้าต่าง"
-          >
-            ✕
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={handleSyncToGoogle}
+              disabled={isSyncingGoogle}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                backgroundColor: isSyncingGoogle ? '#93C5FD' : '#2563EB',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '0.45rem 0.9rem',
+                fontSize: '0.825rem',
+                fontWeight: 600,
+                cursor: isSyncingGoogle ? 'not-allowed' : 'pointer',
+                boxShadow: '0 1px 3px rgba(37,99,235,0.2)',
+                transition: 'all 0.2s',
+              }}
+              title="ซิงค์ผลงาน บุคลากร BOM และข้อมูลบริษัททั้งหมดขึ้น Google Sheets และ Google Drive"
+            >
+              {isSyncingGoogle ? (
+                <>
+                  <Loader2 size={15} className="animate-spin" />
+                  <span>{syncGoogleProgress || 'กำลังซิงค์...'}</span>
+                </>
+              ) : (
+                <>
+                  <CloudUpload size={15} />
+                  <span>ซิงค์ข้อมูลกลางขึ้น Google Sheets & Drive</span>
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={handleClose}
+              style={{ background: 'none', border: 'none', fontSize: '1.3rem', cursor: 'pointer', padding: '4px', color: 'var(--slate-500)' }}
+              title="ปิดหน้าต่าง"
+            >
+              ✕
+            </button>
+          </div>
         </div>
+
+        {/* Google Sync Result Banner */}
+        {googleSyncResult && (
+          <div
+            style={{
+              margin: '0 1.25rem 0.5rem 1.25rem',
+              padding: '0.75rem 1rem',
+              backgroundColor: googleSyncResult.success ? '#EFF6FF' : '#FEF2F2',
+              border: `1px solid ${googleSyncResult.success ? '#BFDBFE' : '#FECACA'}`,
+              borderRadius: '8px',
+              fontSize: '0.85rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '8px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: googleSyncResult.success ? '#1E40AF' : '#991B1B' }}>
+              {googleSyncResult.success ? <CheckCircle size={18} color="#2563EB" /> : <AlertTriangle size={18} color="#DC2626" />}
+              <span>{googleSyncResult.message}</span>
+            </div>
+            {googleSyncResult.success && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {googleSyncResult.sheetUrl && (
+                  <a
+                    href={googleSyncResult.sheetUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      backgroundColor: '#10B981',
+                      color: '#FFFFFF',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      textDecoration: 'none',
+                    }}
+                  >
+                    <ExternalLink size={12} /> เปิดดูใน Google Sheet
+                  </a>
+                )}
+                {googleSyncResult.driveFolderUrl && (
+                  <a
+                    href={googleSyncResult.driveFolderUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      backgroundColor: '#2563EB',
+                      color: '#FFFFFF',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      textDecoration: 'none',
+                    }}
+                  >
+                    <FolderOpen size={12} /> เปิดดูไดรฟ์สัญญา
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Toast Alert */}
         {toastMessage && (

@@ -24,6 +24,7 @@ import { UserManagementModal } from './components/UserManagementModal';
 import { GeminiSettingsModal } from './components/GeminiSettingsModal';
 import { MasterLibraryManagementModal } from './components/MasterLibraryManagementModal';
 import { DraftHistoryModal } from './components/DraftHistoryModal';
+import { GoogleSyncModal } from './components/GoogleSyncModal';
 import { isGeminiAvailable } from './services/geminiService';
 import { checkEmailPermission, signOut } from './services/authService';
 import { supabase, isSupabaseConfigured } from './services/supabaseClient';
@@ -59,6 +60,7 @@ import {
   Loader2,
   Library,
   History,
+  CloudUpload,
 } from 'lucide-react';
 
 import { loadAllProjects, saveProject, normalizeProjectBudget } from './services/projectStorageService';
@@ -488,6 +490,7 @@ export const App: React.FC = () => {
   const [activeTorAttachmentId, setActiveTorAttachmentId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [showExportDocxModal, setShowExportDocxModal] = useState(false);
+  const [showGoogleSyncModal, setShowGoogleSyncModal] = useState(false);
   const [isExportingPrimePackage, setIsExportingPrimePackage] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -943,6 +946,43 @@ export const App: React.FC = () => {
                   <Eye size={16} /> ดูตัวอย่าง
                 </button>
 
+                {/* Save Draft Button (Local-First 0s) */}
+                <button
+                  type="button"
+                  onClick={() => handleManualSaveDraft(true)}
+                  disabled={isSavingDraft}
+                  className="btn btn-outline"
+                  style={{ backgroundColor: 'white', color: '#1E293B', borderColor: '#E2E8F0', fontWeight: 600 }}
+                  title="บันทึกข้อมูลฉบับร่างลงในฐานข้อมูลเครื่อง (IndexedDB) ทันที รวดเร็ว ปลอดภัย"
+                >
+                  <Save size={16} />
+                  <span>{isSavingDraft ? 'กำลังบันทึก...' : 'บันทึกร่าง'}</span>
+                </button>
+
+                {/* Save & Sync to Google Drive/Sheets CTA */}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await handleManualSaveDraft(false);
+                    setShowGoogleSyncModal(true);
+                  }}
+                  className="btn btn-secondary"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    backgroundColor: '#2563EB',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    fontWeight: 700,
+                    boxShadow: '0 2px 4px rgba(37, 99, 235, 0.25)',
+                  }}
+                  title="บันทึกข้อมูลลงฐานข้อมูลและซิงค์ทั้งเล่มพร้อมไฟล์แนบขึ้น Google Drive & Sheets ในคลิกเดียว"
+                >
+                  <CloudUpload size={16} color="#FFFFFF" />
+                  <span>บันทึก & ซิงค์ Google</span>
+                </button>
+
                 {/* Word Export Primary CTA */}
                 <button
                   type="button"
@@ -954,6 +994,28 @@ export const App: React.FC = () => {
                   <span>{isExporting ? 'กำลังสร้างเอกสาร...' : 'ดาวน์โหลด Word (.docx)'}</span>
                 </button>
               </>
+            )}
+
+            {/* Google Drive & Sheets Sync CTA - Visible on Dashboard */}
+            {currentView !== 'editor' && (
+              <button
+                type="button"
+                onClick={() => setShowGoogleSyncModal(true)}
+                className="btn btn-secondary"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backgroundColor: '#EFF6FF',
+                  color: '#1D4ED8',
+                  borderColor: '#BFDBFE',
+                  fontWeight: 700,
+                }}
+                title="บันทึกข้อมูลลง Google Sheet และอัปโหลดไฟล์สัญญา/TOR ทั้งหมดขึ้น Google Drive"
+              >
+                <CloudUpload size={16} color="#2563EB" />
+                <span>ซิงค์ Google Drive & Sheets</span>
+              </button>
             )}
 
             {/* Gemini AI Settings Button */}
@@ -1469,6 +1531,12 @@ export const App: React.FC = () => {
         isOpen={showExportDocxModal}
         proposalData={proposal}
         onClose={() => setShowExportDocxModal(false)}
+      />
+
+      <GoogleSyncModal
+        isOpen={showGoogleSyncModal}
+        project={{ ...currentProject, proposalData: proposal }}
+        onClose={() => setShowGoogleSyncModal(false)}
       />
     </div>
   );

@@ -29,3 +29,7 @@ dist-ssr
 # Generated exports and test files
 *.docx
 
+# Google Cloud Service Account Keys
+*-*.json
+*.key.json
+
