@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ProposalData, BiddingProject, ProposalStatus } from './types/proposal';
-import { INITIAL_PROPOSAL_DATA, createDefaultBlankProject } from './data/defaultData';
+import { INITIAL_PROPOSAL_DATA, createDefaultBlankProject, DEFAULT_BIDDING_PROJECTS } from './data/defaultData';
 import { exportProposalToDocx } from './services/docxExport';
 import { exportProjectPackage, importProjectPackage } from './services/projectPackageService';
 import { runRuleBasedAudit } from './services/proposalAuditor';
@@ -112,7 +112,7 @@ function loadInitialProjects(): BiddingProject[] {
   } catch (e) {
     console.warn('Could not read projects from localStorage', e);
   }
-  return [];
+  return [...DEFAULT_BIDDING_PROJECTS];
 }
 
 export const App: React.FC = () => {
@@ -239,7 +239,7 @@ export const App: React.FC = () => {
 
   // Current active project (guaranteed to be fully sanitized and hydrated)
   const currentProject = normalizeProjectBudget(
-    projects.find((p) => p.id === activeProjectId) || projects[0] || createDefaultBlankProject()
+    projects.find((p) => p.id === activeProjectId) || projects[0] || DEFAULT_BIDDING_PROJECTS[0] || createDefaultBlankProject()
   );
 
   // Proposal Data State for the currently selected project
