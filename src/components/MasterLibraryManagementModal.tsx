@@ -3,6 +3,8 @@ import { PastProject, TeamMember, MasterCompanyProfile, ReportImageBlock } from 
 import {
   getMasterProjectsLibrary,
   saveProjectToMasterLibrary,
+  saveProjectToMasterLibraryResult,
+  deduplicateMasterProjectsLibrary,
   deleteMasterProject,
   clearAllMasterProjects,
   resetMasterProjectsLibrary,
@@ -11,6 +13,8 @@ import {
   MASTER_PROJECTS_UPDATED_EVENT,
   getMasterTeamLibrary,
   saveMemberToMasterLibrary,
+  saveMemberToMasterLibraryResult,
+  deduplicateMasterTeamLibrary,
   deleteMasterTeamMember,
   clearAllMasterTeamMembers,
   resetMasterTeamLibrary,
@@ -59,6 +63,7 @@ import {
   CloudUpload,
   Loader2,
   FolderOpen,
+  Sparkles,
 } from 'lucide-react';
 import { syncMasterLibraryToGoogle, MasterLibrarySyncResult } from '../services/googleSyncService';
 
@@ -132,6 +137,11 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
   useEffect(() => {
     if (initialTab) {
       setActiveTab(initialTab);
+    }
+    if (isOpen) {
+      setProjects(getMasterProjectsLibrary());
+      setTeamMembers(getMasterTeamLibrary());
+      setCompanyProfile(getMasterCompanyProfile());
     }
   }, [initialTab, isOpen]);
 
@@ -254,6 +264,7 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
 
     const projToSave: PastProject = {
       id: projectFormData.id || `lib-proj-${Date.now()}`,
+      originalMasterId: projectFormData.originalMasterId || projectFormData.id,
       projectCode: code,
       contractYearBE: contractYr,
       projectName: projectFormData.projectName.trim(),
@@ -272,10 +283,10 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
       imageBlocks: projectFormData.imageBlocks || [],
     };
 
-    const updated = saveProjectToMasterLibrary(projToSave);
-    setProjects(updated);
+    const { updatedLibrary, savedProject, isNew } = saveProjectToMasterLibraryResult(projToSave);
+    setProjects(updatedLibrary);
     setIsEditingProject(false);
-    showToast(`บันทึกโครงการ "${projToSave.projectName}" (รหัส: ${projToSave.projectCode}) ลงในคลังกลางสำเร็จ`);
+    showToast(`${isNew ? 'บันทึกโครงการใหม่' : 'อัปเดตข้อมูลโครงการเดิม'} "${savedProject.projectName}" (รหัส: ${savedProject.projectCode}) ลงในคลังกลางสำเร็จ`);
   };
 
   const handleDeleteProject = (id: string, name: string) => {
@@ -384,6 +395,7 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
 
     const memberToSave: TeamMember = {
       id: memberFormData.id || `lib-team-${Date.now()}`,
+      originalMasterId: memberFormData.originalMasterId || memberFormData.id,
       memberCode: code,
       recordedYearBE: recYr,
       name: memberFormData.name.trim(),
@@ -401,10 +413,10 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
       imageBlocks: memberFormData.highlightImageBlocks || memberFormData.imageBlocks || [],
     };
 
-    const updated = saveMemberToMasterLibrary(memberToSave);
-    setTeamMembers(updated);
+    const { updatedLibrary, savedMember, isNew } = saveMemberToMasterLibraryResult(memberToSave);
+    setTeamMembers(updatedLibrary);
     setIsEditingMember(false);
-    showToast(`บันทึกบุคลากร "${memberToSave.name}" (รหัส: ${memberToSave.memberCode}) ลงในคลังกลางสำเร็จ`);
+    showToast(`${isNew ? 'บันทึกบุคลากรใหม่' : 'อัปเดตข้อมูลบุคลากรเดิม'} "${savedMember.name}" (รหัส: ${savedMember.memberCode}) ลงในคลังกลางสำเร็จ`);
   };
 
   const handleDeleteMember = (id: string, name: string) => {
@@ -1255,6 +1267,24 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                       </button>
                       <button
                         type="button"
+                        onClick={() => {
+                          const deduped = deduplicateMasterProjectsLibrary();
+                          const diff = projects.length - deduped.length;
+                          setProjects(deduped);
+                          if (diff > 0) {
+                            showToast(`รวมรายการโครงการที่ซ้ำกัน ${diff} รายการเรียบร้อยแล้ว`);
+                          } else {
+                            showToast('ไม่มีรายการโครงการซ้ำในคลังกลาง');
+                          }
+                        }}
+                        className="btn btn-outline"
+                        style={{ fontSize: '0.78rem', padding: '0.4rem 0.65rem', color: '#7C3AED', borderColor: '#C4B5FD', backgroundColor: '#F5F3FF', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
+                        title="รวมและตัดรายการผลงานโครงการที่ซ้ำซ้อนในคลังกลาง"
+                      >
+                        <Sparkles size={13} /> รวมรายการซ้ำ
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => fileInputProjectsRef.current?.click()}
                         className="btn btn-outline"
                         style={{ fontSize: '0.78rem', padding: '0.4rem 0.65rem', color: '#1D4ED8', borderColor: '#93C5FD', backgroundColor: '#EFF6FF', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
@@ -1810,6 +1840,24 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                         title="ส่งออกไฟล์ .json ของคลังบุคลากรทั้งหมด"
                       >
                         <Download size={13} /> ส่งออก (.json)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const deduped = deduplicateMasterTeamLibrary();
+                          const diff = teamMembers.length - deduped.length;
+                          setTeamMembers(deduped);
+                          if (diff > 0) {
+                            showToast(`รวมข้อมูลบุคลากรที่ซ้ำกัน ${diff} ท่านเรียบร้อยแล้ว`);
+                          } else {
+                            showToast('ไม่มีข้อมูลบุคลากรซ้ำในคลังกลาง');
+                          }
+                        }}
+                        className="btn btn-outline"
+                        style={{ fontSize: '0.78rem', padding: '0.4rem 0.65rem', color: '#7C3AED', borderColor: '#C4B5FD', backgroundColor: '#F5F3FF', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
+                        title="รวมและตัดรายการบุคลากรที่ซ้ำซ้อนในคลังกลาง"
+                      >
+                        <Sparkles size={13} /> รวมรายการซ้ำ
                       </button>
                       <button
                         type="button"

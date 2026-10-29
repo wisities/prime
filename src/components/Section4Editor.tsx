@@ -9,7 +9,9 @@ import {
   clearAllMasterTeamMembers,
   resetMasterTeamLibrary,
   saveMemberToMasterLibrary,
+  saveMemberToMasterLibraryResult,
   saveMultipleMembersToMasterLibrary,
+  saveMultipleMembersToMasterLibraryResult,
   MASTER_TEAM_UPDATED_EVENT,
   initMasterLibraryRealtime,
   exportMasterTeamToJson,
@@ -296,9 +298,32 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
       alert('กรุณาระบุชื่อ-นามสกุลของบุคลากรก่อนบันทึกลงคลังข้อมูลกลาง');
       return;
     }
-    const updated = saveMemberToMasterLibrary(member);
-    setTeamLibrary(updated);
-    setSavedMemberToast(`บันทึก/อัปเดตข้อมูล "${member.name}" (รหัส: ${member.memberCode || member.id}) ในคลังบุคลากรกลางเรียบร้อยแล้ว`);
+    const { updatedLibrary, savedMember, isNew } = saveMemberToMasterLibraryResult(member);
+    setTeamLibrary(updatedLibrary);
+
+    // CRITICAL FIX: อัปเดต originalMasterId และ memberCode กลับเข้าเล่มข้อเสนอโครงการทันที
+    const updatedMembers = section4.teamMembers.map((m) => {
+      if (m.id === member.id || (member.originalMasterId && m.originalMasterId === member.originalMasterId)) {
+        return {
+          ...m,
+          originalMasterId: savedMember.id,
+          memberCode: savedMember.memberCode,
+          recordedYearBE: savedMember.recordedYearBE,
+          photoUrl: savedMember.photoUrl || m.photoUrl,
+        };
+      }
+      return m;
+    });
+
+    onChange({
+      ...section4,
+      teamMembers: updatedMembers,
+    });
+
+    const actionText = isNew ? 'บันทึกบุคลากรใหม่' : 'อัปเดตข้อมูลบุคลากรเดิม';
+    setSavedMemberToast(
+      `✓ ${actionText} "${savedMember.name}" (รหัส: ${savedMember.memberCode || savedMember.id}) ในคลังบุคลากรกลางเรียบร้อยแล้ว`
+    );
     setTimeout(() => setSavedMemberToast(null), 3000);
   };
 
@@ -310,9 +335,37 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
       alert('ไม่มีรายการบุคลากรที่มีชื่อถูกต้องให้บันทึก');
       return;
     }
-    const updated = saveMultipleMembersToMasterLibrary(validMembers);
-    setTeamLibrary(updated);
-    alert(`บันทึกบุคลากรทั้งหมด ${validMembers.length} ท่าน เข้าสู่คลังข้อมูลกลางเรียบร้อยแล้ว`);
+    const { updatedLibrary, savedMembers } = saveMultipleMembersToMasterLibraryResult(validMembers);
+    setTeamLibrary(updatedLibrary);
+
+    // อัปเดต originalMasterId และ memberCode ให้กับบุคลากรทุกท่านในเล่ม
+    const updatedMembers = section4.teamMembers.map((m) => {
+      const match = savedMembers.find(
+        (sm) =>
+          (m.originalMasterId && sm.id === m.originalMasterId) ||
+          (m.originalMasterId && sm.originalMasterId === m.originalMasterId) ||
+          sm.id === m.id ||
+          (sm.memberCode && m.memberCode && sm.memberCode.trim().toLowerCase() === m.memberCode.trim().toLowerCase()) ||
+          (sm.name && m.name && sm.name.trim().toLowerCase() === m.name.trim().toLowerCase())
+      );
+      if (match) {
+        return {
+          ...m,
+          originalMasterId: match.id,
+          memberCode: match.memberCode,
+          recordedYearBE: match.recordedYearBE,
+          photoUrl: match.photoUrl || m.photoUrl,
+        };
+      }
+      return m;
+    });
+
+    onChange({
+      ...section4,
+      teamMembers: updatedMembers,
+    });
+
+    alert(`บันทึกและอัปเดตข้อมูลบุคลากรทั้งหมด ${validMembers.length} ท่าน เข้าสู่คลังข้อมูลกลางเรียบร้อยแล้ว`);
   };
 
   // Risk Items

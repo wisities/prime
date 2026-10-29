@@ -9,7 +9,10 @@ import {
   clearAllMasterProjects,
   resetMasterProjectsLibrary,
   saveProjectToMasterLibrary,
+  saveProjectToMasterLibraryResult,
   saveMultipleProjectsToMasterLibrary,
+  saveMultipleProjectsToMasterLibraryResult,
+  deduplicateMasterProjectsLibrary,
   MASTER_PROJECTS_UPDATED_EVENT,
   getMasterCompanyProfile,
   fetchMasterCompanyProfileFromCloud,
@@ -387,9 +390,34 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
       alert('กรุณาระบุชื่อโครงการก่อนบันทึกลงคลังข้อมูลกลาง');
       return;
     }
-    const updated = saveProjectToMasterLibrary(project);
-    setProjectsLibrary(updated);
-    setSavedProjectToast(`✓ บันทึกข้อมูลโครงการ "${project.projectCode ? project.projectCode + ' ' : ''}${project.projectName}" เข้าสู่คลังผลงานกลางเรียบร้อยแล้ว (อัปเดตข้อมูลอัตโนมัติหากมีอยู่แล้ว)`);
+    const { updatedLibrary, savedProject, isNew } = saveProjectToMasterLibraryResult(project);
+    setProjectsLibrary(updatedLibrary);
+
+    // CRITICAL FIX: อัปเดต originalMasterId และ projectCode กลับเข้ามาในรายการผลงานของเล่มข้อเสนอทันที
+    // เพื่อให้การแก้ไขครั้งต่อไป เชื่อมโยงกับโครงการเดิมในคลังกลาง ไม่เพิ่มเป็นโครงการใหม่ซ้ำซ้อน
+    const updatedProjects = section5.pastProjects.map((p) => {
+      if (p.id === project.id || (project.originalMasterId && p.originalMasterId === project.originalMasterId)) {
+        return {
+          ...p,
+          originalMasterId: savedProject.id,
+          projectCode: savedProject.projectCode,
+          contractYearBE: savedProject.contractYearBE,
+          certificateFileUrl: savedProject.certificateFileUrl || p.certificateFileUrl,
+          certificateFileName: savedProject.certificateFileName || p.certificateFileName,
+        };
+      }
+      return p;
+    });
+
+    onChange({
+      ...section5,
+      pastProjects: updatedProjects,
+    });
+
+    const actionText = isNew ? 'บันทึกผลงานใหม่' : 'อัปเดตข้อมูลผลงานเดิม';
+    setSavedProjectToast(
+      `✓ ${actionText} "${savedProject.projectCode ? savedProject.projectCode + ' ' : ''}${savedProject.projectName}" ในคลังผลงานกลางเรียบร้อยแล้ว`
+    );
     setTimeout(() => setSavedProjectToast(null), 3500);
   };
 
@@ -401,9 +429,38 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
       alert('ไม่มีรายการโครงการที่มีชื่อถูกต้องให้บันทึก');
       return;
     }
-    const updated = saveMultipleProjectsToMasterLibrary(validProjects);
-    setProjectsLibrary(updated);
-    alert(`บันทึกผลงานโครงการทั้งหมด ${validProjects.length} รายการ เข้าสู่คลังข้อมูลกลางเรียบร้อยแล้ว`);
+    const { updatedLibrary, savedProjects } = saveMultipleProjectsToMasterLibraryResult(validProjects);
+    setProjectsLibrary(updatedLibrary);
+
+    // อัปเดต originalMasterId และ projectCode กลับมาที่เล่มข้อเสนอให้ตรงกันทุกโครงการ
+    const updatedProjects = section5.pastProjects.map((p) => {
+      const match = savedProjects.find(
+        (sp) =>
+          (p.originalMasterId && sp.id === p.originalMasterId) ||
+          (p.originalMasterId && sp.originalMasterId === p.originalMasterId) ||
+          sp.id === p.id ||
+          (sp.projectCode && p.projectCode && sp.projectCode.trim().toLowerCase() === p.projectCode.trim().toLowerCase()) ||
+          (sp.projectName && p.projectName && sp.projectName.trim().toLowerCase() === p.projectName.trim().toLowerCase())
+      );
+      if (match) {
+        return {
+          ...p,
+          originalMasterId: match.id,
+          projectCode: match.projectCode,
+          contractYearBE: match.contractYearBE,
+          certificateFileUrl: match.certificateFileUrl || p.certificateFileUrl,
+          certificateFileName: match.certificateFileName || p.certificateFileName,
+        };
+      }
+      return p;
+    });
+
+    onChange({
+      ...section5,
+      pastProjects: updatedProjects,
+    });
+
+    alert(`บันทึกและอัปเดตผลงานโครงการทั้งหมด ${validProjects.length} รายการ เข้าสู่คลังข้อมูลกลางเรียบร้อยแล้ว`);
   };
 
   const handleSaveCurrentToMasterCompany = () => {

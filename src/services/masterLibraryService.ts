@@ -400,41 +400,248 @@ export function generateMasterMemberId(yearBE: number, existingMembers: TeamMemb
 }
 
 /**
- * ปรับปรุงข้อมูลโครงการในคลังกลางให้มีรหัสโครงการขึ้นต้นด้วยปี พ.ศ. เสมอ
+ * ฟังก์ชันช่วยค้นหาโครงการเดิมในคลังกลาง (ตรวจจับการอัปเดตแบบแม่นยำ ไม่ให้เพิ่มเป็นโครงการใหม่ซ้ำซ้อน)
  */
-export function normalizeMasterProjects(projects: PastProject[]): PastProject[] {
-  return projects.map((p, idx) => {
-    const contractYear = p.contractYearBE || p.completionYearBE || 2568;
-    let code = p.projectCode?.trim();
-    if (!code) {
-      code = generateMasterProjectCode(contractYear, projects.slice(0, idx));
-    }
-    return {
-      ...p,
-      contractYearBE: contractYear,
-      projectCode: code,
-    };
-  });
+export function findMatchingMasterProjectIndex(target: Partial<PastProject>, library: PastProject[]): number {
+  const norm = (s?: string) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+  // 1. ตรวจจาก originalMasterId ที่เชื่อมโยงไว้ (สำคัญที่สุด: ถ้ามี master id เดิม ต้องอัปเดตโครงการเดิม 100%)
+  if (target.originalMasterId && target.originalMasterId.trim()) {
+    const origId = target.originalMasterId.trim();
+    const idx = library.findIndex((p) =>
+      p.id === origId ||
+      (p.originalMasterId && p.originalMasterId === origId) ||
+      (p.projectCode && p.projectCode.trim().toLowerCase() === origId.toLowerCase())
+    );
+    if (idx >= 0) return idx;
+  }
+
+  // 2. ตรวจจาก id โดยตรง (ถ้า id ตรงกับรายการที่มีอยู่ในคลังกลาง)
+  if (target.id && target.id.trim()) {
+    const targetId = target.id.trim();
+    const idx = library.findIndex((p) =>
+      p.id === targetId ||
+      (p.originalMasterId && p.originalMasterId === targetId)
+    );
+    if (idx >= 0) return idx;
+  }
+
+  // 3. ตรวจจาก projectName เดียวกัน (normalized whitespace & case-insensitive)
+  if (target.projectName && target.projectName.trim()) {
+    const targetName = norm(target.projectName);
+    const idx = library.findIndex((p) => norm(p.projectName) === targetName);
+    if (idx >= 0) return idx;
+  }
+
+  // 4. ตรวจจาก projectCode เดียวกัน (เฉพาะเมื่อชื่อโครงการมีความสอดคล้องกัน หรือ target ไม่มีชื่อ เพื่อป้องกันการทับโครงการอื่น)
+  if (target.projectCode && target.projectCode.trim()) {
+    const targetCode = target.projectCode.trim().toLowerCase();
+    const idx = library.findIndex((p) => {
+      if (!p.projectCode || p.projectCode.trim().toLowerCase() !== targetCode) return false;
+      if (!target.projectName || !p.projectName) return true;
+      const tName = norm(target.projectName);
+      const pName = norm(p.projectName);
+      if (tName === pName || pName.includes(tName) || tName.includes(pName)) return true;
+      if (target.clientName && p.clientName && norm(target.clientName) === norm(p.clientName)) return true;
+      return false;
+    });
+    if (idx >= 0) return idx;
+  }
+
+  // 5. ตรวจจากความคล้ายของชื่อโครงการร่วมกับหน่วยงานผู้ว่าจ้าง (clientName)
+  if (target.projectName && target.clientName) {
+    const targetName = norm(target.projectName);
+    const targetClient = norm(target.clientName);
+    const idx = library.findIndex((p) => {
+      if (!p.clientName || norm(p.clientName) !== targetClient) return false;
+      const pName = norm(p.projectName);
+      if (pName.includes(targetName) || targetName.includes(pName)) return true;
+      return false;
+    });
+    if (idx >= 0) return idx;
+  }
+
+  return -1;
 }
 
 /**
- * ปรับปรุงข้อมูลบุคลากรในคลังกลางให้มีรหัส ID บุคลากรขึ้นต้นด้วยปี พ.ศ. ที่บันทึกเสมอ
+ * ฟังก์ชันช่วยค้นหาบุคลากรเดิมในคลังกลาง (ตรวจจับการอัปเดตแบบแม่นยำ)
+ */
+export function findMatchingMasterMemberIndex(target: Partial<TeamMember>, library: TeamMember[]): number {
+  const norm = (s?: string) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+  // 1. ตรวจจาก originalMasterId
+  if (target.originalMasterId && target.originalMasterId.trim()) {
+    const origId = target.originalMasterId.trim();
+    const idx = library.findIndex((m) =>
+      m.id === origId ||
+      (m.originalMasterId && m.originalMasterId === origId) ||
+      (m.memberCode && m.memberCode.trim().toLowerCase() === origId.toLowerCase())
+    );
+    if (idx >= 0) return idx;
+  }
+
+  // 2. ตรวจจาก id
+  if (target.id && target.id.trim()) {
+    const targetId = target.id.trim();
+    const idx = library.findIndex((m) =>
+      m.id === targetId ||
+      (m.originalMasterId && m.originalMasterId === targetId)
+    );
+    if (idx >= 0) return idx;
+  }
+
+  // 3. ตรวจจาก name เดียวกัน
+  if (target.name && target.name.trim()) {
+    const targetName = norm(target.name);
+    const idx = library.findIndex((m) => norm(m.name) === targetName);
+    if (idx >= 0) return idx;
+  }
+
+  // 4. ตรวจจาก memberCode
+  if (target.memberCode && target.memberCode.trim()) {
+    const targetCode = target.memberCode.trim().toLowerCase();
+    const idx = library.findIndex((m) => m.memberCode && m.memberCode.trim().toLowerCase() === targetCode);
+    if (idx >= 0) return idx;
+  }
+
+  return -1;
+}
+
+/**
+ * รวมและตัดโครงการที่ซ้ำซ้อนในคลังกลาง โดยเลือกข้อมูลที่สมบูรณ์ที่สุด
+ */
+export function deduplicateMasterProjects(projects: PastProject[]): PastProject[] {
+  const result: PastProject[] = [];
+  const norm = (s?: string) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+  for (const p of projects) {
+    if (!p.projectName || p.projectName.trim() === '') continue;
+
+    const existingIdx = result.findIndex((item) => {
+      if (p.originalMasterId && item.originalMasterId && p.originalMasterId === item.originalMasterId) return true;
+      if (p.originalMasterId && (item.id === p.originalMasterId || item.projectCode === p.originalMasterId)) return true;
+      if (item.originalMasterId && (p.id === item.originalMasterId || p.projectCode === item.originalMasterId)) return true;
+      if (p.id && item.id && p.id === item.id) return true;
+      if (p.projectCode && item.projectCode && p.projectCode.trim().toLowerCase() === item.projectCode.trim().toLowerCase()) return true;
+      if (norm(p.projectName) === norm(item.projectName)) return true;
+      return false;
+    });
+
+    if (existingIdx >= 0) {
+      const existing = result[existingIdx];
+      result[existingIdx] = {
+        ...existing,
+        ...p,
+        id: existing.id,
+        originalMasterId: existing.originalMasterId || existing.id,
+        projectCode: existing.projectCode || p.projectCode,
+        contractYearBE: p.contractYearBE || existing.contractYearBE,
+        completionYearBE: p.completionYearBE || existing.completionYearBE,
+        contractValue: p.contractValue > 0 ? p.contractValue : existing.contractValue,
+        description: (p.description && p.description.length > (existing.description || '').length) ? p.description : (existing.description || p.description),
+        certificateFileUrl: p.certificateFileUrl || existing.certificateFileUrl,
+        certificateFileName: p.certificateFileName || existing.certificateFileName,
+        imageBlocks: (p.imageBlocks && p.imageBlocks.length > 0) ? p.imageBlocks : (existing.imageBlocks || []),
+      };
+    } else {
+      result.push({
+        ...p,
+        originalMasterId: p.originalMasterId || p.id,
+      });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * รวมและตัดบุคลากรที่ซ้ำซ้อนในคลังกลาง
+ */
+export function deduplicateMasterTeam(members: TeamMember[]): TeamMember[] {
+  const result: TeamMember[] = [];
+  const norm = (s?: string) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+  for (const m of members) {
+    if (!m.name || m.name.trim() === '' || m.name.includes('(ระบุชื่อ-นามสกุล)')) continue;
+
+    const existingIdx = result.findIndex((item) => {
+      if (m.originalMasterId && item.originalMasterId && m.originalMasterId === item.originalMasterId) return true;
+      if (m.originalMasterId && (item.id === m.originalMasterId || item.memberCode === m.originalMasterId)) return true;
+      if (item.originalMasterId && (m.id === item.originalMasterId || m.memberCode === item.originalMasterId)) return true;
+      if (m.id && item.id && m.id === item.id) return true;
+      if (m.memberCode && item.memberCode && m.memberCode.trim().toLowerCase() === item.memberCode.trim().toLowerCase()) return true;
+      if (norm(m.name) === norm(item.name)) return true;
+      return false;
+    });
+
+    if (existingIdx >= 0) {
+      const existing = result[existingIdx];
+      result[existingIdx] = {
+        ...existing,
+        ...m,
+        id: existing.id,
+        originalMasterId: existing.originalMasterId || existing.id,
+        memberCode: existing.memberCode || m.memberCode,
+        recordedYearBE: m.recordedYearBE || existing.recordedYearBE,
+        personalBio: (m.personalBio && m.personalBio.length > (existing.personalBio || '').length) ? m.personalBio : (existing.personalBio || m.personalBio),
+        responsibilities: (m.responsibilities && m.responsibilities.length > (existing.responsibilities || '').length) ? m.responsibilities : (existing.responsibilities || m.responsibilities),
+        highlightProjects: (m.highlightProjects && m.highlightProjects.length > (existing.highlightProjects || '').length) ? m.highlightProjects : (existing.highlightProjects || m.highlightProjects),
+        photoUrl: m.photoUrl || existing.photoUrl,
+        imageBlocks: (m.imageBlocks && m.imageBlocks.length > 0) ? m.imageBlocks : (existing.imageBlocks || []),
+      };
+    } else {
+      result.push({
+        ...m,
+        originalMasterId: m.originalMasterId || m.id,
+      });
+    }
+  }
+
+  return result;
+}
+export function normalizeMasterProjects(projects: PastProject[]): PastProject[] {
+  return deduplicateMasterProjects(
+    projects.map((p, idx) => {
+      const contractYear = p.contractYearBE || p.completionYearBE || 2568;
+      let code = p.projectCode?.trim();
+      if (!code) {
+        code = generateMasterProjectCode(contractYear, projects.slice(0, idx));
+      }
+      const finalId = p.id || `lib-proj-${idx + 1}`;
+      return {
+        ...p,
+        id: finalId,
+        contractYearBE: contractYear,
+        projectCode: code,
+        originalMasterId: p.originalMasterId || finalId,
+      };
+    })
+  );
+}
+
+/**
+ * ปรับปรุงข้อมูลบุคลากรในคลังกลางให้มีรหัส ID บุคลากรขึ้นต้นด้วยปี พ.ศ. ที่บันทึกเสมอ พร้อมกำหนด originalMasterId
  */
 export function normalizeMasterTeam(members: TeamMember[]): TeamMember[] {
   const currentYearBE = new Date().getFullYear() + 543;
-  return members.map((m, idx) => {
-    const recordedYear = m.recordedYearBE || currentYearBE;
-    let code = m.memberCode?.trim();
-    if (!code) {
-      code = generateMasterMemberId(recordedYear, members.slice(0, idx));
-    }
-    return {
-      ...m,
-      recordedYearBE: recordedYear,
-      memberCode: code,
-      id: m.id || code,
-    };
-  });
+  return deduplicateMasterTeam(
+    members.map((m, idx) => {
+      const recordedYear = m.recordedYearBE || currentYearBE;
+      let code = m.memberCode?.trim();
+      if (!code) {
+        code = generateMasterMemberId(recordedYear, members.slice(0, idx));
+      }
+      const finalId = m.id || code || `lib-team-${idx + 1}`;
+      return {
+        ...m,
+        id: finalId,
+        recordedYearBE: recordedYear,
+        memberCode: code,
+        originalMasterId: m.originalMasterId || finalId,
+      };
+    })
+  );
 }
 
 // ==============================================================================
@@ -493,102 +700,134 @@ export function resetMasterTeamLibrary(): TeamMember[] {
   return defaults;
 }
 
-export function saveMemberToMasterLibrary(member: TeamMember): TeamMember[] {
+export function saveMemberToMasterLibraryResult(member: TeamMember): {
+  updatedLibrary: TeamMember[];
+  savedMember: TeamMember;
+  isNew: boolean;
+} {
   const current = getMasterTeamLibrary();
   const currentYearBE = new Date().getFullYear() + 543;
   const recordedYear = member.recordedYearBE || currentYearBE;
 
-  // ตรวจจับบุคลากรซ้ำ:
-  // 1. ตรวจจาก originalMasterId ที่ดึงมาจากคลังกลาง
-  // 2. ตรวจจาก id เดิม
-  // 3. ตรวจจาก memberCode เดียวกัน
-  // 4. ตรวจจาก name เดียวกัน
-  const existingIdx = current.findIndex((m) => {
-    if (member.originalMasterId && (m.id === member.originalMasterId || m.memberCode === member.originalMasterId)) return true;
-    if (m.id === member.id) return true;
-    if (member.memberCode && m.memberCode && member.memberCode.trim() === m.memberCode.trim()) return true;
-    if (member.name && m.name && member.name.trim().toLowerCase() === member.name.trim().toLowerCase()) return true;
-    return false;
-  });
+  const existingIdx = findMatchingMasterMemberIndex(member, current);
 
   let updatedMember: TeamMember;
   let updated: TeamMember[];
+  let isNew = false;
 
   if (existingIdx >= 0) {
-    // ซ้ำกัน: ให้อัปเดตข้อมูลแทนการบันทึกเป็นคนใหม่
+    // ซ้ำกัน: ให้อัปเดตข้อมูลเดิมในคลังกลาง แทนการบันทึกเป็นคนใหม่
     const target = current[existingIdx];
     const finalCode = member.memberCode?.trim() || target.memberCode || generateMasterMemberId(recordedYear, current);
     updatedMember = {
       ...target,
       ...member,
       id: target.id,
+      originalMasterId: target.id,
       memberCode: finalCode,
       recordedYearBE: recordedYear,
-      originalMasterId: target.id,
+      photoUrl: member.photoUrl || target.photoUrl,
+      imageBlocks: (member.imageBlocks && member.imageBlocks.length > 0) ? member.imageBlocks : (target.imageBlocks || []),
+      bioImageBlocks: (member.bioImageBlocks && member.bioImageBlocks.length > 0) ? member.bioImageBlocks : (target.bioImageBlocks || []),
+      highlightImageBlocks: (member.highlightImageBlocks && member.highlightImageBlocks.length > 0) ? member.highlightImageBlocks : (target.highlightImageBlocks || []),
     };
     updated = [...current];
     updated[existingIdx] = updatedMember;
   } else {
-    // บุคลากรใหม่: สร้าง ID / Member Code ขึ้นต้นด้วยปีที่มีการบันทึก
+    // บุคลากรใหม่: สร้าง ID / Member Code
+    isNew = true;
     const finalCode = member.memberCode?.trim() || generateMasterMemberId(recordedYear, current);
-    const newId = member.id && !member.id.startsWith('member-') ? member.id : finalCode;
+    const newId = (member.originalMasterId && member.originalMasterId.startsWith('lib-team-'))
+      ? member.originalMasterId
+      : (member.id && member.id.startsWith('lib-team-'))
+        ? member.id
+        : `lib-team-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+
     updatedMember = {
       ...member,
       id: newId,
+      originalMasterId: newId,
       memberCode: finalCode,
       recordedYearBE: recordedYear,
-      originalMasterId: newId,
     };
     updated = [...current, updatedMember];
   }
 
-  saveLocalTeamLibrary(updated);
-  dispatchTeamUpdatedEvent(updated);
-  return updated;
+  const deduped = deduplicateMasterTeam(updated);
+  saveLocalTeamLibrary(deduped);
+  dispatchTeamUpdatedEvent(deduped);
+  return { updatedLibrary: deduped, savedMember: updatedMember, isNew };
 }
 
-export function saveMultipleMembersToMasterLibrary(members: TeamMember[]): TeamMember[] {
+export function saveMemberToMasterLibrary(member: TeamMember): TeamMember[] {
+  return saveMemberToMasterLibraryResult(member).updatedLibrary;
+}
+
+export function saveMultipleMembersToMasterLibraryResult(members: TeamMember[]): {
+  updatedLibrary: TeamMember[];
+  savedMembers: TeamMember[];
+} {
   let current = [...getMasterTeamLibrary()];
   const currentYearBE = new Date().getFullYear() + 543;
+  const savedMembers: TeamMember[] = [];
 
   for (const m of members) {
     if (!m.name || m.name.trim() === '' || m.name.includes('(ระบุชื่อ-นามสกุล)')) continue;
     const recordedYear = m.recordedYearBE || currentYearBE;
 
-    const existingIdx = current.findIndex((item) => {
-      if (m.originalMasterId && (item.id === m.originalMasterId || item.memberCode === m.originalMasterId)) return true;
-      if (item.id === m.id) return true;
-      if (m.memberCode && item.memberCode && m.memberCode.trim() === item.memberCode.trim()) return true;
-      if (item.name.trim().toLowerCase() === m.name.trim().toLowerCase()) return true;
-      return false;
-    });
+    const existingIdx = findMatchingMasterMemberIndex(m, current);
+    let updatedMember: TeamMember;
 
     if (existingIdx >= 0) {
       const target = current[existingIdx];
       const finalCode = m.memberCode?.trim() || target.memberCode || generateMasterMemberId(recordedYear, current);
-      current[existingIdx] = {
+      updatedMember = {
         ...target,
         ...m,
         id: target.id,
+        originalMasterId: target.id,
         memberCode: finalCode,
         recordedYearBE: recordedYear,
-        originalMasterId: target.id,
+        photoUrl: m.photoUrl || target.photoUrl,
+        imageBlocks: (m.imageBlocks && m.imageBlocks.length > 0) ? m.imageBlocks : (target.imageBlocks || []),
       };
+      current[existingIdx] = updatedMember;
     } else {
       const finalCode = m.memberCode?.trim() || generateMasterMemberId(recordedYear, current);
-      current.push({
+      const newId = (m.originalMasterId && m.originalMasterId.startsWith('lib-team-'))
+        ? m.originalMasterId
+        : (m.id && m.id.startsWith('lib-team-'))
+          ? m.id
+          : `lib-team-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+
+      updatedMember = {
         ...m,
-        id: m.id && !m.id.startsWith('member-') ? m.id : finalCode,
+        id: newId,
+        originalMasterId: newId,
         memberCode: finalCode,
         recordedYearBE: recordedYear,
-        originalMasterId: finalCode,
-      });
+      };
+      current.push(updatedMember);
     }
+    savedMembers.push(updatedMember);
   }
 
-  saveLocalTeamLibrary(current);
-  dispatchTeamUpdatedEvent(current);
-  return current;
+  const deduped = deduplicateMasterTeam(current);
+  saveLocalTeamLibrary(deduped);
+  dispatchTeamUpdatedEvent(deduped);
+  return { updatedLibrary: deduped, savedMembers };
+}
+
+export function saveMultipleMembersToMasterLibrary(members: TeamMember[]): TeamMember[] {
+  return saveMultipleMembersToMasterLibraryResult(members).updatedLibrary;
+}
+
+export function deduplicateMasterTeamLibrary(): TeamMember[] {
+  const current = getMasterTeamLibrary();
+  const deduped = deduplicateMasterTeam(current);
+  saveLocalTeamLibrary(deduped);
+  dispatchTeamUpdatedEvent(deduped);
+  return deduped;
 }
 
 // ==============================================================================
@@ -647,25 +886,19 @@ export function resetMasterProjectsLibrary(): PastProject[] {
   return defaults;
 }
 
-export function saveProjectToMasterLibrary(project: PastProject): PastProject[] {
+export function saveProjectToMasterLibraryResult(project: PastProject): {
+  updatedLibrary: PastProject[];
+  savedProject: PastProject;
+  isNew: boolean;
+} {
   const current = getMasterProjectsLibrary();
   const contractYear = project.contractYearBE || project.completionYearBE || 2568;
 
-  // ตรวจจับโครงการซ้ำ:
-  // 1. ตรวจจาก originalMasterId ที่ดึงมาจากคลังกลาง
-  // 2. ตรวจจาก id เดิม
-  // 3. ตรวจจาก projectCode เดียวกัน
-  // 4. ตรวจจาก projectName เดียวกัน
-  const existingIdx = current.findIndex((p) => {
-    if (project.originalMasterId && (p.id === project.originalMasterId || p.projectCode === project.originalMasterId)) return true;
-    if (p.id === project.id) return true;
-    if (project.projectCode && p.projectCode && project.projectCode.trim() === p.projectCode.trim()) return true;
-    if (project.projectName && p.projectName && project.projectName.trim().toLowerCase() === p.projectName.trim().toLowerCase()) return true;
-    return false;
-  });
+  const existingIdx = findMatchingMasterProjectIndex(project, current);
 
   let updatedProject: PastProject;
   let updated: PastProject[];
+  let isNew = false;
 
   if (existingIdx >= 0) {
     // ซ้ำกัน: ให้อัปเดตข้อมูลเดิมในคลังกลาง แทนการบันทึกเป็นโครงการใหม่
@@ -674,74 +907,111 @@ export function saveProjectToMasterLibrary(project: PastProject): PastProject[] 
     updatedProject = {
       ...target,
       ...project,
-      id: target.id, // คง ID เดิมของคลังกลางไว้
+      id: target.id, // คง ID เดิมของคลังกลางไว้เสมอ
+      originalMasterId: target.id,
       projectCode: finalCode,
       contractYearBE: contractYear,
-      originalMasterId: target.id,
+      certificateFileUrl: project.certificateFileUrl || target.certificateFileUrl,
+      certificateFileName: project.certificateFileName || target.certificateFileName,
+      imageBlocks: (project.imageBlocks && project.imageBlocks.length > 0) ? project.imageBlocks : (target.imageBlocks || []),
     };
     updated = [...current];
     updated[existingIdx] = updatedProject;
   } else {
-    // โครงการใหม่: สร้างรหัสโครงการขึ้นต้นด้วยปี พ.ศ. ที่ได้สัญญา
+    // โครงการใหม่ในคลังกลาง:
+    isNew = true;
     const finalCode = project.projectCode?.trim() || generateMasterProjectCode(contractYear, current);
-    const newId = project.id && !project.id.startsWith('proj-') ? project.id : `lib-proj-${Date.now()}`;
+    const newId = (project.originalMasterId && project.originalMasterId.startsWith('lib-proj-'))
+      ? project.originalMasterId
+      : (project.id && project.id.startsWith('lib-proj-'))
+        ? project.id
+        : `lib-proj-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+
     updatedProject = {
       ...project,
       id: newId,
+      originalMasterId: newId,
       projectCode: finalCode,
       contractYearBE: contractYear,
-      originalMasterId: newId,
     };
     updated = [updatedProject, ...current];
   }
 
-  saveLocalProjectsLibrary(updated);
-  dispatchProjectsUpdatedEvent(updated);
-  return updated;
+  const deduped = deduplicateMasterProjects(updated);
+  saveLocalProjectsLibrary(deduped);
+  dispatchProjectsUpdatedEvent(deduped);
+  return { updatedLibrary: deduped, savedProject: updatedProject, isNew };
 }
 
-export function saveMultipleProjectsToMasterLibrary(projects: PastProject[]): PastProject[] {
+export function saveProjectToMasterLibrary(project: PastProject): PastProject[] {
+  return saveProjectToMasterLibraryResult(project).updatedLibrary;
+}
+
+export function saveMultipleProjectsToMasterLibraryResult(projects: PastProject[]): {
+  updatedLibrary: PastProject[];
+  savedProjects: PastProject[];
+} {
   let current = [...getMasterProjectsLibrary()];
+  const savedProjects: PastProject[] = [];
 
   for (const p of projects) {
     if (!p.projectName || p.projectName.trim() === '') continue;
     const contractYear = p.contractYearBE || p.completionYearBE || 2568;
 
-    const existingIdx = current.findIndex((item) => {
-      if (p.originalMasterId && (item.id === p.originalMasterId || item.projectCode === p.originalMasterId)) return true;
-      if (item.id === p.id) return true;
-      if (p.projectCode && item.projectCode && p.projectCode.trim() === item.projectCode.trim()) return true;
-      if (item.projectName.trim().toLowerCase() === p.projectName.trim().toLowerCase()) return true;
-      return false;
-    });
+    const existingIdx = findMatchingMasterProjectIndex(p, current);
+    let updatedProject: PastProject;
 
     if (existingIdx >= 0) {
       const target = current[existingIdx];
       const finalCode = p.projectCode?.trim() || target.projectCode || generateMasterProjectCode(contractYear, current);
-      current[existingIdx] = {
+      updatedProject = {
         ...target,
         ...p,
         id: target.id,
+        originalMasterId: target.id,
         projectCode: finalCode,
         contractYearBE: contractYear,
-        originalMasterId: target.id,
+        certificateFileUrl: p.certificateFileUrl || target.certificateFileUrl,
+        certificateFileName: p.certificateFileName || target.certificateFileName,
+        imageBlocks: (p.imageBlocks && p.imageBlocks.length > 0) ? p.imageBlocks : (target.imageBlocks || []),
       };
+      current[existingIdx] = updatedProject;
     } else {
       const finalCode = p.projectCode?.trim() || generateMasterProjectCode(contractYear, current);
-      const newId = p.id && !p.id.startsWith('proj-') ? p.id : `lib-proj-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
-      current.push({
+      const newId = (p.originalMasterId && p.originalMasterId.startsWith('lib-proj-'))
+        ? p.originalMasterId
+        : (p.id && p.id.startsWith('lib-proj-'))
+          ? p.id
+          : `lib-proj-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+
+      updatedProject = {
         ...p,
         id: newId,
+        originalMasterId: newId,
         projectCode: finalCode,
         contractYearBE: contractYear,
-        originalMasterId: newId,
-      });
+      };
+      current.push(updatedProject);
     }
+    savedProjects.push(updatedProject);
   }
 
-  saveLocalProjectsLibrary(current);
-  dispatchProjectsUpdatedEvent(current);
-  return current;
+  const deduped = deduplicateMasterProjects(current);
+  saveLocalProjectsLibrary(deduped);
+  dispatchProjectsUpdatedEvent(deduped);
+  return { updatedLibrary: deduped, savedProjects };
+}
+
+export function saveMultipleProjectsToMasterLibrary(projects: PastProject[]): PastProject[] {
+  return saveMultipleProjectsToMasterLibraryResult(projects).updatedLibrary;
+}
+
+export function deduplicateMasterProjectsLibrary(): PastProject[] {
+  const current = getMasterProjectsLibrary();
+  const deduped = deduplicateMasterProjects(current);
+  saveLocalProjectsLibrary(deduped);
+  dispatchProjectsUpdatedEvent(deduped);
+  return deduped;
 }
 
 // ==============================================================================

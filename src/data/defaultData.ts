@@ -26,6 +26,7 @@ export const DEFAULT_MASTER_COMPANY_PROFILE: MasterCompanyProfile = {
 export const MASTER_PROJECTS_LIBRARY: PastProject[] = [
   {
     id: 'proj-1',
+    originalMasterId: 'proj-1',
     projectCode: '2567-PRJ-001',
     contractYearBE: 2567,
     projectName: 'โครงการพัฒนาระบบบริหารจัดการข้อมูลสารสนเทศภาครัฐและการบูรณาการข้อมูลขนาดใหญ่ (Big Data Platform)',
@@ -41,6 +42,7 @@ export const MASTER_PROJECTS_LIBRARY: PastProject[] = [
   },
   {
     id: 'proj-2',
+    originalMasterId: 'proj-2',
     projectCode: '2567-PRJ-002',
     contractYearBE: 2567,
     projectName: 'โครงการจ้างที่ปรึกษาและพัฒนาระบบบริการประชาชนดิจิทัล (Citizen Portal & e-Service)',
@@ -56,6 +58,7 @@ export const MASTER_PROJECTS_LIBRARY: PastProject[] = [
   },
   {
     id: 'proj-3',
+    originalMasterId: 'proj-3',
     projectCode: '2566-PRJ-001',
     contractYearBE: 2566,
     projectName: 'โครงการพัฒนาระบบจัดซื้อจัดจ้างและบริหารพัสดุอิเล็กทรอนิกส์อัจฉริยะ',
@@ -71,6 +74,7 @@ export const MASTER_PROJECTS_LIBRARY: PastProject[] = [
   },
   {
     id: 'proj-4',
+    originalMasterId: 'proj-4',
     projectCode: '2566-PRJ-002',
     contractYearBE: 2566,
     projectName: 'โครงการจ้างที่ปรึกษาพัฒนาระบบความมั่นคงปลอดภัยไซเบอร์และประเมินช่องโหว่ (Cybersecurity Assessment)',
@@ -86,6 +90,7 @@ export const MASTER_PROJECTS_LIBRARY: PastProject[] = [
   },
   {
     id: 'proj-5',
+    originalMasterId: 'proj-5',
     projectCode: '2565-PRJ-001',
     contractYearBE: 2565,
     projectName: 'โครงการออกแบบและพัฒนาคลังข้อมูลอัจฉริยะสำหรับงานวิจัยและสถิติ',
@@ -101,6 +106,7 @@ export const MASTER_PROJECTS_LIBRARY: PastProject[] = [
   },
   {
     id: 'proj-6',
+    originalMasterId: 'proj-6',
     projectCode: '2564-PRJ-001',
     contractYearBE: 2564,
     projectName: 'โครงการพัฒนาระบบสารสนเทศเพื่อการวางแผนยุทธศาสตร์องค์กร',
@@ -119,6 +125,7 @@ export const MASTER_PROJECTS_LIBRARY: PastProject[] = [
 export const MASTER_TEAM_LIBRARY: TeamMember[] = [
   {
     id: 'team-1',
+    originalMasterId: 'team-1',
     memberCode: '2568-EMP-001',
     recordedYearBE: 2568,
     name: 'ดร. นรินทร์ เกียรติวรชัย',
@@ -133,6 +140,7 @@ export const MASTER_TEAM_LIBRARY: TeamMember[] = [
   },
   {
     id: 'team-2',
+    originalMasterId: 'team-2',
     memberCode: '2568-EMP-002',
     recordedYearBE: 2568,
     name: 'นายศุภกร รัตนเดชาภิรมย์',
@@ -147,6 +155,7 @@ export const MASTER_TEAM_LIBRARY: TeamMember[] = [
   },
   {
     id: 'team-3',
+    originalMasterId: 'team-3',
     memberCode: '2568-EMP-003',
     recordedYearBE: 2568,
     name: 'นางสาวพิมพาภรณ์ วงศ์ศิริ',
@@ -161,6 +170,7 @@ export const MASTER_TEAM_LIBRARY: TeamMember[] = [
   },
   {
     id: 'team-4',
+    originalMasterId: 'team-4',
     memberCode: '2568-EMP-004',
     recordedYearBE: 2568,
     name: 'นายกิตติธัช วราศิริกุล',
@@ -175,6 +185,7 @@ export const MASTER_TEAM_LIBRARY: TeamMember[] = [
   },
   {
     id: 'team-5',
+    originalMasterId: 'team-5',
     memberCode: '2568-EMP-005',
     recordedYearBE: 2568,
     name: 'นางสาวกุลธิดา โชคประสิทธิ์',
