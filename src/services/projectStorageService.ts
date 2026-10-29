@@ -1,7 +1,10 @@
 import { BiddingProject, ProjectAttachment, ProposalData } from '../types/proposal';
-import { createBlankProposalData, createDefaultBlankProject } from '../data/defaultData';
+import { createBlankProposalData, createDefaultBlankProject, MASTER_TEAM_LIBRARY } from '../data/defaultData';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { idbSet, idbGet, idbGetAll, idbDelete, IDB_STORES, stripAllLargeBase64 } from './localDatabase';
+import { isSampleTeamMember } from './masterLibraryService';
+
+export { isSampleTeamMember };
 
 const LOCAL_STORAGE_KEY = 'prime_bidding_projects_v2';
 
@@ -140,7 +143,11 @@ export function normalizeProjectBudget(p: BiddingProject): BiddingProject {
     section4: {
       ...blank.section4,
       ...(rawData.section4 || {}),
-      teamMembers: Array.isArray(rawData.section4?.teamMembers) ? rawData.section4.teamMembers : [],
+      teamMembers: (() => {
+        const rawTeam = Array.isArray(rawData.section4?.teamMembers) ? rawData.section4.teamMembers : [];
+        const cleanTeam = rawTeam.filter((m) => !isSampleTeamMember(m));
+        return cleanTeam.length > 0 ? cleanTeam : [...MASTER_TEAM_LIBRARY];
+      })(),
       riskItems: Array.isArray(rawData.section4?.riskItems) ? rawData.section4.riskItems : [],
       projectManagementOverview: rawData.section4?.projectManagementOverview || blank.section4.projectManagementOverview || '',
       projectManagementImageBlocks: Array.isArray(rawData.section4?.projectManagementImageBlocks) ? rawData.section4.projectManagementImageBlocks : [],
@@ -235,12 +242,15 @@ export function restoreImagesFromSource(targetProposal: ProposalData, sourceProp
 
   // 3. Section 4
   if (sourceProposal.section4) {
-    const srcTeam = Array.isArray(sourceProposal.section4.teamMembers) ? sourceProposal.section4.teamMembers : [];
+    const srcTeam = (Array.isArray(sourceProposal.section4.teamMembers) ? sourceProposal.section4.teamMembers : [])
+      .filter((m) => !isSampleTeamMember(m));
     const srcTeamMap = new Map(srcTeam.map((m) => [m.id, m]));
-    const targetTeam = Array.isArray(target.section4?.teamMembers) ? target.section4.teamMembers : [];
+    const targetTeam = (Array.isArray(target.section4?.teamMembers) ? target.section4.teamMembers : [])
+      .filter((m) => !isSampleTeamMember(m));
+    const baseTeam = targetTeam.length > 0 ? targetTeam : [...MASTER_TEAM_LIBRARY];
 
-    const restoredTeam = targetTeam.map((m) => {
-      const s = srcTeamMap.get(m.id);
+    const restoredTeam = baseTeam.map((m) => {
+      const s = srcTeamMap.get(m.id) || srcTeam.find((st) => st.name === m.name);
       return {
         ...m,
         photoUrl: m.photoUrl || s?.photoUrl,
@@ -552,6 +562,18 @@ export async function loadAllProjects(): Promise<{
           } catch {}
         }
 
+        // กรองบุคลากรตัวอย่างออกจากทุกโครงการใน IndexedDB อย่างถาวร
+        for (const p of normalizedList) {
+          if (p.proposalData?.section4?.teamMembers) {
+            const rawT = p.proposalData.section4.teamMembers;
+            const cleanT = rawT.filter((m) => !isSampleTeamMember(m));
+            if (cleanT.length !== rawT.length) {
+              p.proposalData.section4.teamMembers = cleanT.length > 0 ? cleanT : [...MASTER_TEAM_LIBRARY];
+              idbSet(IDB_STORES.BIDDING_PROJECTS, p.id, p).catch(() => {});
+            }
+          }
+        }
+
         return { projects: normalizedList, source: 'local' };
       }
     }
@@ -575,6 +597,11 @@ export async function loadAllProjects(): Promise<{
                   a.dataUrl = `idb://${a.id}`;
                 }
               }
+            }
+            if (p.proposalData?.section4?.teamMembers) {
+              const rawT = p.proposalData.section4.teamMembers;
+              const cleanT = rawT.filter((m) => !isSampleTeamMember(m));
+              p.proposalData.section4.teamMembers = cleanT.length > 0 ? cleanT : [...MASTER_TEAM_LIBRARY];
             }
           }
           return { projects: normalizedList, source: 'local' };
@@ -1089,4 +1116,94 @@ export async function testSupabaseConnection(): Promise<SupabaseTestResult> {
     };
   }
 }
+
+/**
+ * ล้างข้อมูลบุคลากรตัวอย่าง (Mock/Sample Team Members) ออกจาก Storage ทั้งหมดของเบราว์เซอร์อย่างถาวร
+ * (ทั้ง LocalStorage, IndexedDB และ Draft Snapshot)
+ */
+export function sanitizeAllStoredProjectsAndLibraries(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    // 1. Sanitize Master Team Library in LocalStorage
+    const rawTeam = localStorage.getItem('prime_master_team_library');
+    if (rawTeam) {
+      try {
+        const parsedTeam = JSON.parse(rawTeam);
+        if (Array.isArray(parsedTeam)) {
+          const cleanTeam = parsedTeam.filter((m) => !isSampleTeamMember(m));
+          const finalTeam = cleanTeam.length > 0 ? cleanTeam : [...MASTER_TEAM_LIBRARY];
+          localStorage.setItem('prime_master_team_library', JSON.stringify(finalTeam));
+        }
+      } catch {}
+    }
+
+    // 2. Sanitize Master Team Library in IndexedDB
+    idbGet<any[]>(IDB_STORES.MASTER_TEAM, 'current').then((fromIDB) => {
+      if (fromIDB && Array.isArray(fromIDB)) {
+        const cleanIDB = fromIDB.filter((m) => !isSampleTeamMember(m));
+        const finalIDB = cleanIDB.length > 0 ? cleanIDB : [...MASTER_TEAM_LIBRARY];
+        idbSet(IDB_STORES.MASTER_TEAM, 'current', finalIDB).catch(() => {});
+      }
+    }).catch(() => {});
+
+    // 3. Sanitize Projects list in LocalStorage
+    const rawProjects = localStorage.getItem('prime_bidding_projects_v2');
+    if (rawProjects) {
+      try {
+        const parsedProjects = JSON.parse(rawProjects);
+        if (Array.isArray(parsedProjects)) {
+          const cleanProjects = parsedProjects.map((p) => {
+            if (p.proposalData?.section4?.teamMembers) {
+              const cleaned = p.proposalData.section4.teamMembers.filter((m: any) => !isSampleTeamMember(m));
+              p.proposalData.section4.teamMembers = cleaned.length > 0 ? cleaned : [...MASTER_TEAM_LIBRARY];
+            }
+            return p;
+          });
+          localStorage.setItem('prime_bidding_projects_v2', JSON.stringify(cleanProjects));
+        }
+      } catch {}
+    }
+
+    // 4. Sanitize active draft keys
+    for (let k = 0; k < localStorage.length; k++) {
+      const key = localStorage.key(k);
+      if (key && (key.startsWith('prime_active_draft_') || key === 'prime_active_bidding_project')) {
+        try {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && parsed.proposalData?.section4?.teamMembers) {
+              const cleaned = parsed.proposalData.section4.teamMembers.filter((m: any) => !isSampleTeamMember(m));
+              parsed.proposalData.section4.teamMembers = cleaned.length > 0 ? cleaned : [...MASTER_TEAM_LIBRARY];
+              localStorage.setItem(key, JSON.stringify(parsed));
+            }
+          }
+        } catch {}
+      }
+    }
+
+    // 5. Sanitize IndexedDB Bidding Projects
+    idbGetAll<BiddingProject>(IDB_STORES.BIDDING_PROJECTS).then((allProjects) => {
+      if (allProjects && Array.isArray(allProjects)) {
+        allProjects.forEach((p) => {
+          if (p.proposalData?.section4?.teamMembers) {
+            const cleaned = p.proposalData.section4.teamMembers.filter((m) => !isSampleTeamMember(m));
+            if (cleaned.length !== p.proposalData.section4.teamMembers.length) {
+              p.proposalData.section4.teamMembers = cleaned.length > 0 ? cleaned : [...MASTER_TEAM_LIBRARY];
+              idbSet(IDB_STORES.BIDDING_PROJECTS, p.id, p).catch(() => {});
+            }
+          }
+        });
+      }
+    }).catch(() => {});
+  } catch (err) {
+    console.warn('Could not run sanitizeAllStoredProjectsAndLibraries:', err);
+  }
+}
+
+// Auto-run sanitation on startup
+if (typeof window !== 'undefined') {
+  sanitizeAllStoredProjectsAndLibraries();
+}
+
 

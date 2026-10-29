@@ -19,6 +19,46 @@ export const MASTER_PROJECTS_UPDATED_EVENT = 'prime_master_projects_updated';
 export const MASTER_BOM_UPDATED_EVENT = 'prime_master_bom_updated';
 export const MASTER_COMPANY_UPDATED_EVENT = 'prime_master_company_updated';
 
+export const SAMPLE_TEAM_IDS = new Set([
+  'team-1', 'team-2', 'team-3', 'team-4', 'team-5',
+  'lib-team-1', 'lib-team-2', 'lib-team-3', 'lib-team-4', 'lib-team-5',
+  'sample-team-1', 'sample-team-2', 'sample-team-3', 'sample-team-4', 'sample-team-5',
+]);
+
+export const SAMPLE_TEAM_NAMES = [
+  'นรินทร์ เกียรติวรชัย',
+  'รัตนเดชาภิรมย์',
+  'พิมพาภรณ์ วงศ์ศิริ',
+  'กิตติธัช วราศิริกุล',
+  'กุลธิดา โชคประสิทธิ์',
+  'กฤษดา ศิริวัฒนาภรณ์',
+  'นภาพร เมธาประเสริฐ',
+  'ปกรณ์ สุขสวัสดิ์',
+  'วรวิทย์ เกียรติกำเนิด',
+  'สุพรรษา วงศ์ทองคำ',
+];
+
+export function isSampleTeamMember(member?: Partial<TeamMember> | null): boolean {
+  if (!member || typeof member !== 'object') return false;
+  const id = String(member.id || '').trim();
+  const origId = String(member.originalMasterId || '').trim();
+  const code = String(member.memberCode || '').trim();
+  const name = String(member.name || '').trim();
+
+  if (id && SAMPLE_TEAM_IDS.has(id)) return true;
+  if (origId && SAMPLE_TEAM_IDS.has(origId)) return true;
+  if (code && SAMPLE_TEAM_IDS.has(code)) return true;
+
+  if (name) {
+    if (name.includes('ตัวอย่าง') || name.includes('Mock') || name.includes('Sample')) return true;
+    for (const sampleName of SAMPLE_TEAM_NAMES) {
+      if (name.includes(sampleName)) return true;
+    }
+  }
+
+  return false;
+}
+
 // Hydrate from IndexedDB on startup
 if (typeof window !== 'undefined') {
   idbGet<PastProject[]>(IDB_STORES.MASTER_PROJECTS, 'current').then((fromIDB) => {
@@ -28,9 +68,16 @@ if (typeof window !== 'undefined') {
     }
   });
   idbGet<TeamMember[]>(IDB_STORES.MASTER_TEAM, 'current').then((fromIDB) => {
-    if (fromIDB && Array.isArray(fromIDB) && fromIDB.length > 0) {
-      cachedTeam = fromIDB;
-      dispatchTeamUpdatedEvent(fromIDB);
+    if (fromIDB && Array.isArray(fromIDB)) {
+      const clean = fromIDB.filter((m) => !isSampleTeamMember(m));
+      if (clean.length > 0) {
+        cachedTeam = clean;
+        dispatchTeamUpdatedEvent(clean);
+      } else {
+        cachedTeam = [...MASTER_TEAM_LIBRARY];
+        saveLocalTeamLibrary(cachedTeam);
+        dispatchTeamUpdatedEvent(cachedTeam);
+      }
     }
   });
   idbGet<MasterBomItem[]>(IDB_STORES.MASTER_BOM, 'current').then((fromIDB) => {
@@ -671,6 +718,7 @@ export function deduplicateMasterTeam(members: TeamMember[]): TeamMember[] {
 
   for (const m of members) {
     if (!m || typeof m !== 'object' || !m.name || String(m.name).trim() === '' || String(m.name).includes('(ระบุชื่อ-นามสกุล)')) continue;
+    if (isSampleTeamMember(m)) continue;
 
     const mCodeStr = String(m.memberCode || '').trim().toLowerCase();
     const existingIdx = result.findIndex((item) => {
@@ -733,10 +781,13 @@ export function normalizeMasterProjects(projects: PastProject[]): PastProject[] 
 
 /**
  * ปรับปรุงข้อมูลบุคลากรในคลังกลางให้มีรหัส ID บุคลากรขึ้นต้นด้วยปี พ.ศ. ที่บันทึกเสมอ พร้อมกำหนด originalMasterId
+ * กรองบุคลากรตัวอย่างเดิมทิ้งทั้งหมด 100%
  */
 export function normalizeMasterTeam(members: TeamMember[]): TeamMember[] {
   if (!Array.isArray(members)) return [];
-  const safeList = members.filter((m): m is TeamMember => !!m && typeof m === 'object');
+  const safeList = members
+    .filter((m): m is TeamMember => !!m && typeof m === 'object')
+    .filter((m) => !isSampleTeamMember(m));
   const currentYearBE = new Date().getFullYear() + 543;
   return deduplicateMasterTeam(
     safeList.map((m, idx) => {
@@ -764,34 +815,47 @@ export function normalizeMasterTeam(members: TeamMember[]): TeamMember[] {
 export function getMasterTeamLibrary(): TeamMember[] {
   try {
     if (cachedTeam && Array.isArray(cachedTeam) && cachedTeam.length > 0) {
-      return normalizeMasterTeam(cachedTeam);
+      const clean = cachedTeam.filter((m) => !isSampleTeamMember(m));
+      if (clean.length > 0) {
+        return normalizeMasterTeam(clean);
+      }
     }
     const raw = localStorage.getItem(TEAM_LIBRARY_KEY);
     if (raw !== null && raw !== 'undefined' && raw !== 'null') {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        cachedTeam = normalizeMasterTeam(parsed);
-        return cachedTeam;
+        const clean = parsed.filter((m) => !isSampleTeamMember(m));
+        if (clean.length > 0) {
+          cachedTeam = normalizeMasterTeam(clean);
+          saveLocalTeamLibrary(cachedTeam);
+          return cachedTeam;
+        }
       }
     }
   } catch (e) {
     console.warn('Could not read master team library from localStorage:', e);
   }
   cachedTeam = normalizeMasterTeam([...MASTER_TEAM_LIBRARY]);
+  saveLocalTeamLibrary(cachedTeam);
   return cachedTeam;
 }
 
 export async function fetchMasterTeamLibraryFromCloud(): Promise<TeamMember[]> {
   const fromIDB = await idbGet<TeamMember[]>(IDB_STORES.MASTER_TEAM, 'current');
-  if (fromIDB && Array.isArray(fromIDB) && fromIDB.length > 0) {
-    cachedTeam = normalizeMasterTeam(fromIDB);
-    return cachedTeam;
+  if (fromIDB && Array.isArray(fromIDB)) {
+    const clean = fromIDB.filter((m) => !isSampleTeamMember(m));
+    if (clean.length > 0) {
+      cachedTeam = normalizeMasterTeam(clean);
+      saveLocalTeamLibrary(cachedTeam);
+      return cachedTeam;
+    }
   }
   return getMasterTeamLibrary();
 }
 
 export function saveMasterTeamLibrary(items: TeamMember[]): void {
-  const normalized = normalizeMasterTeam(items);
+  const clean = (items || []).filter((m) => !isSampleTeamMember(m));
+  const normalized = normalizeMasterTeam(clean.length > 0 ? clean : [...MASTER_TEAM_LIBRARY]);
   saveLocalTeamLibrary(normalized);
   dispatchTeamUpdatedEvent(normalized);
 }

@@ -156,14 +156,14 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
   };
 
   const handleClearAllLibrary = () => {
-    if (confirm('ยืนยันการล้างข้อมูลบุคลากรทั้งหมดในคลังกลาง? (คุณสามารถกดปุ่มคืนค่าตัวอย่างเดิมได้ในภายหลัง)')) {
+    if (confirm('ยืนยันการล้างข้อมูลบุคลากรทั้งหมดในคลังกลาง? (คุณสามารถกดปุ่มคืนค่าบุคลากรหลัก 12 ท่านได้ในภายหลัง)')) {
       const updated = clearAllMasterTeamMembers();
       setTeamLibrary(updated);
     }
   };
 
   const handleResetLibrary = () => {
-    if (confirm('ต้องการคืนค่ารายการบุคลากรตัวอย่างเดิมกลับมาใช่หรือไม่?')) {
+    if (confirm('ต้องการคืนค่ารายการบุคลากรหลักของบริษัท (12 ท่าน) กลับมาใช่หรือไม่?')) {
       const updated = resetMasterTeamLibrary();
       setTeamLibrary(updated);
     }

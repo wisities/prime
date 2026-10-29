@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ProposalData, BiddingProject, ProposalStatus } from './types/proposal';
-import { INITIAL_PROPOSAL_DATA, createDefaultBlankProject, DEFAULT_BIDDING_PROJECTS } from './data/defaultData';
+import { INITIAL_PROPOSAL_DATA, createDefaultBlankProject, DEFAULT_BIDDING_PROJECTS, MASTER_TEAM_LIBRARY } from './data/defaultData';
 import { exportProposalToDocx } from './services/docxExport';
 import { exportProjectPackage, importProjectPackage } from './services/projectPackageService';
 import { runRuleBasedAudit } from './services/proposalAuditor';
@@ -63,7 +63,7 @@ import {
   CloudUpload,
 } from 'lucide-react';
 
-import { loadAllProjects, saveProject, normalizeProjectBudget } from './services/projectStorageService';
+import { loadAllProjects, saveProject, normalizeProjectBudget, isSampleTeamMember } from './services/projectStorageService';
 import { saveDraftSnapshot, purgeBloatedHistoricalSnapshots } from './services/localDatabase';
 
 const PROJECTS_STORAGE_KEY = 'prime_bidding_projects_v2';
@@ -108,6 +108,15 @@ function loadInitialProjects(): BiddingProject[] {
     const sampleIds = ['proj-001', 'proj-002', 'proj-003'];
     sampleIds.forEach((id) => projectMap.delete(id));
     const merged = Array.from(projectMap.values()).filter((p) => !sampleIds.includes(p.id));
+
+    // กรองบุคลากรตัวอย่างออกจากทุกโครงการ
+    for (const p of merged) {
+      if (p.proposalData?.section4?.teamMembers) {
+        const clean = p.proposalData.section4.teamMembers.filter((m) => !isSampleTeamMember(m));
+        p.proposalData.section4.teamMembers = clean.length > 0 ? clean : [...MASTER_TEAM_LIBRARY];
+      }
+    }
+
     if (merged.length > 0) return merged;
   } catch (e) {
     console.warn('Could not read projects from localStorage', e);
