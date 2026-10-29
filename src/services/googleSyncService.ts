@@ -36,6 +36,21 @@ export interface GoogleSyncHealth {
   hasSheetId: boolean;
 }
 
+export const DEFAULT_GOOGLE_APPS_SCRIPT_URL =
+  'https://script.google.com/macros/s/AKfycbzE7jWQPQq16UgNWwZPopPiZg8na22WEvxoctreMNojrhK3s62avlqyyaBiEk3Zd4Bu5A/exec';
+
+export function getEffectiveAppsScriptUrl(): string {
+  const custom = typeof localStorage !== 'undefined' ? localStorage.getItem('prime_google_apps_script_url') : '';
+  if (custom && custom.trim().startsWith('https://script.google.com/')) {
+    return custom.trim();
+  }
+  const envUrl = import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL;
+  if (envUrl && envUrl.trim().startsWith('https://script.google.com/')) {
+    return envUrl.trim();
+  }
+  return DEFAULT_GOOGLE_APPS_SCRIPT_URL;
+}
+
 /**
  * แปลง Blob เป็น Base64 String
  */
@@ -105,11 +120,7 @@ export async function syncProposalToGoogle(
       }
     }
 
-    const appsScriptUrl =
-      import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL ||
-      localStorage.getItem('prime_google_apps_script_url') ||
-      '';
-
+    const appsScriptUrl = getEffectiveAppsScriptUrl();
     let data: any;
 
     if (appsScriptUrl && appsScriptUrl.startsWith('https://script.google.com/')) {
@@ -207,11 +218,7 @@ export async function syncMasterLibraryToGoogle(options?: {
     const masterBom = getMasterBomLibrary();
     const masterCompany = getMasterCompanyProfile();
 
-    const appsScriptUrl =
-      import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL ||
-      localStorage.getItem('prime_google_apps_script_url') ||
-      '';
-
+    const appsScriptUrl = getEffectiveAppsScriptUrl();
     let data: any;
 
     if (appsScriptUrl && appsScriptUrl.startsWith('https://script.google.com/')) {
@@ -238,12 +245,23 @@ export async function syncMasterLibraryToGoogle(options?: {
           if (parsed.success) {
             data = parsed;
           } else {
-            console.warn('Apps Script returned error, falling back to direct API:', parsed.error);
+            console.warn('Apps Script returned error:', parsed.error);
+            if (String(parsed.error).includes('Missing project data')) {
+              throw new Error(
+                'Google Apps Script บน Google Drive ยังเป็นเวอร์ชันเก่า กรุณานำโค้ดล่าสุดจากไฟล์ google_apps_script_sync.js ไปวางในส่วนขยาย Apps Script บน Google Sheet แล้วกด "ทำให้ใช้งานได้ > การทำให้ใช้งานได้รายการใหม่" เพื่อเปิดใช้งานคอลัมน์ประวัติย่อและคลังกลาง'
+              );
+            }
           }
-        } catch {
+        } catch (jsonErr: any) {
+          if (jsonErr.message && jsonErr.message.includes('google_apps_script_sync.js')) {
+            throw jsonErr;
+          }
           console.warn('Apps Script response not JSON, falling back');
         }
-      } catch (gasErr) {
+      } catch (gasErr: any) {
+        if (gasErr.message && gasErr.message.includes('google_apps_script_sync.js')) {
+          throw gasErr;
+        }
         console.warn('Apps Script fetch failed, falling back:', gasErr);
       }
     }
@@ -300,12 +318,9 @@ export async function fetchMasterLibraryFromGoogleSheet(): Promise<{
   message?: string;
   error?: string;
 }> {
-  const appsScriptUrl =
-    import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL ||
-    localStorage.getItem('prime_google_apps_script_url') ||
-    '';
-
+  const appsScriptUrl = getEffectiveAppsScriptUrl();
   let data: any = null;
+  let isOutdatedScript = false;
 
   // 1. ลองดึงผ่าน Google Apps Script Web App หากกำหนดไว้
   if (appsScriptUrl && appsScriptUrl.startsWith('https://script.google.com/')) {
@@ -325,6 +340,8 @@ export async function fetchMasterLibraryFromGoogleSheet(): Promise<{
         const parsed = JSON.parse(text);
         if (parsed.success && Array.isArray(parsed.projects)) {
           data = parsed;
+        } else if (parsed.error && String(parsed.error).includes('Missing project data')) {
+          isOutdatedScript = true;
         }
       } catch {
         console.warn('Apps Script returned non-JSON response, attempting backend API fallback');
@@ -364,6 +381,14 @@ export async function fetchMasterLibraryFromGoogleSheet(): Promise<{
       projects: data.projects,
       team: data.team || [],
       message: `ดึงข้อมูลจาก Google Sheet สำเร็จ: พบผลงาน ${data.projects.length} รายการ, บุคลากร ${(data.team || []).length} ท่าน`,
+    };
+  }
+
+  if (isOutdatedScript) {
+    return {
+      success: false,
+      error:
+        'Google Apps Script บน Google Drive ของคุณยังเป็นเวอร์ชันเก่า (ยังไม่รองรับ action: get_master_library)\n\nวิธีแก้ไข:\n1. เปิด Google Sheet แล้วไปที่เมนู "ส่วนขยาย (Extensions) > Apps Script"\n2. คัดลอกโค้ดจากไฟล์ google_apps_script_sync.js ในระบบไปวางแทนที่ทั้งหมด\n3. กดปุ่ม "ทำให้ใช้งานได้ (Deploy) > การทำให้ใช้งานได้รายการใหม่ (New deployment)" แล้วบันทึก',
     };
   }
 

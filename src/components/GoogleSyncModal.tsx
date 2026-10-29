@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { BiddingProject } from '../types/proposal';
-import { syncProposalToGoogle, syncMasterLibraryToGoogle, checkGoogleSyncHealth, GoogleSyncResult, GoogleSyncHealth } from '../services/googleSyncService';
+import {
+  syncProposalToGoogle,
+  syncMasterLibraryToGoogle,
+  checkGoogleSyncHealth,
+  GoogleSyncResult,
+  GoogleSyncHealth,
+  getEffectiveAppsScriptUrl,
+} from '../services/googleSyncService';
 import {
   CloudUpload,
   CheckCircle2,
@@ -33,7 +40,7 @@ export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({ isOpen, projec
   const [syncMasterLibrary, setSyncMasterLibrary] = useState(true);
   const [copiedLink, setCopiedLink] = useState(false);
   const [appsScriptUrl, setAppsScriptUrl] = useState<string>(() => {
-    return localStorage.getItem('prime_google_apps_script_url') || '';
+    return getEffectiveAppsScriptUrl();
   });
 
   useEffect(() => {
