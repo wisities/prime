@@ -9,6 +9,8 @@ export interface UploadedFileResult {
   webViewLink: string;
   webContentLink?: string;
   category: string;
+  projectRef?: string;
+  memberRef?: string;
 }
 
 export interface ProjectFolderStructure {
@@ -125,7 +127,9 @@ export async function uploadFileToDrive(
   fileName: string,
   mimeType: string,
   fileContent: Buffer | string,
-  category: string = 'other'
+  category: string = 'other',
+  projectRef?: string,
+  memberRef?: string
 ): Promise<UploadedFileResult> {
   let buffer: Buffer;
 
@@ -192,5 +196,7 @@ export async function uploadFileToDrive(
     webViewLink,
     webContentLink,
     category,
+    projectRef,
+    memberRef,
   };
 }

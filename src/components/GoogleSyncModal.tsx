@@ -57,6 +57,12 @@ export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({ isOpen, projec
   const pastProjectsWithCerts = (project.proposalData?.section5?.pastProjects || []).filter(
     (p) => p.isSelected !== false && !!p.certificateFileUrl
   );
+  const pastProjectsWithImages = (project.proposalData?.section5?.pastProjects || []).filter(
+    (p) => !!p.projectImageUrl || (p.imageBlocks && p.imageBlocks.length > 0)
+  );
+  const teamMembersWithPhotos = (project.proposalData?.section4?.teamMembers || []).filter(
+    (m) => !!m.photoUrl
+  );
   const totalAttachments = (project.attachments || []).length;
 
   const handleStartSync = async () => {
@@ -223,6 +229,12 @@ export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({ isOpen, projec
                 📁 สัญญาแนบ: <strong>{pastProjectsWithCerts.length} ฉบับ</strong>
               </span>
               <span>
+                🖼️ ภาพผลงาน: <strong>{pastProjectsWithImages.length} โครงการ</strong>
+              </span>
+              <span>
+                👤 รูปถ่ายบุคลากร: <strong>{teamMembersWithPhotos.length} ท่าน</strong>
+              </span>
+              <span>
                 📎 เอกสาร TOR: <strong>{totalAttachments} ไฟล์</strong>
               </span>
             </div>
@@ -322,6 +334,40 @@ export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({ isOpen, projec
                     color: '#334155',
                   }}
                 >
+                  <FileText size={18} color="#8B5CF6" />
+                  <span>
+                    <strong>อัปโหลดภาพผลงานโครงการ & ภาพกิจกรรม ({pastProjectsWithImages.length} โครงการ):</strong> ลงในโฟลเดอร์ <code>05_ภาพผลงานและกิจกรรมโครงการ</code> พร้อมสูตร <code>=IMAGE(...)</code>
+                  </span>
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    backgroundColor: '#F1F5F9',
+                    fontSize: '0.85rem',
+                    color: '#334155',
+                  }}
+                >
+                  <FileText size={18} color="#EC4899" />
+                  <span>
+                    <strong>อัปโหลดรูปถ่ายบุคลากร ({teamMembersWithPhotos.length} ท่าน):</strong> ลงในโฟลเดอร์ <code>06_รูปถ่ายบุคลากร</code> พร้อมสูตร <code>=IMAGE(...)</code> แสดงรูป 1.5 นิ้ว
+                  </span>
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    backgroundColor: '#F1F5F9',
+                    fontSize: '0.85rem',
+                    color: '#334155',
+                  }}
+                >
                   <FileText size={18} color="#059669" />
                   <span>
                     <strong>สร้างและอัปโหลดเล่มข้อเสนอโครงการ (.docx):</strong> ลงในโฟลเดอร์ <code>03_เล่มข้อเสนอโครงการ</code>
@@ -341,7 +387,7 @@ export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({ isOpen, projec
                 >
                   <FileSpreadsheet size={18} color="#15803D" />
                   <span>
-                    <strong>บันทึกข้อมูลทั้งเล่มลง Google Sheet:</strong> 5 แท็บ (ภาพรวม, งวดงาน, BOM, สัญญา, บุคลากร) พร้อมใส่ลิงก์เปิดดูสัญญาใน Drive
+                    <strong>บันทึกข้อมูลทั้งเล่มลง Google Sheet:</strong> 5 แท็บ (ภาพรวม, งวดงาน, BOM, สัญญาพร้อมภาพผลงาน, บุคลากรพร้อมรูปถ่าย) พร้อมลิงก์เปิดดูไฟล์ใน Drive
                   </span>
                 </div>
               </div>

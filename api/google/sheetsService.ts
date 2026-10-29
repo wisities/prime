@@ -86,6 +86,9 @@ export async function initializeSheetTabs(sheets: SheetsClient, spreadsheetId: s
         'ระยะเวลาดำเนินการ',
         'ชื่อไฟล์สำเนาสัญญา/ใบรับรอง',
         'ลิงก์เปิดดูสัญญา (Google Drive)',
+        'ภาพผลงานโครงการ (Google Drive)',
+        'จำนวนภาพประกอบ',
+        'ตัวอย่างภาพผลงาน',
       ],
     },
     {
@@ -99,6 +102,8 @@ export async function initializeSheetTabs(sheets: SheetsClient, spreadsheetId: s
         'ประสบการณ์ทำงาน (ปี)',
         'ภาระหน้าที่รับผิดชอบ',
         'ใบรับรอง/Certifications',
+        'ลิงก์รูปถ่าย (Google Drive)',
+        'ตัวอย่างรูปถ่าย 1.5 นิ้ว',
       ],
     },
   ];
@@ -292,16 +297,45 @@ export async function syncProjectToGoogleSheet(
 
   if (selectedPastProjects.length > 0) {
     const contractRows = selectedPastProjects.map((proj) => {
+      const pRef = proj.id || proj.projectCode || proj.projectName;
+
       // ค้นหาว่าไฟล์สัญญานี้ถูกอัปโหลดขึ้น Google Drive ได้ลิงก์อะไร
       const uploadedCert = uploadedFiles.find(
         (f) =>
           f.category === 'contract_cert' &&
-          (f.name.includes(proj.projectCode || '') || f.name.includes(proj.projectName.substring(0, 15)))
+          (f.projectRef === pRef ||
+            f.name.includes(proj.projectCode || '') ||
+            f.name.includes(proj.projectName.substring(0, 15)))
       );
 
       const contractDriveLink = uploadedCert
         ? `=HYPERLINK("${uploadedCert.webViewLink}", "เปิดดูสำเนาสัญญา (Drive)")`
-        : folderStructure.subfolders.contracts.url;
+        : '-';
+
+      // ค้นหาภาพหลักของผลงาน
+      const mainImg = uploadedFiles.find(
+        (f) =>
+          f.category === 'project_image' &&
+          (f.projectRef === pRef || (proj.projectCode && f.name.includes(proj.projectCode)))
+      );
+
+      // ค้นหาภาพประกอบใน imageBlocks
+      const blockImages = uploadedFiles.filter(
+        (f) =>
+          f.category === 'project_image_block' &&
+          (f.projectRef === pRef || (proj.projectCode && f.name.includes(proj.projectCode)))
+      );
+
+      const effectiveMainImg = mainImg || (blockImages.length > 0 ? blockImages[0] : null);
+      const imgDriveLink = effectiveMainImg
+        ? `=HYPERLINK("${effectiveMainImg.webViewLink}", "เปิดดูภาพผลงาน (Drive)")`
+        : '-';
+
+      const totalImgCount = (mainImg ? 1 : 0) + (mainImg === blockImages[0] ? blockImages.length - 1 : blockImages.length);
+      const countText = totalImgCount > 0 ? `มีภาพประกอบ ${totalImgCount} ภาพ` : '-';
+      const imgThumbnail = effectiveMainImg && effectiveMainImg.fileId
+        ? `=IMAGE("https://drive.google.com/thumbnail?id=${effectiveMainImg.fileId}&sz=w400")`
+        : '-';
 
       return [
         projectCode,
@@ -314,12 +348,15 @@ export async function syncProjectToGoogleSheet(
         proj.periodDuration || '',
         proj.certificateFileName || uploadedCert?.name || 'ไม่มีไฟล์แนบ',
         contractDriveLink,
+        imgDriveLink,
+        countText,
+        imgThumbnail,
       ];
     });
 
     await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: `'${SHEET_TABS.CONTRACTS}'!A:J`,
+      range: `'${SHEET_TABS.CONTRACTS}'!A:M`,
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: contractRows },
     });
@@ -330,20 +367,38 @@ export async function syncProjectToGoogleSheet(
   // --------------------------------------------------------------------------
   const teamMembers = proposalData.section4?.teamMembers || [];
   if (teamMembers.length > 0) {
-    const teamRows = teamMembers.map((m) => [
-      projectCode,
-      projectTitle,
-      m.name || '',
-      m.proposedRole || '',
-      m.education || '',
-      Number(m.experienceYears || 0),
-      m.responsibilities || '',
-      m.certifications || '',
-    ]);
+    const teamRows = teamMembers.map((m) => {
+      const mRef = m.id || m.memberCode || m.name;
+      const uploadedPhoto = uploadedFiles.find(
+        (f) =>
+          f.category === 'team_photo' &&
+          (f.memberRef === mRef || (m.name && f.name.includes(m.name)))
+      );
+
+      const photoDriveLink = uploadedPhoto
+        ? `=HYPERLINK("${uploadedPhoto.webViewLink}", "เปิดดูรูปถ่าย (Drive)")`
+        : '-';
+      const photoThumbnail = uploadedPhoto && uploadedPhoto.fileId
+        ? `=IMAGE("https://drive.google.com/thumbnail?id=${uploadedPhoto.fileId}&sz=w400")`
+        : '-';
+
+      return [
+        projectCode,
+        projectTitle,
+        m.name || '',
+        m.proposedRole || '',
+        m.education || '',
+        Number(m.experienceYears || 0),
+        m.responsibilities || '',
+        m.certifications || '',
+        photoDriveLink,
+        photoThumbnail,
+      ];
+    });
 
     await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: `'${SHEET_TABS.TEAM}'!A:H`,
+      range: `'${SHEET_TABS.TEAM}'!A:J`,
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: teamRows },
     });
@@ -364,6 +419,8 @@ export async function syncMasterLibraryToGoogleSheet(
     masterBom?: any[];
     masterCompany?: any;
     uploadedCerts?: Record<string, string>;
+    uploadedProjectImages?: Record<string, { mainUrl?: string; mainFileId?: string; blockUrls: string[]; count: number }>;
+    uploadedTeamPhotos?: Record<string, { photoUrl: string; fileId: string }>;
   }
 ): Promise<string> {
   const meta = await sheets.spreadsheets.get({ spreadsheetId });
@@ -387,6 +444,9 @@ export async function syncMasterLibraryToGoogleSheet(
         'หมายเหตุความสอดคล้อง TOR',
         'ชื่อไฟล์สำเนาสัญญา',
         'ลิงก์เปิดดูสัญญา (Google Drive)',
+        'ภาพผลงานโครงการ (Google Drive)',
+        'จำนวนภาพประกอบ',
+        'ตัวอย่างภาพผลงาน',
         'วันที่อัปเดตล่าสุด',
       ],
     },
@@ -403,6 +463,8 @@ export async function syncMasterLibraryToGoogleSheet(
         'หน้าที่ความรับผิดชอบหลัก',
         'ผลงานเด่นที่ผ่านมา',
         'ใบรับรอง/Certifications',
+        'ลิงก์รูปถ่าย (Google Drive)',
+        'ตัวอย่างรูปถ่าย 1.5 นิ้ว',
         'วันที่อัปเดตล่าสุด',
       ],
     },
@@ -463,12 +525,23 @@ export async function syncMasterLibraryToGoogleSheet(
   const { masterProjects = [], masterTeam = [], masterBom = [], masterCompany = {}, uploadedCerts = {} } = masterData;
 
   // 1. [คลังกลาง] ผลงานและสัญญา
+  const { uploadedProjectImages = {}, uploadedTeamPhotos = {} } = masterData;
   const projHeaders = masterTabsConfig[0].headers;
   const projRows: any[][] = [projHeaders];
   for (let j = 0; j < masterProjects.length; j++) {
     const mp = masterProjects[j];
-    const certLink = uploadedCerts[mp.id || mp.projectCode] || (mp.certificateFileUrl?.startsWith('http') ? mp.certificateFileUrl : null);
+    const pRef = mp.id || mp.projectCode || ('prj_' + j);
+    const certLink = uploadedCerts[pRef] || (mp.certificateFileUrl?.startsWith('http') ? mp.certificateFileUrl : null);
     const certFormula = certLink ? `=HYPERLINK("${certLink}", "เปิดดูสำเนาสัญญา (Drive)")` : '-';
+
+    const imgInfo = uploadedProjectImages[pRef];
+    const imgLink = imgInfo?.mainUrl || (mp.projectImageUrl?.startsWith('http') ? mp.projectImageUrl : null);
+    const imgFormula = imgLink ? `=HYPERLINK("${imgLink}", "เปิดดูภาพผลงาน (Drive)")` : '-';
+    const imgCountStr = (imgInfo && imgInfo.count > 0) ? `มีภาพประกอบ ${imgInfo.count} ภาพ` : '-';
+    const imgThumbFormula = (imgInfo && imgInfo.mainFileId)
+      ? `=IMAGE("https://drive.google.com/thumbnail?id=${imgInfo.mainFileId}&sz=w400")`
+      : '-';
+
     projRows.push([
       mp.projectCode || `PRJ-${j + 1}`,
       Number(mp.contractYearBE || mp.completionYearBE || 2568),
@@ -483,6 +556,9 @@ export async function syncMasterLibraryToGoogleSheet(
       mp.relevanceNote || '',
       mp.certificateFileName || (certLink ? 'มีไฟล์แนบในไดรฟ์' : 'ไม่มีไฟล์แนบ'),
       certFormula,
+      imgFormula,
+      imgCountStr,
+      imgThumbFormula,
       nowThai,
     ]);
   }
@@ -490,7 +566,7 @@ export async function syncMasterLibraryToGoogleSheet(
   // เคลียร์และเขียนข้อมูลแท็บ Projects
   await sheets.spreadsheets.values.clear({
     spreadsheetId,
-    range: `'${MASTER_SHEET_TABS.PROJECTS}'!A:N`,
+    range: `'${MASTER_SHEET_TABS.PROJECTS}'!A:Q`,
   });
   await sheets.spreadsheets.values.update({
     spreadsheetId,
@@ -504,6 +580,14 @@ export async function syncMasterLibraryToGoogleSheet(
   const teamRows: any[][] = [teamHeaders];
   for (let k = 0; k < masterTeam.length; k++) {
     const tm = masterTeam[k];
+    const tRef = tm.id || tm.memberCode || tm.name;
+    const photoInfo = uploadedTeamPhotos[tRef];
+    const photoLink = photoInfo?.photoUrl || (tm.photoUrl?.startsWith('http') ? tm.photoUrl : null);
+    const photoFormula = photoLink ? `=HYPERLINK("${photoLink}", "เปิดดูรูปถ่าย (Drive)")` : '-';
+    const photoThumbFormula = (photoInfo && photoInfo.fileId)
+      ? `=IMAGE("https://drive.google.com/thumbnail?id=${photoInfo.fileId}&sz=w400")`
+      : '-';
+
     teamRows.push([
       tm.memberCode || tm.id || `EMP-${k + 1}`,
       Number(tm.recordedYearBE || 2568),
@@ -515,13 +599,15 @@ export async function syncMasterLibraryToGoogleSheet(
       tm.responsibilities || '',
       tm.highlightProjects || '',
       tm.certifications || '',
+      photoFormula,
+      photoThumbFormula,
       nowThai,
     ]);
   }
 
   await sheets.spreadsheets.values.clear({
     spreadsheetId,
-    range: `'${MASTER_SHEET_TABS.TEAM}'!A:K`,
+    range: `'${MASTER_SHEET_TABS.TEAM}'!A:M`,
   });
   await sheets.spreadsheets.values.update({
     spreadsheetId,

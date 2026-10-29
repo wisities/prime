@@ -32,4 +32,5 @@ dist-ssr
 # Google Cloud Service Account Keys
 *-*.json
 *.key.json
-
+# Temporary scratch files
+scratch/
