@@ -760,6 +760,8 @@ export function deduplicateMasterTeam(members: TeamMember[]): TeamMember[] {
 export function normalizeMasterProjects(projects: PastProject[]): PastProject[] {
   if (!Array.isArray(projects)) return [];
   const safeList = projects.filter((p): p is PastProject => !!p && typeof p === 'object');
+  const existingLocal = (cachedProjects && cachedProjects.length > 0) ? cachedProjects : [];
+
   return deduplicateMasterProjects(
     safeList.map((p, idx) => {
       const contractYear = Number(p.contractYearBE || p.completionYearBE) || 2568;
@@ -769,17 +771,27 @@ export function normalizeMasterProjects(projects: PastProject[]): PastProject[] 
       }
       const finalId = p.id ? String(p.id) : `lib-proj-${idx + 1}`;
       const assets = getRecoveredProjectAssets(code || p.projectCode, p.clientName, p.projectName);
+
+      const matchLocal = existingLocal.find((e) =>
+        (e.id && e.id === finalId) ||
+        (e.originalMasterId && e.originalMasterId === (p.originalMasterId || finalId)) ||
+        (code && e.projectCode && e.projectCode.trim().toLowerCase() === code.toLowerCase()) ||
+        (p.projectName && e.projectName && e.projectName.trim().toLowerCase() === p.projectName.trim().toLowerCase())
+      );
+
       return {
         ...p,
         id: finalId,
         contractYearBE: contractYear,
         projectCode: code,
         originalMasterId: p.originalMasterId ? String(p.originalMasterId) : finalId,
-        clientLogoUrl: p.clientLogoUrl || assets.clientLogoUrl,
-        projectImageUrl: p.projectImageUrl || assets.projectImageUrl,
-        certificateFileUrl: p.certificateFileUrl || assets.certificateFileUrl,
-        certificateFileName: p.certificateFileName || assets.certificateFileName,
-        imageBlocks: (Array.isArray(p.imageBlocks) && p.imageBlocks.length > 0) ? p.imageBlocks : [],
+        clientLogoUrl: p.clientLogoUrl || matchLocal?.clientLogoUrl || assets.clientLogoUrl,
+        projectImageUrl: p.projectImageUrl || matchLocal?.projectImageUrl || assets.projectImageUrl,
+        certificateFileUrl: p.certificateFileUrl || matchLocal?.certificateFileUrl || assets.certificateFileUrl,
+        certificateFileName: p.certificateFileName || matchLocal?.certificateFileName || assets.certificateFileName,
+        imageBlocks: (Array.isArray(p.imageBlocks) && p.imageBlocks.length > 0)
+          ? p.imageBlocks
+          : (matchLocal?.imageBlocks && matchLocal.imageBlocks.length > 0 ? matchLocal.imageBlocks : []),
       };
     })
   );
@@ -795,6 +807,8 @@ export function normalizeMasterTeam(members: TeamMember[]): TeamMember[] {
     .filter((m): m is TeamMember => !!m && typeof m === 'object')
     .filter((m) => !isSampleTeamMember(m));
   const currentYearBE = new Date().getFullYear() + 543;
+  const existingLocal = (cachedTeam && cachedTeam.length > 0) ? cachedTeam : [];
+
   return deduplicateMasterTeam(
     safeList.map((m, idx) => {
       const recordedYear = Number(m.recordedYearBE) || currentYearBE;
@@ -803,13 +817,27 @@ export function normalizeMasterTeam(members: TeamMember[]): TeamMember[] {
         code = generateMasterMemberId(recordedYear, safeList.slice(0, idx));
       }
       const finalId = m.id ? String(m.id) : code || `lib-team-${idx + 1}`;
+
+      const matchLocal = existingLocal.find((e) =>
+        (e.id && e.id === finalId) ||
+        (e.originalMasterId && e.originalMasterId === (m.originalMasterId || finalId)) ||
+        (code && e.memberCode && e.memberCode.trim().toLowerCase() === code.toLowerCase()) ||
+        (m.name && e.name && e.name.trim().toLowerCase() === m.name.trim().toLowerCase())
+      );
+
       return {
         ...m,
         id: finalId,
         recordedYearBE: recordedYear,
         memberCode: code,
         originalMasterId: m.originalMasterId ? String(m.originalMasterId) : finalId,
-        photoUrl: m.photoUrl || getRecoveredTeamPhoto(m.name),
+        photoUrl: m.photoUrl || matchLocal?.photoUrl || getRecoveredTeamPhoto(m.name),
+        bioImageBlocks: (Array.isArray(m.bioImageBlocks) && m.bioImageBlocks.length > 0)
+          ? m.bioImageBlocks
+          : (matchLocal?.bioImageBlocks && matchLocal.bioImageBlocks.length > 0 ? matchLocal.bioImageBlocks : []),
+        highlightImageBlocks: (Array.isArray(m.highlightImageBlocks) && m.highlightImageBlocks.length > 0)
+          ? m.highlightImageBlocks
+          : (matchLocal?.highlightImageBlocks && matchLocal.highlightImageBlocks.length > 0 ? matchLocal.highlightImageBlocks : []),
       };
     })
   );

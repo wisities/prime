@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getGoogleClients, getGoogleCredentials } from './auth';
 import { setupProjectFolderHierarchy, uploadFileToDrive, UploadedFileResult } from './driveService';
-import { syncProjectToGoogleSheet, syncMasterLibraryToGoogleSheet } from './sheetsService';
+import { syncProjectToGoogleSheet, syncMasterLibraryToGoogleSheet, getMasterLibraryFromGoogleSheet } from './sheetsService';
 import { BiddingProject } from '../../src/types/proposal';
 
 export const config = {
@@ -44,6 +44,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // กรณีขออ่านข้อมูลคลังกลางจาก Google Sheet (Pull / Read)
+    if (req.body.action === 'get_master_library') {
+      const { masterSheetId } = getGoogleCredentials();
+      const { sheets } = await getGoogleClients();
+      if (!sheets || !masterSheetId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Google Sheets API หรือ Master Sheet ID ยังไม่ได้ตั้งค่า',
+        });
+      }
+      const readRes = await getMasterLibraryFromGoogleSheet(sheets, masterSheetId);
+      return res.status(200).json({
+        success: true,
+        projects: readRes.projects,
+        team: readRes.team,
+        message: `ดึงข้อมูลจาก Google Sheet สำเร็จ: พบผลงาน ${readRes.projects.length} รายการ, บุคลากร ${readRes.team.length} ท่าน`,
+      });
+    }
+
     // กรณีซิงค์ข้อมูลกลาง (Master Library)
     if (req.body.action === 'sync_master_library' || req.body.masterProjects) {
       const { masterProjects = [], masterTeam = [], masterBom = [], masterCompany = {} } = req.body;

@@ -59,11 +59,16 @@ export const sortPastProjects = (projects: PastProject[]): PastProject[] => {
         return bVal - aVal;
       }
 
-      // 4. หากมูลค่าเท่ากัน เรียงตามรหัสโครงการ
-      const aCode = String(a.projectCode || '');
-      const bCode = String(b.projectCode || '');
+      // 4. หากมูลค่าเท่ากัน เรียงตามรหัสโครงการ (Natural Numeric Sorting)
+      const aCode = String(a.projectCode || '').trim();
+      const bCode = String(b.projectCode || '').trim();
+      const isPendingA = !aCode || aCode.includes('รอออกรหัส');
+      const isPendingB = !bCode || bCode.includes('รอออกรหัส');
+      if (isPendingA && !isPendingB) return -1;
+      if (!isPendingA && isPendingB) return 1;
+
       if (aCode && bCode) {
-        return bCode.localeCompare(aCode);
+        return bCode.localeCompare(aCode, undefined, { numeric: true, sensitivity: 'base' });
       }
 
       return String(a.projectName || '').localeCompare(String(b.projectName || ''));

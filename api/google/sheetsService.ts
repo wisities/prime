@@ -683,3 +683,119 @@ export async function syncMasterLibraryToGoogleSheet(
   return `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`;
 }
 
+/**
+ * ดึงข้อมูลคลังกลาง (ผลงานและสัญญา, บุคลากร) จาก Google Sheet ผ่าน Google Sheets API
+ */
+export async function getMasterLibraryFromGoogleSheet(
+  sheets: SheetsClient,
+  spreadsheetId: string
+): Promise<{
+  projects: any[];
+  team: any[];
+}> {
+  function extractUrlFromCell(val: any): string {
+    const s = String(val || '').trim();
+    if (!s) return '';
+    const hyperMatch = s.match(/HYPERLINK\(\s*["']([^"']+)["']/i);
+    if (hyperMatch && hyperMatch[1] && hyperMatch[1].startsWith('http')) {
+      return hyperMatch[1];
+    }
+    const imgMatch = s.match(/IMAGE\(\s*["']([^"']+)["']/i);
+    if (imgMatch && imgMatch[1] && imgMatch[1].startsWith('http')) {
+      return imgMatch[1];
+    }
+    if (s.startsWith('http')) {
+      return s;
+    }
+    return '';
+  }
+
+  const projects: any[] = [];
+  const team: any[] = [];
+
+  try {
+    const projRes = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `'${MASTER_SHEET_TABS.PROJECTS}'!A2:Q`,
+      valueRenderOption: 'FORMULA',
+    });
+
+    const pRows = projRes.data.values || [];
+    for (let i = 0; i < pRows.length; i++) {
+      const row = pRows[i];
+      const code = String(row[0] || '').trim();
+      const cYear = Number(row[1]) || 2567;
+      const name = String(row[2] || '').trim();
+      if (!name && !code) continue;
+
+      const certUrl = extractUrlFromCell(row[12]);
+      const imgUrl = extractUrlFromCell(row[13]) || extractUrlFromCell(row[15]);
+      const id = 'lib-proj-' + (code ? code.toLowerCase().replace(/[^a-z0-9_-]/g, '-') : `row-${i + 1}`);
+
+      projects.push({
+        id,
+        originalMasterId: id,
+        projectCode: code || `${cYear}-PRJ-${String(i + 1).padStart(3, '0')}`,
+        contractYearBE: cYear,
+        projectName: name,
+        clientName: String(row[3] || '').trim(),
+        contractValue: Number(row[4]) || 0,
+        completionYearBE: Number(row[5]) || cYear,
+        periodDuration: String(row[6] || '').trim(),
+        category: String(row[7] || '').trim(),
+        projectType: String(row[8] || '').includes('ตรง TOR') ? 'tor_reference' : 'supplementary',
+        description: String(row[9] || '').trim(),
+        relevanceNote: String(row[10] || '').trim(),
+        certificateFileName: String(row[11] || '').trim(),
+        certificateFileUrl: certUrl || undefined,
+        projectImageUrl: imgUrl || undefined,
+        isSelected: true,
+        imageBlocks: [],
+      });
+    }
+  } catch (err) {
+    console.warn('Could not read projects from master sheet:', err);
+  }
+
+  try {
+    const teamRes = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `'${MASTER_SHEET_TABS.TEAM}'!A2:M`,
+      valueRenderOption: 'FORMULA',
+    });
+
+    const tRows = teamRes.data.values || [];
+    for (let j = 0; j < tRows.length; j++) {
+      const tRow = tRows[j];
+      const mCode = String(tRow[0] || '').trim();
+      const recYear = Number(tRow[1]) || 2568;
+      const tName = String(tRow[2] || '').trim();
+      if (!tName && !mCode) continue;
+
+      const photoUrl = extractUrlFromCell(tRow[10]) || extractUrlFromCell(tRow[11]);
+      const mId = 'lib-team-' + (mCode ? mCode.toLowerCase().replace(/[^a-z0-9_-]/g, '-') : `row-${j + 1}`);
+
+      team.push({
+        id: mId,
+        originalMasterId: mId,
+        memberCode: mCode || `${recYear}-EMP-${String(j + 1).padStart(3, '0')}`,
+        recordedYearBE: recYear,
+        name: tName,
+        proposedRole: String(tRow[3] || '').trim(),
+        education: String(tRow[4] || '').trim(),
+        experienceYears: Number(tRow[5]) || 0,
+        startWorkYearBE: Number(tRow[6]) || (recYear - 5),
+        responsibilities: String(tRow[7] || '').trim(),
+        highlightProjects: String(tRow[8] || '').trim(),
+        certifications: String(tRow[9] || '').trim(),
+        photoUrl: photoUrl || undefined,
+      });
+    }
+  } catch (err) {
+    console.warn('Could not read team from master sheet:', err);
+  }
+
+  return { projects, team };
+}
+
+

@@ -167,6 +167,10 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
       setIsSyncingGoogle(true);
       setGoogleSyncResult(null);
       setSyncGoogleProgress('กำลังเริ่มต้นการซิงค์ข้อมูลลง Google Sheets & Drive...');
+      if (projectsToSync && Array.isArray(projectsToSync) && projectsToSync.length > 0) {
+        saveMasterProjectsLibrary(projectsToSync);
+        setProjects(projectsToSync);
+      }
       const res = await syncMasterLibraryToGoogle({
         onProgress: (msg) => setSyncGoogleProgress(msg),
       });
@@ -692,25 +696,51 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
       const yrB = Number(b.contractYearBE || b.completionYearBE || 0);
       if (yrA !== yrB) return yrB - yrA;
 
-      // 2. หากปีเดียวกัน เรียงตามรหัสโครงการ
+      // 2. หากปีเดียวกัน ให้โครงการที่รอออกรหัสอัตโนมัติอยู่บนสุดเพื่อความสะดวกในการจัดการ
       const codeA = String(a.projectCode || '').trim();
       const codeB = String(b.projectCode || '').trim();
-      if (codeA && codeB) return codeB.localeCompare(codeA);
+      const isPendingA = !codeA || codeA.includes('รอออกรหัส');
+      const isPendingB = !codeB || codeB.includes('รอออกรหัส');
+      if (isPendingA && !isPendingB) return -1;
+      if (!isPendingA && isPendingB) return 1;
 
-      // 3. เรียงตามชื่อโครงการ
+      // 3. เรียงตามรหัสโครงการจากใหม่ไปเก่า (Natural Numeric Sorting)
+      if (codeA && codeB) {
+        return codeB.localeCompare(codeA, undefined, { numeric: true, sensitivity: 'base' });
+      }
+
+      // 4. เรียงตามชื่อโครงการ
       return String(a.projectName || '').localeCompare(String(b.projectName || ''));
     });
 
-  const filteredTeam = (teamMembers || []).filter((m) => {
-    if (!m) return false;
-    const s = (teamSearch || '').toLowerCase();
-    return (
-      String(m.name || '').toLowerCase().includes(s) ||
-      String(m.proposedRole || '').toLowerCase().includes(s) ||
-      String(m.certifications || '').toLowerCase().includes(s) ||
-      String(m.education || '').toLowerCase().includes(s)
-    );
-  });
+  const filteredTeam = (teamMembers || [])
+    .filter((m) => {
+      if (!m) return false;
+      const s = (teamSearch || '').toLowerCase();
+      return (
+        String(m.name || '').toLowerCase().includes(s) ||
+        String(m.proposedRole || '').toLowerCase().includes(s) ||
+        String(m.certifications || '').toLowerCase().includes(s) ||
+        String(m.education || '').toLowerCase().includes(s)
+      );
+    })
+    .sort((a, b) => {
+      if (!a || !b) return 0;
+      // 1. เรียงตามปีที่บันทึก จากใหม่ไปเก่า
+      const yrA = Number(a.recordedYearBE || 0);
+      const yrB = Number(b.recordedYearBE || 0);
+      if (yrA !== yrB) return yrB - yrA;
+
+      // 2. เรียงตามรหัสบุคลากรจากใหม่ไปเก่า (Natural Numeric Sorting)
+      const codeA = String(a.memberCode || '').trim();
+      const codeB = String(b.memberCode || '').trim();
+      if (codeA && codeB) {
+        return codeB.localeCompare(codeA, undefined, { numeric: true, sensitivity: 'base' });
+      }
+
+      // 3. เรียงตามชื่อ
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
   const handleClose = () => {
     if (isEditingMember || isEditingProject) {
       if (!window.confirm('คุณกำลังแก้ไขข้อมูลอยู่และยังไม่ได้บันทึก ยืนยันการปิดหน้าต่างหรือไม่?')) {

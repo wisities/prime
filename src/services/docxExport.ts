@@ -30,16 +30,23 @@ import { ProposalData, ReportImageBlock, TorScopeItem } from '../types/proposal'
 import { normalizeDocumentStructure } from '../data/defaultData';
 import { normalizeTorItemImageBlocks } from '../utils/imageBlockUtils';
 import { generateDefaultConceptualDiagram } from '../utils/ganttRenderer';
+import { getRecoveredTeamPhoto } from '../data/defaultMediaAssets';
 
 function base64ToUint8Array(base64: string): Uint8Array {
-  const pureBase64 = base64.includes(',') ? base64.split(',')[1] : base64;
-  const binaryString = atob(pureBase64);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
+  if (!base64 || typeof base64 !== 'string') return new Uint8Array(0);
+  try {
+    const pureBase64 = base64.includes(',') ? base64.split(',')[1] : base64;
+    const binaryString = atob(pureBase64);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
+  } catch (err) {
+    console.warn('base64ToUint8Array conversion failed:', err);
+    return new Uint8Array(0);
   }
-  return bytes;
 }
 
 const FONT_FAMILY = 'TH Sarabun New';
@@ -2095,16 +2102,20 @@ export async function generateProposalDocxBlob(data: ProposalData): Promise<{ bl
         );
 
         section4.teamMembers.forEach((member, idx) => {
+          let photoData = member.photoUrl;
+          if (!photoData || photoData.startsWith('http')) {
+            photoData = getRecoveredTeamPhoto(member.name) || photoData;
+          }
           let photoParagraph: Paragraph;
-          if (member.photoUrl) {
+          if (photoData && photoData.startsWith('data:')) {
             try {
-              const imgType = member.photoUrl.startsWith('data:image/png') ? 'png' : 'jpg';
+              const imgType = photoData.startsWith('data:image/png') ? 'png' : 'jpg';
               photoParagraph = new Paragraph({
                 alignment: AlignmentType.CENTER,
                 children: [
                   new ImageRun({
                     type: imgType,
-                    data: member.photoUrl,
+                    data: photoData,
                     transformation: {
                       width: 108,
                       height: 144,

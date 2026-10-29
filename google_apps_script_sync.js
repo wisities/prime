@@ -791,6 +791,25 @@ function handleGetMasterLibrary(spreadsheetId) {
     ss = SpreadsheetApp.getActiveSpreadsheet();
   }
 
+  function extractUrlFromCell(val, formula) {
+    var f = String(formula || '').trim();
+    if (f) {
+      var match = f.match(/HYPERLINK\(\s*["']([^"']+)["']/i);
+      if (match && match[1] && match[1].indexOf('http') === 0) {
+        return match[1];
+      }
+      var imgMatch = f.match(/IMAGE\(\s*["']([^"']+)["']/i);
+      if (imgMatch && imgMatch[1] && imgMatch[1].indexOf('http') === 0) {
+        return imgMatch[1];
+      }
+    }
+    var v = String(val || '').trim();
+    if (v.indexOf('http') === 0) {
+      return v;
+    }
+    return '';
+  }
+
   var TAB_M_PROJECTS = "[คลังกลาง] ผลงานและสัญญา";
   var shProj = ss.getSheetByName(TAB_M_PROJECTS);
   var projects = [];
@@ -798,18 +817,17 @@ function handleGetMasterLibrary(spreadsheetId) {
   if (shProj && shProj.getLastRow() > 1) {
     var pCols = Math.max(shProj.getLastColumn(), 17);
     var pData = shProj.getRange(2, 1, shProj.getLastRow() - 1, pCols).getValues();
+    var pFormulas = shProj.getRange(2, 1, shProj.getLastRow() - 1, pCols).getFormulas();
     for (var i = 0; i < pData.length; i++) {
       var row = pData[i];
+      var fRow = pFormulas ? pFormulas[i] : null;
       var code = String(row[0] || '').trim();
       var cYear = Number(row[1]) || 2567;
       var name = String(row[2] || '').trim();
       if (!name && !code) continue;
 
-      var certUrl = String(row[12] || '');
-      if (certUrl.indexOf('http') === -1) certUrl = '';
-
-      var imgUrl = String(row[13] || '');
-      if (imgUrl.indexOf('http') === -1) imgUrl = '';
+      var certUrl = extractUrlFromCell(row[12], fRow ? fRow[12] : '');
+      var imgUrl = extractUrlFromCell(row[13], fRow ? fRow[13] : '') || extractUrlFromCell(row[15], fRow ? fRow[15] : '');
 
       var id = 'lib-proj-' + (code ? code.toLowerCase().replace(/[^a-z0-9_-]/g, '-') : ('row-' + (i + 1)));
 
@@ -843,15 +861,16 @@ function handleGetMasterLibrary(spreadsheetId) {
   if (shTeam && shTeam.getLastRow() > 1) {
     var tCols = Math.max(shTeam.getLastColumn(), 13);
     var tData = shTeam.getRange(2, 1, shTeam.getLastRow() - 1, tCols).getValues();
+    var tFormulas = shTeam.getRange(2, 1, shTeam.getLastRow() - 1, tCols).getFormulas();
     for (var j = 0; j < tData.length; j++) {
       var tRow = tData[j];
+      var tfRow = tFormulas ? tFormulas[j] : null;
       var mCode = String(tRow[0] || '').trim();
       var recYear = Number(tRow[1]) || 2568;
       var tName = String(tRow[2] || '').trim();
       if (!tName && !mCode) continue;
 
-      var photoUrl = String(tRow[10] || '');
-      if (photoUrl.indexOf('http') === -1) photoUrl = '';
+      var photoUrl = extractUrlFromCell(tRow[10], tfRow ? tfRow[10] : '') || extractUrlFromCell(tRow[11], tfRow ? tfRow[11] : '');
 
       var mId = 'lib-team-' + (mCode ? mCode.toLowerCase().replace(/[^a-z0-9_-]/g, '-') : ('row-' + (j + 1)));
 

@@ -305,52 +305,72 @@ export async function fetchMasterLibraryFromGoogleSheet(): Promise<{
     localStorage.getItem('prime_google_apps_script_url') ||
     '';
 
-  if (!appsScriptUrl || !appsScriptUrl.startsWith('https://script.google.com/')) {
-    return {
-      success: false,
-      error: 'ยังไม่ได้ระบุ Google Apps Script Web App URL กรุณากำหนดในหน้าต่างตั้งค่าการซิงค์',
-    };
-  }
+  let data: any = null;
 
-  try {
-    const res = await fetch(appsScriptUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8',
-      },
-      body: JSON.stringify({
-        action: 'get_master_library',
-      }),
-    });
-
-    const text = await res.text();
-    let data: any;
+  // 1. ลองดึงผ่าน Google Apps Script Web App หากกำหนดไว้
+  if (appsScriptUrl && appsScriptUrl.startsWith('https://script.google.com/')) {
     try {
-      data = JSON.parse(text);
-    } catch {
-      return {
-        success: false,
-        error: 'Google Apps Script ตอบกลับข้อมูลที่ไม่ใช่ JSON: ' + text.substring(0, 100),
-      };
-    }
+      const res = await fetch(appsScriptUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify({
+          action: 'get_master_library',
+        }),
+      });
 
-    if (data.success && Array.isArray(data.projects)) {
-      return {
-        success: true,
-        projects: data.projects,
-        team: data.team || [],
-        message: `ดึงข้อมูลจาก Google Sheet สำเร็จ: พบผลงาน ${data.projects.length} รายการ, บุคลากร ${(data.team || []).length} ท่าน`,
-      };
+      const text = await res.text();
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed.success && Array.isArray(parsed.projects)) {
+          data = parsed;
+        }
+      } catch {
+        console.warn('Apps Script returned non-JSON response, attempting backend API fallback');
+      }
+    } catch (gasErr) {
+      console.warn('Could not pull master library via Apps Script, attempting backend API fallback:', gasErr);
     }
+  }
 
+  // 2. หากยังไม่ได้ข้อมูล ให้ลองดึงผ่านระบบหลังบ้าน Serverless / Local API
+  if (!data) {
+    try {
+      const apiRes = await fetch('/api/google/sync-proposal', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'get_master_library',
+        }),
+      });
+
+      if (apiRes.ok) {
+        const parsed = await apiRes.json();
+        if (parsed.success && Array.isArray(parsed.projects)) {
+          data = parsed;
+        }
+      }
+    } catch (apiErr) {
+      console.warn('Backend API master library pull error:', apiErr);
+    }
+  }
+
+  if (data && data.success && Array.isArray(data.projects)) {
     return {
-      success: false,
-      error: data.error || data.message || 'ไม่พบข้อมูลในตาราง Google Sheet หรือสคริปต์ยังไม่ได้รับการอัปเดต',
-    };
-  } catch (err: any) {
-    return {
-      success: false,
-      error: err.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อกับ Google Apps Script',
+      success: true,
+      projects: data.projects,
+      team: data.team || [],
+      message: `ดึงข้อมูลจาก Google Sheet สำเร็จ: พบผลงาน ${data.projects.length} รายการ, บุคลากร ${(data.team || []).length} ท่าน`,
     };
   }
+
+  return {
+    success: false,
+    error:
+      data?.error ||
+      'ไม่สามารถดึงข้อมูลจาก Google Sheet ได้ กรุณาตรวจสอบว่ากำหนด Google Apps Script Web App URL หรือ Google Sheets API เรียบร้อยแล้ว',
+  };
 }
