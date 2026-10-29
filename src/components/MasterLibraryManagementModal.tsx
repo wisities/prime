@@ -119,21 +119,34 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
   const [isPullingFromSheet, setIsPullingFromSheet] = useState(false);
   const currentYearBE = 2568;
 
+  // Local Staging & Code Generation on Sync
+  const [modifiedProjectIds, setModifiedProjectIds] = useState<Set<string>>(new Set());
+  const [autoGenCodeOnSync, setAutoGenCodeOnSync] = useState(true);
+  const [showSyncCodeConfirmModal, setShowSyncCodeConfirmModal] = useState(false);
+  const [syncCodeConfirmations, setSyncCodeConfirmations] = useState<Array<{
+    id: string;
+    projectName: string;
+    yearBE: number;
+    generatedCode: string;
+    clientName: string;
+  }>>([]);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleSyncToGoogle = async () => {
+  const executeFinalSyncToGoogle = async (projectsToSync?: PastProject[]) => {
     try {
       setIsSyncingGoogle(true);
       setGoogleSyncResult(null);
-      setSyncGoogleProgress('กำลังเริ่มต้นการซิงค์...');
+      setSyncGoogleProgress('กำลังเริ่มต้นการซิงค์ข้อมูลลง Google Sheets & Drive...');
       const res = await syncMasterLibraryToGoogle({
         onProgress: (msg) => setSyncGoogleProgress(msg),
       });
       setGoogleSyncResult(res);
       if (res.success) {
+        setModifiedProjectIds(new Set());
         showToast(res.message);
       } else {
         alert(res.message || res.error || 'เกิดข้อผิดพลาดในการซิงค์ข้อมูลกลาง');
@@ -143,6 +156,80 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
     } finally {
       setIsSyncingGoogle(false);
     }
+  };
+
+  const handleInitiateSyncToGoogle = async () => {
+    // ตรวจสอบว่ามีโครงการใหม่ที่ต้องออกรหัสตามปีสัญญาหรือไม่
+    const projectsNeedingCode = projects.filter(
+      (p) => !p.projectCode || p.projectCode.trim() === '' || p.projectCode.includes('รอออกรหัส') || p.projectCode === 'AUTO'
+    );
+
+    if (projectsNeedingCode.length > 0) {
+      setIsSyncingGoogle(true);
+      setSyncGoogleProgress('กำลังตรวจสอบรหัสล่าสุดของแต่ละปีจาก Google Sheet...');
+
+      let sheetProjects: PastProject[] = [];
+      try {
+        const pullRes = await fetchMasterLibraryFromGoogleSheet();
+        if (pullRes.success && pullRes.projects) {
+          sheetProjects = pullRes.projects;
+        }
+      } catch (err) {
+        console.warn('Could not fetch latest sheet before code generation, using local library pool:', err);
+      } finally {
+        setIsSyncingGoogle(false);
+      }
+
+      // รวมโครงการที่มีรหัสที่แน่นอนแล้ว เพื่อคำนวณ max sequence ของแต่ละปี
+      const confirmedProjectsPool = [
+        ...sheetProjects,
+        ...projects.filter((p) => p.projectCode && !p.projectCode.includes('รอออกรหัส')),
+      ];
+
+      const allocatedSoFar: PastProject[] = [];
+      const newConfirmations = projectsNeedingCode.map((proj) => {
+        const yr = Number(proj.contractYearBE) || Number(proj.completionYearBE) || currentYearBE;
+        const nextCode = generateMasterProjectCode(yr, [...confirmedProjectsPool, ...allocatedSoFar]);
+        allocatedSoFar.push({ ...proj, projectCode: nextCode });
+        return {
+          id: proj.id,
+          projectName: proj.projectName || 'ไม่ระบุชื่อโครงการ',
+          yearBE: yr,
+          generatedCode: nextCode,
+          clientName: proj.clientName || 'ไม่ระบุหน่วยงาน',
+        };
+      });
+
+      setSyncCodeConfirmations(newConfirmations);
+      setShowSyncCodeConfirmModal(true);
+      return;
+    }
+
+    // หากไม่มีโครงการใหม่ที่ต้องออกรหัส (เป็นการอัปเดตข้อมูลโครงการเดิม) บันทึกและซิงค์ได้ทันที
+    executeFinalSyncToGoogle(projects);
+  };
+
+  const handleConfirmAndProceedSync = () => {
+    // อัปเดตรหัสใหม่ที่ผู้ใช้ยืนยันแล้วลงในรายการโครงการ
+    const updatedProjects = projects.map((p) => {
+      const foundConf = syncCodeConfirmations.find((c) => c.id === p.id);
+      if (foundConf) {
+        return {
+          ...p,
+          projectCode: foundConf.generatedCode,
+          contractYearBE: foundConf.yearBE,
+        };
+      }
+      return p;
+    });
+
+    saveMasterProjectsLibrary(updatedProjects);
+    setProjects(updatedProjects);
+    setShowSyncCodeConfirmModal(false);
+    setModifiedProjectIds(new Set());
+
+    // ซิงค์ทั้งหมดลง Google Sheet ทันที
+    executeFinalSyncToGoogle(updatedProjects);
   };
 
   useEffect(() => {
@@ -339,10 +426,9 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
   // -------------------------------------------------------------------------
   const handleOpenAddProject = () => {
     const contractYr = currentYearBE;
-    const autoCode = generateMasterProjectCode(contractYr, projects);
     setProjectFormData({
       id: `lib-proj-${Date.now()}`,
-      projectCode: autoCode,
+      projectCode: '[รอออกรหัสอัตโนมัติ]',
       contractYearBE: contractYr,
       projectName: '',
       clientName: '',
@@ -356,17 +442,19 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
       relevanceNote: '',
       imageBlocks: [],
     });
+    setAutoGenCodeOnSync(true);
     setIsEditingProject(true);
   };
 
   const handleOpenEditProject = (proj: PastProject) => {
     const contractYr = proj.contractYearBE || proj.completionYearBE || currentYearBE;
-    const code = proj.projectCode || generateMasterProjectCode(contractYr, projects);
+    const isPendingCode = !proj.projectCode || proj.projectCode.includes('รอออกรหัส');
     setProjectFormData({
       ...proj,
       contractYearBE: contractYr,
-      projectCode: code,
+      projectCode: proj.projectCode || '[รอออกรหัสอัตโนมัติ]',
     });
+    setAutoGenCodeOnSync(isPendingCode);
     setIsEditingProject(true);
   };
 
@@ -378,7 +466,9 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
     }
 
     const contractYr = Number(projectFormData.contractYearBE) || Number(projectFormData.completionYearBE) || currentYearBE;
-    const code = projectFormData.projectCode?.trim() || generateMasterProjectCode(contractYr, projects);
+    const code = autoGenCodeOnSync
+      ? (projectFormData.projectCode && !projectFormData.projectCode.includes('รอออกรหัส') ? projectFormData.projectCode : '[รอออกรหัสอัตโนมัติ]')
+      : (projectFormData.projectCode?.trim() || generateMasterProjectCode(contractYr, projects, projectFormData.id));
 
     const projToSave: PastProject = {
       id: projectFormData.id || `lib-proj-${Date.now()}`,
@@ -403,8 +493,9 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
 
     const { updatedLibrary, savedProject, isNew } = saveProjectToMasterLibraryResult(projToSave);
     setProjects(updatedLibrary);
+    setModifiedProjectIds((prev) => new Set(prev).add(savedProject.id));
     setIsEditingProject(false);
-    showToast(`${isNew ? 'บันทึกโครงการใหม่' : 'อัปเดตข้อมูลโครงการเดิม'} "${savedProject.projectName}" (รหัส: ${savedProject.projectCode}) ลงในคลังกลางสำเร็จ`);
+    showToast(`💾 บันทึก${isNew ? 'โครงการใหม่' : 'การแก้ไข'} "${savedProject.projectName}" ลงในเครื่องแล้ว (รอซิงค์ลง Google Sheet)`);
   };
 
   const handleDeleteProject = (id: string, name: string) => {
@@ -572,11 +663,12 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
     showToast('บันทึกข้อมูลบริษัทกลางเข้าสู่เครื่อง (IndexedDB) สำเร็จ');
   };
 
-  // Filtered & Sorted Lists
-  const filteredProjects = sortPastProjects(
-    projects.filter((p) => {
+  // Filtered & Sorted Lists: แสดงทั้งหมดเรียงจากปีใหม่ไปเก่า (Newest to Oldest)
+  const filteredProjects = projects
+    .filter((p) => {
       const matchSearch =
         (p.projectName || '').toLowerCase().includes(projectSearch.toLowerCase()) ||
+        (p.projectCode || '').toLowerCase().includes(projectSearch.toLowerCase()) ||
         (p.clientName || '').toLowerCase().includes(projectSearch.toLowerCase()) ||
         (p.description || '').toLowerCase().includes(projectSearch.toLowerCase());
       const matchType =
@@ -585,7 +677,20 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
         (projectTypeFilter === 'supplementary' && p.projectType === 'supplementary');
       return matchSearch && matchType;
     })
-  );
+    .sort((a, b) => {
+      // 1. เรียงตามปีที่ได้สัญญา (หรือปีแล้วเสร็จ) จากใหม่ไปเก่า
+      const yrA = Number(a.contractYearBE || a.completionYearBE || 0);
+      const yrB = Number(b.contractYearBE || b.completionYearBE || 0);
+      if (yrA !== yrB) return yrB - yrA;
+
+      // 2. หากปีเดียวกัน เรียงตามรหัสโครงการ
+      const codeA = (a.projectCode || '').trim();
+      const codeB = (b.projectCode || '').trim();
+      if (codeA && codeB) return codeB.localeCompare(codeA);
+
+      // 3. เรียงตามชื่อโครงการ
+      return (a.projectName || '').localeCompare(b.projectName || '');
+    });
 
   const filteredTeam = teamMembers.filter((m) => {
     return (
@@ -630,7 +735,7 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <button
               type="button"
-              onClick={handleSyncToGoogle}
+              onClick={handleInitiateSyncToGoogle}
               disabled={isSyncingGoogle}
               style={{
                 display: 'inline-flex',
@@ -887,62 +992,98 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
 
                   <div className="grid-2">
                     <div className="form-group">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
                         <label className="form-label" style={{ marginBottom: 0 }}>
                           รหัสโครงการ (Project Code) <span className="required">*</span>
                         </label>
-                        {isFormProjectCodeDuplicated && (
-                          <span style={{ fontSize: '0.68rem', color: '#DC2626', backgroundColor: '#FEE2E2', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
-                            ⚠️ รหัสนี้ซ้ำในคลัง
-                          </span>
-                        )}
+                        <label style={{ fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', color: '#047857', fontWeight: 600 }}>
+                          <input
+                            type="checkbox"
+                            checked={autoGenCodeOnSync}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setAutoGenCodeOnSync(checked);
+                              if (checked) {
+                                setProjectFormData({ ...projectFormData, projectCode: '[รอออกรหัสอัตโนมัติ]' });
+                              } else {
+                                const yr = Number(projectFormData.contractYearBE) || currentYearBE;
+                                setProjectFormData({ ...projectFormData, projectCode: generateMasterProjectCode(yr, projects, projectFormData.id) });
+                              }
+                            }}
+                          />
+                          ให้ระบบตรวจและออกรหัสตามปีสัญญาตอนกดซิงค์
+                        </label>
                       </div>
-                      <div style={{ display: 'flex', gap: '6px', marginTop: '0.25rem' }}>
-                        <input
-                          type="text"
-                          className="form-input"
-                          required
-                          placeholder="เช่น 2567-PRJ-001"
+
+                      {autoGenCodeOnSync ? (
+                        <div
                           style={{
+                            marginTop: '0.25rem',
+                            padding: '0.5rem 0.75rem',
+                            backgroundColor: '#F0FDF4',
+                            border: '1.5px dashed #86EFAC',
+                            borderRadius: '6px',
+                            color: '#166534',
+                            fontSize: '0.8rem',
                             fontWeight: 600,
-                            color: isFormProjectCodeDuplicated ? '#DC2626' : undefined,
-                            borderColor: isFormProjectCodeDuplicated ? '#F87171' : undefined,
-                            backgroundColor: isFormProjectCodeDuplicated ? '#FEF2F2' : undefined,
-                            flex: 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
                           }}
-                          value={projectFormData.projectCode || ''}
-                          onChange={(e) => setProjectFormData({ ...projectFormData, projectCode: e.target.value })}
-                          title="รหัสโครงการขึ้นต้นด้วยปี พ.ศ. ที่ได้สัญญา"
-                        />
-                        {isFormProjectCodeDuplicated && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const yr = Number(projectFormData.contractYearBE) || Number(projectFormData.completionYearBE) || currentYearBE;
-                              const nextCode = generateMasterProjectCode(yr, projects, projectFormData.id);
-                              setProjectFormData({ ...projectFormData, projectCode: nextCode });
-                            }}
-                            style={{
-                              fontSize: '0.72rem',
-                              padding: '0 8px',
-                              background: '#EFF6FF',
-                              color: '#1D4ED8',
-                              border: '1px solid #BFDBFE',
-                              borderRadius: '6px',
-                              cursor: 'pointer',
-                              fontWeight: 600,
-                              whiteSpace: 'nowrap',
-                            }}
-                            title="เปลี่ยนเป็นรหัสถัดไปที่ไม่ซ้ำอัตโนมัติ"
-                          >
-                            ⚡ รหัสถัดไป
-                          </button>
-                        )}
-                      </div>
-                      {isFormProjectCodeDuplicated && (
-                        <div style={{ fontSize: '0.7rem', color: '#DC2626', marginTop: '3px' }}>
-                          รหัส "{projectFormData.projectCode}" มีโครงการอื่นในคลังกลางใช้อยู่แล้ว คลิก "⚡ รหัสถัดไป" เพื่อสร้างรหัสใหม่
+                        >
+                          <Sparkles size={14} color="#16A34A" />
+                          <span>ระบบจะตรวจรหัสล่าสุดของปี พ.ศ. {projectFormData.contractYearBE || currentYearBE} ใน Google Sheet และออกรหัสให้ตอนกดซิงค์</span>
                         </div>
+                      ) : (
+                        <>
+                          <div style={{ display: 'flex', gap: '6px', marginTop: '0.25rem' }}>
+                            <input
+                              type="text"
+                              className="form-input"
+                              required
+                              placeholder="เช่น 2568-PRJ-001"
+                              style={{
+                                fontWeight: 600,
+                                color: isFormProjectCodeDuplicated ? '#DC2626' : undefined,
+                                borderColor: isFormProjectCodeDuplicated ? '#F87171' : undefined,
+                                backgroundColor: isFormProjectCodeDuplicated ? '#FEF2F2' : undefined,
+                                flex: 1,
+                              }}
+                              value={projectFormData.projectCode || ''}
+                              onChange={(e) => setProjectFormData({ ...projectFormData, projectCode: e.target.value })}
+                              title="รหัสโครงการขึ้นต้นด้วยปี พ.ศ. ที่ได้สัญญา"
+                            />
+                            {isFormProjectCodeDuplicated && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const yr = Number(projectFormData.contractYearBE) || Number(projectFormData.completionYearBE) || currentYearBE;
+                                  const nextCode = generateMasterProjectCode(yr, projects, projectFormData.id);
+                                  setProjectFormData({ ...projectFormData, projectCode: nextCode });
+                                }}
+                                style={{
+                                  fontSize: '0.72rem',
+                                  padding: '0 8px',
+                                  background: '#EFF6FF',
+                                  color: '#1D4ED8',
+                                  border: '1px solid #BFDBFE',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer',
+                                  fontWeight: 600,
+                                  whiteSpace: 'nowrap',
+                                }}
+                                title="เปลี่ยนเป็นรหัสถัดไปที่ไม่ซ้ำอัตโนมัติ"
+                              >
+                                ⚡ รหัสถัดไป
+                              </button>
+                            )}
+                          </div>
+                          {isFormProjectCodeDuplicated && (
+                            <div style={{ fontSize: '0.7rem', color: '#DC2626', marginTop: '3px' }}>
+                              รหัส "{projectFormData.projectCode}" มีโครงการอื่นในคลังกลางใช้อยู่แล้ว คลิก "⚡ รหัสถัดไป" หรือเลือกให้ระบบออกรหัสให้อัตโนมัติ
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
 
@@ -1368,7 +1509,7 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                       className="btn btn-primary"
                       style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                     >
-                      <Save size={15} /> 💾 บันทึกโครงการลงคลังกลาง
+                      <Save size={15} /> 💾 บันทึกในเครื่อง (รอซิงค์ลง Google Sheet)
                     </button>
                   </div>
                 </form>
@@ -1559,6 +1700,51 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                     </div>
                   )}
 
+                  {/* Local Staging / Pending Sync Banner */}
+                  {(modifiedProjectIds.size > 0 || projects.some(p => !p.projectCode || p.projectCode.includes('รอออกรหัส'))) && (
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '0.75rem',
+                        backgroundColor: '#F0FDF4',
+                        padding: '0.65rem 0.85rem',
+                        borderRadius: '6px',
+                        border: '1.5px solid #86EFAC',
+                        marginBottom: '0.75rem',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#166534', fontSize: '0.825rem' }}>
+                        <CheckCircle size={16} color="#16A34A" />
+                        <span>
+                          มีการบันทึกการแก้ไขในเครื่องแล้ว <strong>{modifiedProjectIds.size + projects.filter(p => !p.projectCode || p.projectCode.includes('รอออกรหัส')).length}</strong> รายการ (เมื่อตรวจสอบเสร็จแล้ว ให้กดปุ่ม "ซิงค์ข้อมูลกลางขึ้น Google Sheets & Drive" เพื่อออกรหัสและบันทึกลง Sheet)
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleInitiateSyncToGoogle}
+                        disabled={isSyncingGoogle}
+                        style={{
+                          fontSize: '0.78rem',
+                          padding: '4px 10px',
+                          backgroundColor: '#16A34A',
+                          color: '#FFFFFF',
+                          border: 'none',
+                          borderRadius: '5px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}
+                      >
+                        <CloudUpload size={13} /> ซิงค์ลง Google Sheet
+                      </button>
+                    </div>
+                  )}
+
                   {/* List View */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     {filteredProjects.length === 0 ? (
@@ -1598,8 +1784,47 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                               )}
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  {/* Year Badge */}
+                                  <span
+                                    style={{
+                                      fontSize: '0.72rem',
+                                      padding: '2px 7px',
+                                      borderRadius: '4px',
+                                      fontWeight: 700,
+                                      backgroundColor: '#FEF3C7',
+                                      color: '#B45309',
+                                      border: '1px solid #FDE68A',
+                                      letterSpacing: '0.02em',
+                                    }}
+                                    title="ปีที่ได้สัญญา / ปีแล้วเสร็จ (เรียงจากใหม่ไปเก่า)"
+                                  >
+                                    พ.ศ. {item.contractYearBE || item.completionYearBE}
+                                  </span>
+
+                                  {/* Code Badge */}
                                   {(() => {
-                                    const codeUpper = (item.projectCode || '').trim().toUpperCase();
+                                    const code = (item.projectCode || '').trim();
+                                    const isPendingCode = !code || code.includes('รอออกรหัส');
+                                    if (isPendingCode) {
+                                      return (
+                                        <span
+                                          style={{
+                                            fontSize: '0.72rem',
+                                            padding: '2px 7px',
+                                            borderRadius: '4px',
+                                            fontWeight: 700,
+                                            backgroundColor: '#FDF4FF',
+                                            color: '#9333EA',
+                                            border: '1px solid #F0ABFC',
+                                            letterSpacing: '0.02em',
+                                          }}
+                                          title="ระบบจะตรวจและออกรหัสให้ตอนกดปุ่มซิงค์ข้อมูลลง Google Sheet"
+                                        >
+                                          ⏳ รอออกรหัสเมื่อซิงค์
+                                        </span>
+                                      );
+                                    }
+                                    const codeUpper = code.toUpperCase();
                                     const isItemCodeDup = codeUpper && (duplicateProjectCodesInfo.countMap[codeUpper] || 0) > 1;
                                     return (
                                       <span
@@ -1615,10 +1840,28 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                                         }}
                                         title={isItemCodeDup ? '⚠️ รหัสโครงการนี้ซ้ำกับโครงการอื่นในคลังกลาง' : 'รหัสโครงการขึ้นต้นด้วยปี พ.ศ. ที่ได้สัญญา'}
                                       >
-                                        {item.projectCode || item.id} {isItemCodeDup && '⚠️ ซ้ำ'}
+                                        {code} {isItemCodeDup && '⚠️ ซ้ำ'}
                                       </span>
                                     );
                                   })()}
+
+                                  {/* Modified in Local Staging Badge */}
+                                  {modifiedProjectIds.has(item.id) && (
+                                    <span
+                                      style={{
+                                        fontSize: '0.68rem',
+                                        padding: '1px 6px',
+                                        borderRadius: '4px',
+                                        fontWeight: 600,
+                                        backgroundColor: '#ECFDF5',
+                                        color: '#065F46',
+                                        border: '1px solid #A7F3D0',
+                                      }}
+                                      title="บันทึกในเครื่องแล้ว รอกดปุ่มซิงค์เพื่อบันทึกลง Google Sheet"
+                                    >
+                                      💾 บันทึกในเครื่องแล้ว (รอซิงค์)
+                                    </span>
+                                  )}
                                   <span
                                     style={{
                                       fontSize: '0.7rem',
@@ -2504,6 +2747,167 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
           )}
         </div>
       </div>
+      {/* Confirmation Modal for Generated Project Codes on Sync */}
+      {showSyncCodeConfirmModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(3px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            padding: '1rem',
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '12px',
+              maxWidth: '560px',
+              width: '100%',
+              boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2), 0 10px 10px -5px rgba(0,0,0,0.04)',
+              overflow: 'hidden',
+              border: '1px solid #E2E8F0',
+            }}
+          >
+            <div
+              style={{
+                padding: '1.25rem 1.5rem',
+                backgroundColor: '#F8FAFC',
+                borderBottom: '1px solid #E2E8F0',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+              }}
+            >
+              <div style={{ backgroundColor: '#FEF3C7', padding: '8px', borderRadius: '8px', color: '#D97706' }}>
+                <Sparkles size={20} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--primary-900)' }}>
+                  ยืนยันการออกรหัสโครงการใหม่และบันทึกลง Google Sheet
+                </h3>
+                <p style={{ fontSize: '0.8rem', color: '#64748B', margin: '2px 0 0 0' }}>
+                  ระบบได้ตรวจลำดับรหัสใน Google Sheet ตามปีสัญญา และกำหนดรหัสใหม่ให้ดังนี้
+                </p>
+              </div>
+            </div>
+
+            <div style={{ padding: '1.25rem 1.5rem', maxHeight: '55vh', overflowY: 'auto' }}>
+              <div style={{ fontSize: '0.825rem', color: '#334155', marginBottom: '0.75rem', fontWeight: 500 }}>
+                พบโครงการใหม่ที่ต้องออกรหัส <strong>{syncCodeConfirmations.length}</strong> รายการ:
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {syncCodeConfirmations.map((item, idx) => (
+                  <div
+                    key={item.id}
+                    style={{
+                      backgroundColor: '#F8FAFC',
+                      border: '1.5px solid #E2E8F0',
+                      borderRadius: '8px',
+                      padding: '0.85rem 1rem',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: '12px',
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {idx + 1}. {item.projectName}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '2px' }}>
+                        🏛️ {item.clientName} | สัญญาปี พ.ศ. <strong>{item.yearBE}</strong>
+                      </div>
+                    </div>
+
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <div style={{ fontSize: '0.68rem', color: '#059669', fontWeight: 600 }}>รหัสที่เจนให้ใหม่</div>
+                      <div
+                        style={{
+                          backgroundColor: '#ECFDF5',
+                          color: '#065F46',
+                          border: '1.5px solid #6EE7B7',
+                          padding: '3px 10px',
+                          borderRadius: '6px',
+                          fontSize: '0.9rem',
+                          fontWeight: 800,
+                          letterSpacing: '0.5px',
+                          fontFamily: 'monospace',
+                          marginTop: '2px',
+                        }}
+                      >
+                        ⚡ {item.generatedCode}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div
+                style={{
+                  marginTop: '1rem',
+                  padding: '0.65rem 0.85rem',
+                  backgroundColor: '#EFF6FF',
+                  borderRadius: '6px',
+                  border: '1px solid #BFDBFE',
+                  fontSize: '0.78rem',
+                  color: '#1E40AF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+              >
+                <CheckCircle size={15} color="#2563EB" />
+                <span>เมื่อกดยืนยัน ระบบจะบันทึกรหัสใหม่ลงในเครื่องและซิงค์แถวข้อมูลทั้งหมดลง Google Sheet ให้ทันที</span>
+              </div>
+            </div>
+
+            <div
+              style={{
+                padding: '1rem 1.5rem',
+                backgroundColor: '#F8FAFC',
+                borderTop: '1px solid #E2E8F0',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '0.75rem',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setShowSyncCodeConfirmModal(false)}
+                className="btn btn-outline"
+                style={{ fontSize: '0.825rem', padding: '0.45rem 1rem' }}
+              >
+                ย้อนกลับไปแก้ไข
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmAndProceedSync}
+                className="btn btn-primary"
+                style={{
+                  fontSize: '0.825rem',
+                  padding: '0.45rem 1.25rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backgroundColor: '#059669',
+                  borderColor: '#059669',
+                }}
+              >
+                <Check size={16} /> ยืนยันรหัสและบันทึกลง Google Sheet
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
