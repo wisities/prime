@@ -99,11 +99,15 @@ export async function initializeSheetTabs(sheets: SheetsClient, spreadsheetId: s
         'ชื่อ-นามสกุล บุคลากร',
         'ตำแหน่งที่เสนอในโครงการ',
         'วุฒิการศึกษา',
+        'ประสบการณ์ทำงาน (ปี)',
         'หน้าที่ความรับผิดชอบ',
         'ประวัติย่อและความเชี่ยวชาญสำคัญ',
         'ใบรับรอง/Certifications',
         'ลิงก์รูปถ่าย (Google Drive)',
         'ตัวอย่างรูปถ่าย 1.5 นิ้ว',
+        'ภาพประกอบประวัติย่อ (Google Drive)',
+        'จำนวนภาพประกอบประวัติย่อ',
+        'ตัวอย่างภาพประกอบประวัติย่อ',
       ],
     },
   ];
@@ -382,6 +386,23 @@ export async function syncProjectToGoogleSheet(
         ? `=IMAGE("https://drive.google.com/thumbnail?id=${uploadedPhoto.fileId}&sz=w400")`
         : '-';
 
+      const uploadedBioImages = uploadedFiles.filter(
+        (f) =>
+          f.category === 'team_bio_image_block' &&
+          (f.memberRef === mRef || (m.name && f.name.includes(m.name)))
+      );
+
+      const mainBioImg = uploadedBioImages.length > 0 ? uploadedBioImages[0] : null;
+      const bioImgDriveFormula = mainBioImg
+        ? `=HYPERLINK("${mainBioImg.webViewLink}", "เปิดดูภาพประกอบประวัติย่อ (Drive)")`
+        : '-';
+      const bioImgCountStr = uploadedBioImages.length > 0
+        ? `มีภาพประกอบ ${uploadedBioImages.length} ภาพ`
+        : '-';
+      const bioImgThumbnailFormula = mainBioImg && mainBioImg.fileId
+        ? `=IMAGE("https://drive.google.com/thumbnail?id=${mainBioImg.fileId}&sz=w400")`
+        : '-';
+
       return [
         projectCode,
         projectTitle,
@@ -394,12 +415,15 @@ export async function syncProjectToGoogleSheet(
         m.certifications || '',
         photoDriveLink,
         photoThumbnail,
+        bioImgDriveFormula,
+        bioImgCountStr,
+        bioImgThumbnailFormula,
       ];
     });
 
     await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: `'${SHEET_TABS.TEAM}'!A:K`,
+      range: `'${SHEET_TABS.TEAM}'!A:N`,
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: teamRows },
     });
@@ -422,6 +446,7 @@ export async function syncMasterLibraryToGoogleSheet(
     uploadedCerts?: Record<string, string>;
     uploadedProjectImages?: Record<string, { mainUrl?: string; mainFileId?: string; blockUrls: string[]; count: number }>;
     uploadedTeamPhotos?: Record<string, { photoUrl: string; fileId: string }>;
+    uploadedTeamBioImages?: Record<string, { mainUrl?: string; mainFileId?: string; count: number }>;
   }
 ): Promise<string> {
   const meta = await sheets.spreadsheets.get({ spreadsheetId });
@@ -467,6 +492,9 @@ export async function syncMasterLibraryToGoogleSheet(
         'ใบรับรอง/Certifications',
         'ลิงก์รูปถ่าย (Google Drive)',
         'ตัวอย่างรูปถ่าย 1.5 นิ้ว',
+        'ภาพประกอบประวัติย่อ (Google Drive)',
+        'จำนวนภาพประกอบประวัติย่อ',
+        'ตัวอย่างภาพประกอบประวัติย่อ',
         'วันที่อัปเดตล่าสุด',
       ],
     },
@@ -590,6 +618,14 @@ export async function syncMasterLibraryToGoogleSheet(
       ? `=IMAGE("https://drive.google.com/thumbnail?id=${photoInfo.fileId}&sz=w400")`
       : '-';
 
+    const bioImgInfo = masterData.uploadedTeamBioImages?.[tRef];
+    const bioImgLink = bioImgInfo?.mainUrl || null;
+    const bioImgFormula = bioImgLink ? `=HYPERLINK("${bioImgLink}", "เปิดดูภาพประกอบประวัติย่อ (Drive)")` : '-';
+    const bioImgCountStr = (bioImgInfo && bioImgInfo.count > 0) ? `มีภาพประกอบ ${bioImgInfo.count} ภาพ` : '-';
+    const bioImgThumbFormula = (bioImgInfo && bioImgInfo.mainFileId)
+      ? `=IMAGE("https://drive.google.com/thumbnail?id=${bioImgInfo.mainFileId}&sz=w400")`
+      : '-';
+
     teamRows.push([
       tm.memberCode || tm.id || `EMP-${k + 1}`,
       Number(tm.recordedYearBE || 2568),
@@ -604,13 +640,16 @@ export async function syncMasterLibraryToGoogleSheet(
       tm.certifications || '',
       photoFormula,
       photoThumbFormula,
+      bioImgFormula,
+      bioImgCountStr,
+      bioImgThumbFormula,
       nowThai,
     ]);
   }
 
   await sheets.spreadsheets.values.clear({
     spreadsheetId,
-    range: `'${MASTER_SHEET_TABS.TEAM}'!A:N`,
+    range: `'${MASTER_SHEET_TABS.TEAM}'!A:Q`,
   });
   await sheets.spreadsheets.values.update({
     spreadsheetId,
@@ -763,7 +802,7 @@ export async function getMasterLibraryFromGoogleSheet(
   try {
     const teamRes = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `'${MASTER_SHEET_TABS.TEAM}'!A1:N`,
+      range: `'${MASTER_SHEET_TABS.TEAM}'!A1:Q`,
       valueRenderOption: 'FORMULA',
     });
 
@@ -772,13 +811,16 @@ export async function getMasterLibraryFromGoogleSheet(
     let bioIdx = -1;
     let certIdx = -1;
     let photoIdx = -1;
+    let bioImgIdx = -1;
     for (let h = 0; h < tHeaders.length; h++) {
       const hText = String(tHeaders[h] || '');
-      if (hText.includes('ประวัติย่อ')) bioIdx = h;
+      if (hText.includes('ประวัติย่อ') && !hText.includes('ภาพประกอบ')) bioIdx = h;
       else if (hText.includes('ใบรับรอง') || hText.includes('Certification')) certIdx = h;
       else if (hText.includes('ลิงก์รูปถ่าย')) photoIdx = h;
+      else if (hText.includes('ภาพประกอบประวัติย่อ')) bioImgIdx = h;
     }
-    if (bioIdx === -1 && tHeaders.length >= 14) { bioIdx = 9; certIdx = 10; photoIdx = 11; }
+    if (bioIdx === -1 && tHeaders.length >= 17) { bioIdx = 9; certIdx = 10; photoIdx = 11; bioImgIdx = 13; }
+    else if (bioIdx === -1 && tHeaders.length >= 14) { bioIdx = 9; certIdx = 10; photoIdx = 11; }
     else if (bioIdx === -1 && tHeaders.length < 14) { bioIdx = -1; certIdx = 9; photoIdx = 10; }
 
     const tRows = allRows.slice(1);
@@ -793,6 +835,15 @@ export async function getMasterLibraryFromGoogleSheet(
       const cCert = certIdx >= 0 ? String(tRow[certIdx] || '').trim() : '';
       const pIdx = photoIdx >= 0 ? photoIdx : 11;
       const photoUrl = extractUrlFromCell(tRow[pIdx]) || extractUrlFromCell(tRow[pIdx + 1]);
+
+      const bioImgUrl = bioImgIdx >= 0 ? (extractUrlFromCell(tRow[bioImgIdx]) || extractUrlFromCell(tRow[bioImgIdx + 2])) : '';
+      const bioBlocks = bioImgUrl ? [{
+        id: `bio-img-${j + 1}`,
+        type: 'single' as const,
+        url: bioImgUrl,
+        caption: 'ภาพประกอบประวัติย่อ/ความเชี่ยวชาญ',
+      }] : [];
+
       const mId = 'lib-team-' + (mCode ? mCode.toLowerCase().replace(/[^a-z0-9_-]/g, '-') : `row-${j + 1}`);
 
       team.push({
@@ -810,6 +861,7 @@ export async function getMasterLibraryFromGoogleSheet(
         personalBio: pBio || undefined,
         certifications: cCert || undefined,
         photoUrl: photoUrl || undefined,
+        bioImageBlocks: bioBlocks,
       });
     }
   } catch (err) {

@@ -91,7 +91,7 @@ function doPost(e) {
     var outputsFolder = getOrCreateSubFolder(projectFolder, "03_เล่มข้อเสนอโครงการ");
     var otherFolder = getOrCreateSubFolder(projectFolder, "04_เอกสารอื่นๆ");
     var projImagesFolder = getOrCreateSubFolder(projectFolder, "05_ภาพผลงานและกิจกรรมโครงการ");
-    var teamPhotosFolder = getOrCreateSubFolder(projectFolder, "06_รูปถ่ายบุคลากร");
+    var teamPhotosFolder = getOrCreateSubFolder(projectFolder, "06_รูปถ่ายและภาพประกอบบุคลากร", "06_รูปถ่ายบุคลากร");
 
     var uploadedFiles = [];
 
@@ -155,15 +155,46 @@ function doPost(e) {
       }
     }
 
-    // 7. อัปโหลดรูปถ่ายบุคลากร (Section 4 Team)
+    // 7. อัปโหลดรูปถ่ายและภาพประกอบประวัติย่อบุคลากร (Section 4 Team)
     var teamMembers = (project.proposalData && project.proposalData.section4 && project.proposalData.section4.teamMembers) ? project.proposalData.section4.teamMembers : [];
     for (var tmIdx = 0; tmIdx < teamMembers.length; tmIdx++) {
       var tm = teamMembers[tmIdx];
-      if (tm && tm.photoUrl && tm.photoUrl.indexOf('data:') === 0) {
-        var mRef = tm.id || tm.memberCode || tm.name;
-        var phName = 'รูปถ่าย_' + (tm.name || ('บุคลากร_' + (tmIdx + 1))).replace(/[\/\\?%*:|"<>]/g, '_') + '.png';
+      if (!tm) continue;
+      var mRef = tm.id || tm.memberCode || tm.name;
+      var cleanMemberName = (tm.name || ('บุคลากร_' + (tmIdx + 1))).replace(/[\/\\?%*:|"<>]/g, '_');
+
+      // 7.1 รูปถ่ายทางการ 1.5 นิ้ว
+      if (tm.photoUrl && tm.photoUrl.indexOf('data:') === 0) {
+        var phName = 'รูปถ่าย_' + cleanMemberName + '.png';
         var upPhoto = uploadBase64File(teamPhotosFolder, phName, tm.photoUrl, 'team_photo', mRef);
         if (upPhoto) uploadedFiles.push(upPhoto);
+      }
+
+      // 7.2 ภาพประกอบประวัติย่อ / ความเชี่ยวชาญ (bioImageBlocks / imageBlocks)
+      var bioBlocks = tm.bioImageBlocks || tm.imageBlocks || [];
+      if (bioBlocks && Array.isArray(bioBlocks)) {
+        for (var bIdx = 0; bIdx < bioBlocks.length; bIdx++) {
+          var bBlock = bioBlocks[bIdx];
+          if (!bBlock) continue;
+          if (bBlock.type === 'single' && bBlock.url && bBlock.url.indexOf('data:') === 0) {
+            var bioImgName = 'ภาพประวัติย่อ_' + cleanMemberName + '_ภาพที่' + (bIdx + 1) + '.png';
+            var upBioB = uploadBase64File(teamPhotosFolder, bioImgName, bBlock.url, 'team_bio_image_block', mRef);
+            if (upBioB) uploadedFiles.push(upBioB);
+          } else if (bBlock.type === 'double' || bBlock.type === 'pair') {
+            var bLeft = bBlock.urlLeft || bBlock.leftUrl;
+            if (bLeft && bLeft.indexOf('data:') === 0) {
+              var bioImgNameL = 'ภาพประวัติย่อ_' + cleanMemberName + '_ภาพที่' + (bIdx + 1) + 'a.png';
+              var upBioBL = uploadBase64File(teamPhotosFolder, bioImgNameL, bLeft, 'team_bio_image_block', mRef);
+              if (upBioBL) uploadedFiles.push(upBioBL);
+            }
+            var bRight = bBlock.urlRight || bBlock.rightUrl;
+            if (bRight && bRight.indexOf('data:') === 0) {
+              var bioImgNameR = 'ภาพประวัติย่อ_' + cleanMemberName + '_ภาพที่' + (bIdx + 1) + 'b.png';
+              var upBioBR = uploadBase64File(teamPhotosFolder, bioImgNameR, bRight, 'team_bio_image_block', mRef);
+              if (upBioBR) uploadedFiles.push(upBioBR);
+            }
+          }
+        }
       }
     }
 
@@ -215,10 +246,16 @@ function doPost(e) {
 /**
  * ฟังก์ชันสร้างหรือดึงโฟลเดอร์ย่อย
  */
-function getOrCreateSubFolder(parent, name) {
+function getOrCreateSubFolder(parent, name, fallbackName) {
   var folders = parent.getFoldersByName(name);
   if (folders.hasNext()) {
     return folders.next();
+  }
+  if (fallbackName) {
+    var fbFolders = parent.getFoldersByName(fallbackName);
+    if (fbFolders.hasNext()) {
+      return fbFolders.next();
+    }
   }
   return parent.createFolder(name);
 }
@@ -428,35 +465,48 @@ function syncToSheets(spreadsheetId, project, projectFolder, uploadedFiles) {
     }
   }
 
-  // 5. TAB TEAM (บุคลากรหลัก พร้อมลิงก์รูปถ่าย & สูตรแสดงภาพ 1.5 นิ้ว)
+  // 5. TAB TEAM (บุคลากรหลัก พร้อมลิงก์รูปถ่าย & ภาพประกอบประวัติย่อ)
   var teamMembersList = (pData.section4 && pData.section4.teamMembers) ? pData.section4.teamMembers : [];
   if (teamMembersList.length > 0) {
-    var shTeam = getOrCreateSheet(ss, TAB_TEAM, [
+    var teamSheetHeaders = [
       "รหัสโครงการ", "ชื่อโครงการ", "ชื่อ-นามสกุล บุคลากร", "ตำแหน่งที่เสนอในโครงการ",
       "วุฒิการศึกษา", "ประสบการณ์ทำงาน (ปี)", "ภาระหน้าที่รับผิดชอบ", "ประวัติย่อและความเชี่ยวชาญสำคัญ",
-      "ใบรับรอง/Certifications", "ลิงก์รูปถ่าย (Google Drive)", "ตัวอย่างรูปถ่าย 1.5 นิ้ว"
-    ]);
+      "ใบรับรอง/Certifications", "ลิงก์รูปถ่าย (Google Drive)", "ตัวอย่างรูปถ่าย 1.5 นิ้ว",
+      "ภาพประกอบประวัติย่อ (Google Drive)", "จำนวนภาพประกอบประวัติย่อ", "ตัวอย่างภาพประกอบประวัติย่อ"
+    ];
+    var shTeam = getOrCreateSheet(ss, TAB_TEAM, teamSheetHeaders);
     deleteExistingProjectRows(shTeam, projectCode);
 
     for (var t = 0; t < teamMembersList.length; t++) {
       var tm = teamMembersList[t];
       var mRef = tm.id || tm.memberCode || tm.name;
       var uploadedPhoto = null;
+      var uploadedBioImages = [];
+
       for (var u3 = 0; u3 < uploadedFiles.length; u3++) {
         var uf3 = uploadedFiles[u3];
-        if (uf3.category === 'team_photo' && (uf3.refId === mRef || (tm.name && uf3.name.indexOf(tm.name) !== -1))) {
-          uploadedPhoto = uf3;
-          break;
+        if (uf3.refId === mRef || (tm.name && uf3.name.indexOf(tm.name) !== -1)) {
+          if (uf3.category === 'team_photo') {
+            uploadedPhoto = uf3;
+          } else if (uf3.category === 'team_bio_image_block') {
+            uploadedBioImages.push(uf3);
+          }
         }
       }
       var photoDriveFormula = uploadedPhoto ? '=HYPERLINK("' + uploadedPhoto.webViewLink + '", "เปิดดูรูปถ่าย (Drive)")' : "-";
       var photoThumbnailFormula = (uploadedPhoto && uploadedPhoto.fileId) ? ('=IMAGE("https://drive.google.com/thumbnail?id=' + uploadedPhoto.fileId + '&sz=w400")') : "-";
 
+      var mainBioImg = uploadedBioImages.length > 0 ? uploadedBioImages[0] : null;
+      var bioImgDriveFormula = mainBioImg ? '=HYPERLINK("' + mainBioImg.webViewLink + '", "เปิดดูภาพประกอบประวัติย่อ (Drive)")' : "-";
+      var bioImgCountStr = uploadedBioImages.length > 0 ? ("มีภาพประกอบ " + uploadedBioImages.length + " ภาพ") : "-";
+      var bioImgThumbnailFormula = (mainBioImg && mainBioImg.fileId) ? ('=IMAGE("https://drive.google.com/thumbnail?id=' + mainBioImg.fileId + '&sz=w400")') : "-";
+
       shTeam.appendRow([
         projectCode, projectTitle, tm.name || "", tm.proposedRole || "",
         tm.education || "", Number(tm.experienceYears || 0), tm.responsibilities || "",
         tm.personalBio || "", tm.certifications || "",
-        photoDriveFormula, photoThumbnailFormula
+        photoDriveFormula, photoThumbnailFormula,
+        bioImgDriveFormula, bioImgCountStr, bioImgThumbnailFormula
       ]);
     }
   }
@@ -508,7 +558,7 @@ function handleSyncMasterLibrary(data, rootFolder, spreadsheetId) {
   var masterFolder = getOrCreateSubFolder(rootFolder, "00_คลังข้อมูลกลาง_Master_Library");
   var certsFolder = getOrCreateSubFolder(masterFolder, "01_สำเนาสัญญาและใบรับรองผลงานกลาง");
   var projImagesFolder = getOrCreateSubFolder(masterFolder, "02_ภาพผลงานโครงการกลาง");
-  var teamPhotosFolder = getOrCreateSubFolder(masterFolder, "03_รูปถ่ายบุคลากรกลาง");
+  var teamPhotosFolder = getOrCreateSubFolder(masterFolder, "03_รูปถ่ายและภาพประกอบบุคลากรกลาง", "03_รูปถ่ายบุคลากรกลาง");
 
   // 2. อัปโหลดสำเนาสัญญา และภาพผลงานโครงการของ Master Projects
   var uploadedCerts = {};
@@ -591,13 +641,18 @@ function handleSyncMasterLibrary(data, rootFolder, spreadsheetId) {
     }
   }
 
-  // 3. อัปโหลดรูปถ่ายบุคลากรในคลังกลาง
+  // 3. อัปโหลดรูปถ่ายบุคลากร และภาพประกอบประวัติย่อในคลังกลาง
   var uploadedTeamPhotos = {};
+  var uploadedTeamBioImages = {}; // key: tRef -> { mainUrl, mainFileId, blockCount }
   for (var k = 0; k < masterTeam.length; k++) {
     var tm = masterTeam[k];
-    if (tm && tm.photoUrl && tm.photoUrl.indexOf('data:') === 0) {
-      var tRef = tm.id || tm.memberCode || tm.name;
-      var phName = 'รูปถ่าย_' + (tm.name || ('บุคลากร_' + (k + 1))).replace(/[\/\\?%*:|"<>]/g, '_') + '.png';
+    if (!tm) continue;
+    var tRef = tm.id || tm.memberCode || tm.name;
+    var cleanTName = (tm.name || ('บุคลากร_' + (k + 1))).replace(/[\/\\?%*:|"<>]/g, '_');
+
+    // 3.1 รูปถ่ายทางการ 1.5 นิ้ว
+    if (tm.photoUrl && tm.photoUrl.indexOf('data:') === 0) {
+      var phName = 'รูปถ่าย_' + cleanTName + '.png';
       var upPhoto = uploadBase64File(teamPhotosFolder, phName, tm.photoUrl, 'master_team_photo', tRef);
       if (upPhoto) {
         uploadedTeamPhotos[tRef] = {
@@ -605,6 +660,57 @@ function handleSyncMasterLibrary(data, rootFolder, spreadsheetId) {
           fileId: upPhoto.fileId
         };
       }
+    }
+
+    // 3.2 ภาพประกอบประวัติย่อ/ความเชี่ยวชาญ (bioImageBlocks)
+    var bioBlocks = tm.bioImageBlocks || tm.imageBlocks || [];
+    var bioMainUrl = null;
+    var bioMainFileId = null;
+    var bioCount = 0;
+
+    if (bioBlocks && Array.isArray(bioBlocks)) {
+      for (var b = 0; b < bioBlocks.length; b++) {
+        var block = bioBlocks[b];
+        if (!block) continue;
+        if (block.type === 'single' && block.url && block.url.indexOf('data:') === 0) {
+          var bName = 'ภาพประวัติย่อ_' + cleanTName + '_ภาพที่' + (b + 1) + '.png';
+          var upBio = uploadBase64File(teamPhotosFolder, bName, block.url, 'master_team_bio_image', tRef);
+          if (upBio) {
+            if (!bioMainUrl) {
+              bioMainUrl = upBio.webViewLink;
+              bioMainFileId = upBio.fileId;
+            }
+            bioCount++;
+          }
+        } else if (block.type === 'double' || block.type === 'pair') {
+          var left = block.urlLeft || block.leftUrl;
+          if (left && left.indexOf('data:') === 0) {
+            var bNameL = 'ภาพประวัติย่อ_' + cleanTName + '_ภาพที่' + (b + 1) + 'a.png';
+            var upBioL = uploadBase64File(teamPhotosFolder, bNameL, left, 'master_team_bio_image', tRef);
+            if (upBioL) {
+              if (!bioMainUrl) {
+                bioMainUrl = upBioL.webViewLink;
+                bioMainFileId = upBioL.fileId;
+              }
+              bioCount++;
+            }
+          }
+          var right = block.urlRight || block.rightUrl;
+          if (right && right.indexOf('data:') === 0) {
+            var bNameR = 'ภาพประวัติย่อ_' + cleanTName + '_ภาพที่' + (b + 1) + 'b.png';
+            var upBioR = uploadBase64File(teamPhotosFolder, bNameR, right, 'master_team_bio_image', tRef);
+            if (upBioR) bioCount++;
+          }
+        }
+      }
+    }
+
+    if (bioMainUrl || bioCount > 0) {
+      uploadedTeamBioImages[tRef] = {
+        mainUrl: bioMainUrl,
+        mainFileId: bioMainFileId,
+        blockCount: bioCount
+      };
     }
   }
 
@@ -664,13 +770,15 @@ function handleSyncMasterLibrary(data, rootFolder, spreadsheetId) {
     shProj.getRange(2, 1, projRows.length, projHeaders.length).setValues(projRows);
   }
 
-  // 4. แท็บ [คลังกลาง] บุคลากร (14 คอลัมน์)
+  // 4. แท็บ [คลังกลาง] บุคลากร (17 คอลัมน์)
   var TAB_M_TEAM = "[คลังกลาง] บุคลากร";
   var teamHeaders = [
     "รหัสบุคลากร", "ปีที่บันทึก (พ.ศ.)", "ชื่อ-นามสกุล", "ตำแหน่งหลักที่เสนอ",
     "วุฒิการศึกษา", "ประสบการณ์ (ปี)", "ปีเริ่มทำงาน (พ.ศ.)", "หน้าที่ความรับผิดชอบหลัก",
     "ผลงานเด่นที่ผ่านมา", "ประวัติย่อและความเชี่ยวชาญสำคัญ", "ใบรับรอง/Certifications",
-    "ลิงก์รูปถ่าย (Google Drive)", "ตัวอย่างรูปถ่าย 1.5 นิ้ว", "วันที่อัปเดตล่าสุด"
+    "ลิงก์รูปถ่าย (Google Drive)", "ตัวอย่างรูปถ่าย 1.5 นิ้ว",
+    "ภาพประกอบประวัติย่อ (Google Drive)", "จำนวนภาพประกอบประวัติย่อ", "ตัวอย่างภาพประกอบประวัติย่อ",
+    "วันที่อัปเดตล่าสุด"
   ];
   var shTeam = getOrCreateSheet(ss, TAB_M_TEAM, teamHeaders);
 
@@ -687,6 +795,12 @@ function handleSyncMasterLibrary(data, rootFolder, spreadsheetId) {
     var photoFormula = photoLink ? '=HYPERLINK("' + photoLink + '", "เปิดดูรูปถ่าย (Drive)")' : "-";
     var photoThumbFormula = (photoInfo && photoInfo.fileId) ? ('=IMAGE("https://drive.google.com/thumbnail?id=' + photoInfo.fileId + '&sz=w400")') : "-";
 
+    var bioImgInfo = uploadedTeamBioImages[tRef];
+    var bioImgLink = bioImgInfo && bioImgInfo.mainUrl ? bioImgInfo.mainUrl : null;
+    var bioImgFormula = bioImgLink ? '=HYPERLINK("' + bioImgLink + '", "เปิดดูภาพประกอบประวัติย่อ (Drive)")' : "-";
+    var bioImgCountStr = (bioImgInfo && bioImgInfo.blockCount > 0) ? ("มีภาพประกอบ " + bioImgInfo.blockCount + " ภาพ") : "-";
+    var bioImgThumbFormula = (bioImgInfo && bioImgInfo.mainFileId) ? ('=IMAGE("https://drive.google.com/thumbnail?id=' + bioImgInfo.mainFileId + '&sz=w400")') : "-";
+
     teamRows.push([
       tm.memberCode || tm.id || ("EMP-" + (k + 1)),
       Number(tm.recordedYearBE || 2568),
@@ -701,6 +815,9 @@ function handleSyncMasterLibrary(data, rootFolder, spreadsheetId) {
       tm.certifications || "",
       photoFormula,
       photoThumbFormula,
+      bioImgFormula,
+      bioImgCountStr,
+      bioImgThumbFormula,
       nowStr
     ]);
   }
@@ -861,18 +978,21 @@ function handleGetMasterLibrary(spreadsheetId) {
   var team = [];
 
   if (shTeam && shTeam.getLastRow() > 1) {
-    var tCols = Math.max(shTeam.getLastColumn(), 14);
+    var tCols = Math.max(shTeam.getLastColumn(), 17);
     var tHeaders = shTeam.getRange(1, 1, 1, tCols).getValues()[0] || [];
     var bioIdx = -1;
     var certIdx = -1;
     var photoIdx = -1;
+    var bioImgIdx = -1;
     for (var h = 0; h < tHeaders.length; h++) {
       var hText = String(tHeaders[h] || '');
-      if (hText.indexOf('ประวัติย่อ') !== -1) bioIdx = h;
+      if (hText.indexOf('ประวัติย่อ') !== -1 && hText.indexOf('ภาพประกอบ') === -1) bioIdx = h;
       else if (hText.indexOf('ใบรับรอง') !== -1 || hText.indexOf('Certification') !== -1) certIdx = h;
       else if (hText.indexOf('ลิงก์รูปถ่าย') !== -1) photoIdx = h;
+      else if (hText.indexOf('ภาพประกอบประวัติย่อ') !== -1) bioImgIdx = h;
     }
-    if (bioIdx === -1 && tCols >= 14) { bioIdx = 9; certIdx = 10; photoIdx = 11; }
+    if (bioIdx === -1 && tCols >= 17) { bioIdx = 9; certIdx = 10; photoIdx = 11; bioImgIdx = 13; }
+    else if (bioIdx === -1 && tCols >= 14) { bioIdx = 9; certIdx = 10; photoIdx = 11; }
     else if (bioIdx === -1 && tCols < 14) { bioIdx = -1; certIdx = 9; photoIdx = 10; }
 
     var tData = shTeam.getRange(2, 1, shTeam.getLastRow() - 1, tCols).getValues();
@@ -890,6 +1010,18 @@ function handleGetMasterLibrary(spreadsheetId) {
       var pIdx = photoIdx >= 0 ? photoIdx : 11;
       var photoUrl = extractUrlFromCell(tRow[pIdx], tfRow ? tfRow[pIdx] : '') || extractUrlFromCell(tRow[pIdx + 1], tfRow ? tfRow[pIdx + 1] : '');
 
+      var bioImgUrl = bioImgIdx >= 0 ? (extractUrlFromCell(tRow[bioImgIdx], tfRow ? tfRow[bioImgIdx] : '') || extractUrlFromCell(tRow[bioImgIdx + 2], tfRow ? tfRow[bioImgIdx + 2] : '')) : '';
+
+      var bioBlocks = [];
+      if (bioImgUrl) {
+        bioBlocks.push({
+          id: 'bio-img-' + (j + 1),
+          type: 'single',
+          url: bioImgUrl,
+          caption: 'ภาพประกอบประวัติย่อ/ความเชี่ยวชาญ'
+        });
+      }
+
       var mId = 'lib-team-' + (mCode ? mCode.toLowerCase().replace(/[^a-z0-9_-]/g, '-') : ('row-' + (j + 1)));
 
       team.push({
@@ -906,7 +1038,8 @@ function handleGetMasterLibrary(spreadsheetId) {
         highlightProjects: String(tRow[8] || '').trim(),
         personalBio: pBio || undefined,
         certifications: cCert || undefined,
-        photoUrl: photoUrl || undefined
+        photoUrl: photoUrl || undefined,
+        bioImageBlocks: bioBlocks
       });
     }
   }

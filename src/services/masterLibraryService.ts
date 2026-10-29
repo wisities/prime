@@ -1596,9 +1596,11 @@ export function importMasterTeamFromCsv(csvText: string): { success: boolean; co
     }
 
     const headerCols = parseCsvLine(lines[0]);
-    let bioIdx = headerCols.findIndex(c => c.includes('ประวัติย่อ'));
+    let bioIdx = headerCols.findIndex(c => c.includes('ประวัติย่อ') && !c.includes('ภาพประกอบ'));
     let certIdx = headerCols.findIndex(c => c.includes('ใบรับรอง') || c.includes('Certification'));
-    if (bioIdx === -1 && headerCols.length >= 14) { bioIdx = 9; certIdx = 10; }
+    let bioImgIdx = headerCols.findIndex(c => c.includes('ภาพประกอบประวัติย่อ'));
+    if (bioIdx === -1 && headerCols.length >= 17) { bioIdx = 9; certIdx = 10; bioImgIdx = 13; }
+    else if (bioIdx === -1 && headerCols.length >= 14) { bioIdx = 9; certIdx = 10; }
     else if (bioIdx === -1 && headerCols.length < 14) { bioIdx = -1; certIdx = 9; }
 
     const members: TeamMember[] = [];

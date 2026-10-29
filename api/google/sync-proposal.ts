@@ -72,6 +72,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const uploadedCerts: Record<string, string> = {};
       const uploadedProjectImages: Record<string, { mainUrl?: string; mainFileId?: string; blockUrls: string[]; count: number }> = {};
       const uploadedTeamPhotos: Record<string, { photoUrl: string; fileId: string }> = {};
+      const uploadedTeamBioImages: Record<string, { mainUrl?: string; mainFileId?: string; count: number }> = {};
 
       if (drive && parentFolderId) {
         try {
@@ -79,7 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const masterFolder = await getOrCreateFolder(drive, parentFolderId, '00_คลังข้อมูลกลาง_Master_Library');
           const certsFolder = await getOrCreateFolder(drive, masterFolder.id, '01_สำเนาสัญญาและใบรับรองผลงานกลาง');
           const projImagesFolder = await getOrCreateFolder(drive, masterFolder.id, '02_ภาพผลงานโครงการกลาง');
-          const teamPhotosFolder = await getOrCreateFolder(drive, masterFolder.id, '03_รูปถ่ายบุคลากรกลาง');
+          const teamPhotosFolder = await getOrCreateFolder(drive, masterFolder.id, '03_รูปถ่ายและภาพประกอบบุคลากรกลาง');
 
           // อัปโหลดสัญญาและภาพผลงานโครงการ
           for (let i = 0; i < masterProjects.length; i++) {
@@ -148,16 +149,65 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
           }
 
-          // อัปโหลดรูปถ่ายบุคลากร
+          // อัปโหลดรูปถ่ายและภาพประกอบประวัติย่อบุคลากร
           for (let k = 0; k < masterTeam.length; k++) {
             const tm = masterTeam[k];
-            if (tm && tm.photoUrl && tm.photoUrl.startsWith('data:')) {
-              const tRef = tm.id || tm.memberCode || tm.name;
-              const phName = `รูปถ่าย_${(tm.name || ('บุคลากร_' + (k + 1))).replace(/[\/\\?%*:|"<>]/g, '_')}.png`;
+            if (!tm) continue;
+            const tRef = tm.id || tm.memberCode || tm.name;
+            const cleanTName = (tm.name || (`บุคลากร_${k + 1}`)).replace(/[\/\\?%*:|"<>]/g, '_');
+
+            if (tm.photoUrl && tm.photoUrl.startsWith('data:')) {
+              const phName = `รูปถ่าย_${cleanTName}.png`;
               const upPhoto = await uploadFileToDrive(drive, teamPhotosFolder.id, phName, 'image/png', tm.photoUrl, 'master_team_photo', undefined, tRef);
               uploadedTeamPhotos[tRef] = {
                 photoUrl: upPhoto.webViewLink,
                 fileId: upPhoto.fileId,
+              };
+            }
+
+            const bioBlocks = tm.bioImageBlocks || tm.imageBlocks || [];
+            let bioMainUrl: string | undefined;
+            let bioMainFileId: string | undefined;
+            let bioCount = 0;
+
+            if (Array.isArray(bioBlocks)) {
+              for (let b = 0; b < bioBlocks.length; b++) {
+                const block = bioBlocks[b];
+                if (!block) continue;
+                if (block.type === 'single' && block.url && block.url.startsWith('data:')) {
+                  const bName = `ภาพประวัติย่อ_${cleanTName}_ภาพที่${b + 1}.png`;
+                  const upBio = await uploadFileToDrive(drive, teamPhotosFolder.id, bName, 'image/png', block.url, 'master_team_bio_image', undefined, tRef);
+                  if (!bioMainUrl) {
+                    bioMainUrl = upBio.webViewLink;
+                    bioMainFileId = upBio.fileId;
+                  }
+                  bioCount++;
+                } else if (block.type === 'double' || block.type === 'pair') {
+                  const left = block.urlLeft || block.leftUrl;
+                  if (left && left.startsWith('data:')) {
+                    const bNameL = `ภาพประวัติย่อ_${cleanTName}_ภาพที่${b + 1}a.png`;
+                    const upBioL = await uploadFileToDrive(drive, teamPhotosFolder.id, bNameL, 'image/png', left, 'master_team_bio_image', undefined, tRef);
+                    if (!bioMainUrl) {
+                      bioMainUrl = upBioL.webViewLink;
+                      bioMainFileId = upBioL.fileId;
+                    }
+                    bioCount++;
+                  }
+                  const right = block.urlRight || block.rightUrl;
+                  if (right && right.startsWith('data:')) {
+                    const bNameR = `ภาพประวัติย่อ_${cleanTName}_ภาพที่${b + 1}b.png`;
+                    const upBioR = await uploadFileToDrive(drive, teamPhotosFolder.id, bNameR, 'image/png', right, 'master_team_bio_image', undefined, tRef);
+                    bioCount++;
+                  }
+                }
+              }
+            }
+
+            if (bioMainUrl || bioCount > 0) {
+              uploadedTeamBioImages[tRef] = {
+                mainUrl: bioMainUrl,
+                mainFileId: bioMainFileId,
+                count: bioCount,
               };
             }
           }
@@ -174,6 +224,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         uploadedCerts,
         uploadedProjectImages,
         uploadedTeamPhotos,
+        uploadedTeamBioImages,
       });
 
       return res.status(200).json({
@@ -344,13 +395,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // 3.4 อัปโหลดรูปถ่ายบุคลากร (Section 4 Team)
+    // 3.4 อัปโหลดรูปถ่ายบุคลากร และภาพประกอบประวัติย่อ (Section 4 Team)
     const teamMembers = project.proposalData?.section4?.teamMembers || [];
     for (let tmIdx = 0; tmIdx < teamMembers.length; tmIdx++) {
       const tm = teamMembers[tmIdx];
-      if (tm && tm.photoUrl && tm.photoUrl.startsWith('data:')) {
-        const mRef = tm.id || tm.memberCode || tm.name;
-        const phName = `รูปถ่าย_${(tm.name || ('บุคลากร_' + (tmIdx + 1))).replace(/[\/\\?%*:|"<>]/g, '_')}.png`;
+      if (!tm) continue;
+      const mRef = tm.id || tm.memberCode || tm.name;
+      const cleanMemberName = (tm.name || (`บุคลากร_${tmIdx + 1}`)).replace(/[\/\\?%*:|"<>]/g, '_');
+
+      // 3.4.1 รูปถ่ายทางการ 1.5 นิ้ว
+      if (tm.photoUrl && tm.photoUrl.startsWith('data:')) {
+        const phName = `รูปถ่าย_${cleanMemberName}.png`;
         const upPhoto = await uploadFileToDrive(
           drive,
           teamPhotosSubfolder.id,
@@ -362,6 +417,60 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           mRef
         );
         uploadedResults.push(upPhoto);
+      }
+
+      // 3.4.2 ภาพประกอบประวัติย่อ / ความเชี่ยวชาญ (bioImageBlocks)
+      const bioBlocks = tm.bioImageBlocks || tm.imageBlocks || [];
+      if (Array.isArray(bioBlocks)) {
+        for (let b = 0; b < bioBlocks.length; b++) {
+          const block = bioBlocks[b];
+          if (!block) continue;
+          if (block.type === 'single' && block.url && block.url.startsWith('data:')) {
+            const bName = `ภาพประวัติย่อ_${cleanMemberName}_ภาพที่${b + 1}.png`;
+            const upB = await uploadFileToDrive(
+              drive,
+              teamPhotosSubfolder.id,
+              bName,
+              'image/png',
+              block.url,
+              'team_bio_image_block',
+              undefined,
+              mRef
+            );
+            uploadedResults.push(upB);
+          } else if (block.type === 'double' || block.type === 'pair') {
+            const left = block.urlLeft || block.leftUrl;
+            if (left && left.startsWith('data:')) {
+              const bNameL = `ภาพประวัติย่อ_${cleanMemberName}_ภาพที่${b + 1}a.png`;
+              const upBL = await uploadFileToDrive(
+                drive,
+                teamPhotosSubfolder.id,
+                bNameL,
+                'image/png',
+                left,
+                'team_bio_image_block',
+                undefined,
+                mRef
+              );
+              uploadedResults.push(upBL);
+            }
+            const right = block.urlRight || block.rightUrl;
+            if (right && right.startsWith('data:')) {
+              const bNameR = `ภาพประวัติย่อ_${cleanMemberName}_ภาพที่${b + 1}b.png`;
+              const upBR = await uploadFileToDrive(
+                drive,
+                teamPhotosSubfolder.id,
+                bNameR,
+                'image/png',
+                right,
+                'team_bio_image_block',
+                undefined,
+                mRef
+              );
+              uploadedResults.push(upBR);
+            }
+          }
+        }
       }
     }
 
