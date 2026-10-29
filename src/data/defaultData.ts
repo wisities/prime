@@ -1,3 +1,4 @@
+import { getRecoveredTeamPhoto, getRecoveredProjectAssets, RECOVERED_FRAMEWORK_IMAGE } from './defaultMediaAssets';
 import { ProposalData, PastProject, TeamMember, TorScopeItem, BiddingProject, DocumentStructureConfig, MasterCompanyProfile } from '../types/proposal';
 import { MasterBomItem } from '../types/bom';
 
@@ -23,7 +24,7 @@ export const DEFAULT_MASTER_COMPANY_PROFILE: MasterCompanyProfile = {
   maxYearsFilter: 3,
 };
 
-export const MASTER_PROJECTS_LIBRARY: PastProject[] = [
+const RAW_MASTER_PROJECTS: PastProject[] = [
   {
     id: 'lib-proj-2568-001',
     originalMasterId: 'lib-proj-2568-001',
@@ -366,7 +367,18 @@ export const MASTER_PROJECTS_LIBRARY: PastProject[] = [
   },
 ];
 
-export const MASTER_TEAM_LIBRARY: TeamMember[] = [
+export const MASTER_PROJECTS_LIBRARY: PastProject[] = RAW_MASTER_PROJECTS.map((p) => {
+  const assets = getRecoveredProjectAssets(p.projectCode, p.clientName, p.projectName);
+  return {
+    ...p,
+    clientLogoUrl: p.clientLogoUrl || assets.clientLogoUrl,
+    projectImageUrl: p.projectImageUrl || assets.projectImageUrl,
+    certificateFileUrl: p.certificateFileUrl || assets.certificateFileUrl,
+    certificateFileName: p.certificateFileName || assets.certificateFileName,
+  };
+});
+
+const RAW_MASTER_TEAM: TeamMember[] = [
   {
     "id": "lib-team-2568-001",
     "originalMasterId": "lib-team-2568-001",
@@ -548,6 +560,11 @@ export const MASTER_TEAM_LIBRARY: TeamMember[] = [
     "highlightProjects": "สนับสนุนโครงการวิเคราะห์และบริหารจัดการระบบสารสนเทศภาครัฐ"
   }
 ];
+
+export const MASTER_TEAM_LIBRARY: TeamMember[] = RAW_MASTER_TEAM.map((m) => ({
+  ...m,
+  photoUrl: m.photoUrl || getRecoveredTeamPhoto(m.name),
+}));
 
 export const MASTER_BOM_LIBRARY: MasterBomItem[] = [
   // --- 1. งานจัดกิจกรรม ประชุม สัมมนา และอีเวนต์ ---
@@ -1484,6 +1501,7 @@ export const INITIAL_PROPOSAL_DATA: ProposalData = {
     ],
   },
   section3: {
+    conceptualDiagramImage: RECOVERED_FRAMEWORK_IMAGE,
     frameworkOverview: 'บริษัท ไพร์มดิจิทัลคอนซัลแทนท์ จำกัด กำหนดกรอบแนวคิดการดำเนินงานภายใต้หลักการ 4 มิติ คือ Modern Architecture, High Security & Compliance, User-Centric Design, และ Agile Collaboration เพื่อให้การพัฒนาระบบมีความทันสมัย รองรับปริมาณผู้ใช้งานจำนวนมาก และตอบสนองต่อขอบเขตงาน (TOR) ทุกข้ออย่างสมบูรณ์แบบ',
     conceptualDiagramCaption: 'ภาพที่ 3-1 กรอบแนวคิดสถาปัตยกรรมระบบบริการประชาชนดิจิทัลและการบูรณาการข้อมูล (Enterprise Conceptual Framework)',
     projectApproachOverview: `การถอดกรอบแนวคิดสู่การดำเนินโครงการจริง (Project Approach & Operational Principles)

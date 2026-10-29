@@ -1,3 +1,4 @@
+import { getRecoveredTeamPhoto, getRecoveredProjectAssets, RECOVERED_FRAMEWORK_IMAGE } from './data/defaultMediaAssets';
 import React, { useState, useEffect, useRef } from 'react';
 import { ProposalData, BiddingProject, ProposalStatus } from './types/proposal';
 import { INITIAL_PROPOSAL_DATA, createDefaultBlankProject, DEFAULT_BIDDING_PROJECTS, MASTER_TEAM_LIBRARY } from './data/defaultData';
@@ -109,11 +110,30 @@ function loadInitialProjects(): BiddingProject[] {
     sampleIds.forEach((id) => projectMap.delete(id));
     const merged = Array.from(projectMap.values()).filter((p) => !sampleIds.includes(p.id));
 
-    // กรองบุคลากรตัวอย่างออกจากทุกโครงการ
+    // กรองบุคลากรตัวอย่างออกจากทุกโครงการ พร้อมคืนค่ารูปถ่ายและภาพผลงานครบ 100%
     for (const p of merged) {
       if (p.proposalData?.section4?.teamMembers) {
         const clean = p.proposalData.section4.teamMembers.filter((m) => !isSampleTeamMember(m));
-        p.proposalData.section4.teamMembers = clean.length > 0 ? clean : [...MASTER_TEAM_LIBRARY];
+        const enriched = (clean.length > 0 ? clean : [...MASTER_TEAM_LIBRARY]).map((m) => ({
+          ...m,
+          photoUrl: m.photoUrl || getRecoveredTeamPhoto(m.name),
+        }));
+        p.proposalData.section4.teamMembers = enriched;
+      }
+      if (p.proposalData?.section5?.pastProjects) {
+        p.proposalData.section5.pastProjects = p.proposalData.section5.pastProjects.map((proj) => {
+          const assets = getRecoveredProjectAssets(proj.projectCode, proj.clientName, proj.projectName);
+          return {
+            ...proj,
+            clientLogoUrl: proj.clientLogoUrl || assets.clientLogoUrl,
+            projectImageUrl: proj.projectImageUrl || assets.projectImageUrl,
+            certificateFileUrl: proj.certificateFileUrl || assets.certificateFileUrl,
+            certificateFileName: proj.certificateFileName || assets.certificateFileName,
+          };
+        });
+      }
+      if (p.proposalData?.section3) {
+        p.proposalData.section3.conceptualDiagramImage = p.proposalData.section3.conceptualDiagramImage || RECOVERED_FRAMEWORK_IMAGE;
       }
     }
 

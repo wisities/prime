@@ -1,3 +1,4 @@
+import { getRecoveredTeamPhoto, getRecoveredProjectAssets, RECOVERED_FRAMEWORK_IMAGE } from '../data/defaultMediaAssets';
 import { TeamMember, PastProject, MasterCompanyProfile } from '../types/proposal';
 import { MasterBomItem } from '../types/bom';
 import { MASTER_TEAM_LIBRARY, MASTER_PROJECTS_LIBRARY, MASTER_BOM_LIBRARY, DEFAULT_MASTER_COMPANY_PROFILE } from '../data/defaultData';
@@ -21,7 +22,6 @@ export const MASTER_COMPANY_UPDATED_EVENT = 'prime_master_company_updated';
 
 export const SAMPLE_TEAM_IDS = new Set([
   'team-1', 'team-2', 'team-3', 'team-4', 'team-5',
-  'lib-team-1', 'lib-team-2', 'lib-team-3', 'lib-team-4', 'lib-team-5',
   'sample-team-1', 'sample-team-2', 'sample-team-3', 'sample-team-4', 'sample-team-5',
 ]);
 
@@ -768,12 +768,18 @@ export function normalizeMasterProjects(projects: PastProject[]): PastProject[] 
         code = generateMasterProjectCode(contractYear, safeList.slice(0, idx));
       }
       const finalId = p.id ? String(p.id) : `lib-proj-${idx + 1}`;
+      const assets = getRecoveredProjectAssets(code || p.projectCode, p.clientName, p.projectName);
       return {
         ...p,
         id: finalId,
         contractYearBE: contractYear,
         projectCode: code,
         originalMasterId: p.originalMasterId ? String(p.originalMasterId) : finalId,
+        clientLogoUrl: p.clientLogoUrl || assets.clientLogoUrl,
+        projectImageUrl: p.projectImageUrl || assets.projectImageUrl,
+        certificateFileUrl: p.certificateFileUrl || assets.certificateFileUrl,
+        certificateFileName: p.certificateFileName || assets.certificateFileName,
+        imageBlocks: (Array.isArray(p.imageBlocks) && p.imageBlocks.length > 0) ? p.imageBlocks : [],
       };
     })
   );
@@ -803,6 +809,7 @@ export function normalizeMasterTeam(members: TeamMember[]): TeamMember[] {
         recordedYearBE: recordedYear,
         memberCode: code,
         originalMasterId: m.originalMasterId ? String(m.originalMasterId) : finalId,
+        photoUrl: m.photoUrl || getRecoveredTeamPhoto(m.name),
       };
     })
   );

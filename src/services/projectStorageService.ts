@@ -1,3 +1,4 @@
+import { getRecoveredTeamPhoto, getRecoveredProjectAssets, RECOVERED_FRAMEWORK_IMAGE } from '../data/defaultMediaAssets';
 import { BiddingProject, ProjectAttachment, ProposalData } from '../types/proposal';
 import { createBlankProposalData, createDefaultBlankProject, MASTER_TEAM_LIBRARY } from '../data/defaultData';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
@@ -213,7 +214,7 @@ export function restoreImagesFromSource(targetProposal: ProposalData, sourceProp
   if (sourceProposal.section3) {
     target.section3 = {
       ...target.section3,
-      conceptualDiagramImage: target.section3?.conceptualDiagramImage || sourceProposal.section3.conceptualDiagramImage,
+      conceptualDiagramImage: target.section3?.conceptualDiagramImage || sourceProposal.section3?.conceptualDiagramImage || RECOVERED_FRAMEWORK_IMAGE,
       imageBlocks: (target.section3?.imageBlocks && target.section3.imageBlocks.length > 0)
         ? target.section3.imageBlocks
         : sourceProposal.section3.imageBlocks,
@@ -250,10 +251,15 @@ export function restoreImagesFromSource(targetProposal: ProposalData, sourceProp
     const baseTeam = targetTeam.length > 0 ? targetTeam : [...MASTER_TEAM_LIBRARY];
 
     const restoredTeam = baseTeam.map((m) => {
-      const s = srcTeamMap.get(m.id) || srcTeam.find((st) => st.name === m.name);
+      const s = srcTeamMap.get(m.id) ||
+        (m.originalMasterId ? srcTeam.find((st) => st.originalMasterId === m.originalMasterId || st.id === m.originalMasterId) : undefined) ||
+        (m.memberCode ? srcTeam.find((st) => st.memberCode === m.memberCode) : undefined) ||
+        srcTeam.find((st) => st.name && st.name.trim() === m.name.trim());
       return {
         ...m,
-        photoUrl: m.photoUrl || s?.photoUrl,
+        photoUrl: m.photoUrl || s?.photoUrl || getRecoveredTeamPhoto(m.name),
+        bioImageBlocks: (Array.isArray(m.bioImageBlocks) && m.bioImageBlocks.length > 0) ? m.bioImageBlocks : s?.bioImageBlocks,
+        highlightImageBlocks: (Array.isArray(m.highlightImageBlocks) && m.highlightImageBlocks.length > 0) ? m.highlightImageBlocks : s?.highlightImageBlocks,
       };
     });
 
@@ -280,13 +286,20 @@ export function restoreImagesFromSource(targetProposal: ProposalData, sourceProp
     const targetPast = Array.isArray(target.section5?.pastProjects) ? target.section5.pastProjects : [];
 
     const restoredPast = targetPast.map((p) => {
-      const s = srcPastMap.get(p.id);
+      const s = srcPastMap.get(p.id) ||
+        (p.originalMasterId ? srcPast.find((sp) => sp.originalMasterId === p.originalMasterId || sp.id === p.originalMasterId) : undefined) ||
+        (p.projectCode ? srcPast.find((sp) => sp.projectCode === p.projectCode) : undefined) ||
+        srcPast.find((sp) => sp.projectName && sp.projectName.trim() === p.projectName.trim());
+
+      const assets = getRecoveredProjectAssets(p.projectCode, p.clientName, p.projectName);
+
       return {
         ...p,
-        clientLogoUrl: p.clientLogoUrl || s?.clientLogoUrl,
-        projectImageUrl: p.projectImageUrl || s?.projectImageUrl,
-        certificateFileUrl: p.certificateFileUrl || s?.certificateFileUrl,
-        imageBlocks: (Array.isArray(p.imageBlocks) && p.imageBlocks.length > 0) ? p.imageBlocks : s?.imageBlocks,
+        clientLogoUrl: p.clientLogoUrl || s?.clientLogoUrl || assets.clientLogoUrl,
+        projectImageUrl: p.projectImageUrl || s?.projectImageUrl || assets.projectImageUrl,
+        certificateFileUrl: p.certificateFileUrl || s?.certificateFileUrl || assets.certificateFileUrl,
+        certificateFileName: p.certificateFileName || s?.certificateFileName || assets.certificateFileName,
+        imageBlocks: (Array.isArray(p.imageBlocks) && p.imageBlocks.length > 0) ? p.imageBlocks : (s?.imageBlocks || []),
       };
     });
 
@@ -1131,7 +1144,10 @@ export function sanitizeAllStoredProjectsAndLibraries(): void {
         const parsedTeam = JSON.parse(rawTeam);
         if (Array.isArray(parsedTeam)) {
           const cleanTeam = parsedTeam.filter((m) => !isSampleTeamMember(m));
-          const finalTeam = cleanTeam.length > 0 ? cleanTeam : [...MASTER_TEAM_LIBRARY];
+          const finalTeam = (cleanTeam.length > 0 ? cleanTeam : [...MASTER_TEAM_LIBRARY]).map((m) => ({
+            ...m,
+            photoUrl: m.photoUrl || getRecoveredTeamPhoto(m.name),
+          }));
           localStorage.setItem('prime_master_team_library', JSON.stringify(finalTeam));
         }
       } catch {}
@@ -1141,7 +1157,10 @@ export function sanitizeAllStoredProjectsAndLibraries(): void {
     idbGet<any[]>(IDB_STORES.MASTER_TEAM, 'current').then((fromIDB) => {
       if (fromIDB && Array.isArray(fromIDB)) {
         const cleanIDB = fromIDB.filter((m) => !isSampleTeamMember(m));
-        const finalIDB = cleanIDB.length > 0 ? cleanIDB : [...MASTER_TEAM_LIBRARY];
+        const finalIDB = (cleanIDB.length > 0 ? cleanIDB : [...MASTER_TEAM_LIBRARY]).map((m) => ({
+          ...m,
+          photoUrl: m.photoUrl || getRecoveredTeamPhoto(m.name),
+        }));
         idbSet(IDB_STORES.MASTER_TEAM, 'current', finalIDB).catch(() => {});
       }
     }).catch(() => {});
@@ -1155,7 +1174,10 @@ export function sanitizeAllStoredProjectsAndLibraries(): void {
           const cleanProjects = parsedProjects.map((p) => {
             if (p.proposalData?.section4?.teamMembers) {
               const cleaned = p.proposalData.section4.teamMembers.filter((m: any) => !isSampleTeamMember(m));
-              p.proposalData.section4.teamMembers = cleaned.length > 0 ? cleaned : [...MASTER_TEAM_LIBRARY];
+              p.proposalData.section4.teamMembers = (cleaned.length > 0 ? cleaned : [...MASTER_TEAM_LIBRARY]).map((m: any) => ({
+                ...m,
+                photoUrl: m.photoUrl || getRecoveredTeamPhoto(m.name),
+              }));
             }
             return p;
           });
@@ -1174,7 +1196,10 @@ export function sanitizeAllStoredProjectsAndLibraries(): void {
             const parsed = JSON.parse(raw);
             if (parsed && parsed.proposalData?.section4?.teamMembers) {
               const cleaned = parsed.proposalData.section4.teamMembers.filter((m: any) => !isSampleTeamMember(m));
-              parsed.proposalData.section4.teamMembers = cleaned.length > 0 ? cleaned : [...MASTER_TEAM_LIBRARY];
+              parsed.proposalData.section4.teamMembers = (cleaned.length > 0 ? cleaned : [...MASTER_TEAM_LIBRARY]).map((m: any) => ({
+                ...m,
+                photoUrl: m.photoUrl || getRecoveredTeamPhoto(m.name),
+              }));
               localStorage.setItem(key, JSON.stringify(parsed));
             }
           }
