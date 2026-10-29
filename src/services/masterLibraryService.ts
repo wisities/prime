@@ -1359,3 +1359,153 @@ export function initMasterLibraryRealtime(
 ): () => void {
   return () => {};
 }
+
+/**
+ * ฟังก์ชันช่วยแยกแถว CSV รองรับเครื่องหมายคำพูด (quotes) และ comma ในเซลล์
+ */
+function parseCsvLine(text: string): string[] {
+  const result: string[] = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"') {
+      if (inQuotes && text[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (c === ',' && !inQuotes) {
+      result.push(cur.trim());
+      cur = '';
+    } else {
+      cur += c;
+    }
+  }
+  result.push(cur.trim());
+  return result;
+}
+
+/**
+ * นำเข้าผลงานโครงการจากไฟล์ CSV (ที่ดาวน์โหลดจากแท็บ [คลังกลาง] ผลงานและสัญญา ของ Google Sheet)
+ */
+export function importMasterProjectsFromCsv(csvText: string): { success: boolean; count: number; error?: string } {
+  try {
+    const lines = csvText.split(/\r?\n/).filter(line => line.trim().length > 0);
+    if (lines.length < 2) {
+      return { success: false, count: 0, error: 'ไฟล์ CSV ไม่มีข้อมูลแถวผลงาน' };
+    }
+
+    const projects: PastProject[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const cols = parseCsvLine(lines[i]);
+      if (cols.length === 0 || !cols.some(c => c.length > 0)) continue;
+
+      const code = cols[0] || '';
+      const contractYr = parseInt(cols[1]) || 2567;
+      const name = cols[2] || '';
+      if (!name && !code) continue;
+
+      const client = cols[3] || '';
+      const value = parseFloat((cols[4] || '0').replace(/,/g, '')) || 0;
+      const compYr = parseInt(cols[5]) || contractYr;
+      const duration = cols[6] || '';
+      const category = cols[7] || '';
+      const typeStr = cols[8] || '';
+      const projectType = (typeStr.includes('ตรง TOR') || typeStr.includes('tor_reference')) ? 'tor_reference' : 'supplementary';
+      const desc = cols[9] || '';
+      const relevanceNote = cols[10] || '';
+      const certFileName = cols[11] || '';
+      const certFileUrl = cols[12] && cols[12].startsWith('http') ? cols[12] : undefined;
+
+      const id = code ? `lib-proj-${code.toLowerCase().replace(/[^a-z0-9_-]/g, '-')}` : `lib-proj-${Date.now()}-${i}`;
+
+      projects.push({
+        id,
+        originalMasterId: id,
+        projectCode: code || `${contractYr}-PRJ-${String(i).padStart(3, '0')}`,
+        contractYearBE: contractYr,
+        projectName: name,
+        clientName: client,
+        contractValue: value,
+        completionYearBE: compYr,
+        periodDuration: duration,
+        category,
+        projectType,
+        description: desc,
+        relevanceNote,
+        certificateFileName: certFileName || undefined,
+        certificateFileUrl: certFileUrl,
+        isSelected: true,
+        imageBlocks: [],
+      });
+    }
+
+    if (projects.length === 0) {
+      return { success: false, count: 0, error: 'ไม่พบแถวข้อมูลผลงานที่ถูกต้องในไฟล์ CSV' };
+    }
+
+    const saved = saveMultipleProjectsToMasterLibraryResult(projects);
+    return { success: true, count: saved.updatedLibrary.length };
+  } catch (err: any) {
+    return { success: false, count: 0, error: err.message || 'รูปแบบ CSV ไม่ถูกต้อง' };
+  }
+}
+
+/**
+ * นำเข้าบุคลากรจากไฟล์ CSV (ที่ดาวน์โหลดจากแท็บ [คลังกลาง] บุคลากร ของ Google Sheet)
+ */
+export function importMasterTeamFromCsv(csvText: string): { success: boolean; count: number; error?: string } {
+  try {
+    const lines = csvText.split(/\r?\n/).filter(line => line.trim().length > 0);
+    if (lines.length < 2) {
+      return { success: false, count: 0, error: 'ไฟล์ CSV ไม่มีข้อมูลแถวบุคลากร' };
+    }
+
+    const members: TeamMember[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const cols = parseCsvLine(lines[i]);
+      if (cols.length === 0 || !cols.some(c => c.length > 0)) continue;
+
+      const code = cols[0] || '';
+      const recYr = parseInt(cols[1]) || 2568;
+      const name = cols[2] || '';
+      if (!name && !code) continue;
+
+      const proposedRole = cols[3] || '';
+      const education = cols[4] || '';
+      const expYears = parseFloat((cols[5] || '0').replace(/,/g, '')) || 0;
+      const startWorkYr = parseInt(cols[6]) || (recYr - Math.round(expYears));
+      const responsibilities = cols[7] || '';
+      const highlightProjects = cols[8] || '';
+      const certifications = cols[9] || '';
+
+      const id = code ? `lib-team-${code.toLowerCase().replace(/[^a-z0-9_-]/g, '-')}` : `lib-team-${Date.now()}-${i}`;
+
+      members.push({
+        id,
+        originalMasterId: id,
+        memberCode: code || `${recYr}-EMP-${String(i).padStart(3, '0')}`,
+        recordedYearBE: recYr,
+        name,
+        proposedRole,
+        education,
+        experienceYears: expYears,
+        startWorkYearBE: startWorkYr,
+        responsibilities,
+        highlightProjects,
+        certifications,
+      });
+    }
+
+    if (members.length === 0) {
+      return { success: false, count: 0, error: 'ไม่พบแถวข้อมูลบุคลากรที่ถูกต้องในไฟล์ CSV' };
+    }
+
+    const saved = saveMultipleMembersToMasterLibraryResult(members);
+    return { success: true, count: saved.updatedLibrary.length };
+  } catch (err: any) {
+    return { success: false, count: 0, error: err.message || 'รูปแบบ CSV ไม่ถูกต้อง' };
+  }
+}

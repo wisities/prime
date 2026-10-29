@@ -1,4 +1,4 @@
-import { BiddingProject } from '../types/proposal';
+import { BiddingProject, PastProject, TeamMember } from '../types/proposal';
 import { generateProposalDocxBlob } from './docxExport';
 import {
   getMasterProjectsLibrary,
@@ -289,3 +289,68 @@ export async function syncMasterLibraryToGoogle(options?: {
   }
 }
 
+
+/**
+ * ดึงข้อมูลคลังกลาง (ผลงาน และบุคลากร) จาก Google Sheet ผ่าน Google Apps Script Web App
+ */
+export async function fetchMasterLibraryFromGoogleSheet(): Promise<{
+  success: boolean;
+  projects?: PastProject[];
+  team?: TeamMember[];
+  message?: string;
+  error?: string;
+}> {
+  const appsScriptUrl =
+    import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL ||
+    localStorage.getItem('prime_google_apps_script_url') ||
+    '';
+
+  if (!appsScriptUrl || !appsScriptUrl.startsWith('https://script.google.com/')) {
+    return {
+      success: false,
+      error: 'ยังไม่ได้ระบุ Google Apps Script Web App URL กรุณากำหนดในหน้าต่างตั้งค่าการซิงค์',
+    };
+  }
+
+  try {
+    const res = await fetch(appsScriptUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
+      body: JSON.stringify({
+        action: 'get_master_library',
+      }),
+    });
+
+    const text = await res.text();
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return {
+        success: false,
+        error: 'Google Apps Script ตอบกลับข้อมูลที่ไม่ใช่ JSON: ' + text.substring(0, 100),
+      };
+    }
+
+    if (data.success && Array.isArray(data.projects)) {
+      return {
+        success: true,
+        projects: data.projects,
+        team: data.team || [],
+        message: `ดึงข้อมูลจาก Google Sheet สำเร็จ: พบผลงาน ${data.projects.length} รายการ, บุคลากร ${(data.team || []).length} ท่าน`,
+      };
+    }
+
+    return {
+      success: false,
+      error: data.error || data.message || 'ไม่พบข้อมูลในตาราง Google Sheet หรือสคริปต์ยังไม่ได้รับการอัปเดต',
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อกับ Google Apps Script',
+    };
+  }
+}

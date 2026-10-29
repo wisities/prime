@@ -22,6 +22,12 @@ var DEFAULT_PARENT_FOLDER_ID = "157aWxavvB6eKzjb3iCiRJRyzMO_pbCj9";
 var DEFAULT_SPREADSHEET_ID = "1fT8DsROkO0xJ9XL0NtkFlgct6G_NzdU8WBtCRlv3NYI";
 
 function doGet(e) {
+  var action = (e && e.parameter) ? e.parameter.action : '';
+  if (action === 'get_master_library') {
+    var spreadsheetId = (e.parameter && e.parameter.spreadsheetId) || DEFAULT_SPREADSHEET_ID;
+    var result = handleGetMasterLibrary(spreadsheetId);
+    return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
+  }
   return ContentService.createTextOutput(JSON.stringify({
     status: "ok",
     message: "Prime Proposal Sync Service is online and ready!"
@@ -42,6 +48,12 @@ function doPost(e) {
       rootFolder = DriveApp.getFolderById(parentFolderId);
     } catch (fErr) {
       rootFolder = DriveApp.getRootFolder();
+    }
+
+    // กรณีขออ่านข้อมูลคลังกลางจาก Google Sheet (Pull / Read)
+    if (data.action === 'get_master_library') {
+      var readResult = handleGetMasterLibrary(spreadsheetId);
+      return ContentService.createTextOutput(JSON.stringify(readResult)).setMimeType(ContentService.MimeType.JSON);
     }
 
     // กรณีซิงค์คลังข้อมูลกลาง (Master Library)
@@ -532,3 +544,94 @@ function handleSyncMasterLibrary(data, rootFolder, spreadsheetId) {
   };
 }
 
+
+/**
+ * อ่านข้อมูลคลังกลางทั้งหมดจาก Google Sheet กลับมาเป็น JSON สำหรับนำเข้าสู่ระบบ Prime Proposal
+ */
+function handleGetMasterLibrary(spreadsheetId) {
+  var ss;
+  try {
+    ss = SpreadsheetApp.openById(spreadsheetId);
+  } catch (e) {
+    ss = SpreadsheetApp.getActiveSpreadsheet();
+  }
+
+  var TAB_M_PROJECTS = "[คลังกลาง] ผลงานและสัญญา";
+  var shProj = ss.getSheetByName(TAB_M_PROJECTS);
+  var projects = [];
+
+  if (shProj && shProj.getLastRow() > 1) {
+    var pData = shProj.getRange(2, 1, shProj.getLastRow() - 1, 14).getValues();
+    for (var i = 0; i < pData.length; i++) {
+      var row = pData[i];
+      var code = String(row[0] || '').trim();
+      var cYear = Number(row[1]) || 2567;
+      var name = String(row[2] || '').trim();
+      if (!name && !code) continue;
+
+      var certUrl = String(row[12] || '');
+      if (certUrl.indexOf('http') === -1) certUrl = '';
+
+      var id = 'lib-proj-' + (code ? code.toLowerCase().replace(/[^a-z0-9_-]/g, '-') : ('row-' + (i + 1)));
+
+      projects.push({
+        id: id,
+        originalMasterId: id,
+        projectCode: code || (cYear + '-PRJ-' + String(i + 1).padStart(3, '0')),
+        contractYearBE: cYear,
+        projectName: name,
+        clientName: String(row[3] || '').trim(),
+        contractValue: Number(row[4]) || 0,
+        completionYearBE: Number(row[5]) || cYear,
+        periodDuration: String(row[6] || '').trim(),
+        category: String(row[7] || '').trim(),
+        projectType: String(row[8] || '').indexOf('ตรง TOR') !== -1 ? 'tor_reference' : 'supplementary',
+        description: String(row[9] || '').trim(),
+        relevanceNote: String(row[10] || '').trim(),
+        certificateFileName: String(row[11] || '').trim(),
+        certificateFileUrl: certUrl || undefined,
+        isSelected: true,
+        imageBlocks: []
+      });
+    }
+  }
+
+  var TAB_M_TEAM = "[คลังกลาง] บุคลากร";
+  var shTeam = ss.getSheetByName(TAB_M_TEAM);
+  var team = [];
+
+  if (shTeam && shTeam.getLastRow() > 1) {
+    var tData = shTeam.getRange(2, 1, shTeam.getLastRow() - 1, 11).getValues();
+    for (var j = 0; j < tData.length; j++) {
+      var tRow = tData[j];
+      var mCode = String(tRow[0] || '').trim();
+      var recYear = Number(tRow[1]) || 2568;
+      var tName = String(tRow[2] || '').trim();
+      if (!tName && !mCode) continue;
+
+      var mId = 'lib-team-' + (mCode ? mCode.toLowerCase().replace(/[^a-z0-9_-]/g, '-') : ('row-' + (j + 1)));
+
+      team.push({
+        id: mId,
+        originalMasterId: mId,
+        memberCode: mCode || (recYear + '-EMP-' + String(j + 1).padStart(3, '0')),
+        recordedYearBE: recYear,
+        name: tName,
+        proposedRole: String(tRow[3] || '').trim(),
+        education: String(tRow[4] || '').trim(),
+        experienceYears: Number(tRow[5]) || 0,
+        startWorkYearBE: Number(tRow[6]) || (recYear - 5),
+        responsibilities: String(tRow[7] || '').trim(),
+        highlightProjects: String(tRow[8] || '').trim(),
+        certifications: String(tRow[9] || '').trim(),
+      });
+    }
+  }
+
+  return {
+    success: true,
+    projects: projects,
+    team: team,
+    message: "อ่านข้อมูลจาก Google Sheet สำเร็จ: พบผลงาน " + projects.length + " รายการ, บุคลากร " + team.length + " ท่าน"
+  };
+}

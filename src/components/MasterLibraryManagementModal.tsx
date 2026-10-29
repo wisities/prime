@@ -30,7 +30,12 @@ import {
   findDuplicateProjectCodes,
   resequenceAllMasterProjectsCodes,
   resequenceAllMasterTeamCodes,
+  importMasterProjectsFromCsv,
+  importMasterTeamFromCsv,
+  saveMasterProjectsLibrary,
+  saveMasterTeamLibrary,
 } from '../services/masterLibraryService';
+import { fetchMasterLibraryFromGoogleSheet } from '../services/googleSyncService';
 import { sortPastProjects } from './Section5Editor';
 import { ReportImageManager } from './ReportImageManager';
 import { compressImageFile } from '../utils/imageCompressor';
@@ -108,7 +113,10 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
   const [googleSyncResult, setGoogleSyncResult] = useState<MasterLibrarySyncResult | null>(null);
 
   const fileInputProjectsRef = useRef<HTMLInputElement>(null);
+  const fileInputProjectsCsvRef = useRef<HTMLInputElement>(null);
   const fileInputTeamRef = useRef<HTMLInputElement>(null);
+  const fileInputTeamCsvRef = useRef<HTMLInputElement>(null);
+  const [isPullingFromSheet, setIsPullingFromSheet] = useState(false);
   const currentYearBE = 2568;
 
   const showToast = (msg: string) => {
@@ -258,6 +266,72 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
     const updated = resequenceAllMasterTeamCodes();
     setTeamMembers(updated);
     showToast(`จัดระเบียบรหัสบุคลากร ${updated.length} ท่านเรียบร้อยแล้ว`);
+  };
+
+  // -------------------------------------------------------------------------
+  // Pull from Google Sheet & CSV Import Actions
+  // -------------------------------------------------------------------------
+  const handlePullFromGoogleSheet = async () => {
+    setIsPullingFromSheet(true);
+    try {
+      const res = await fetchMasterLibraryFromGoogleSheet();
+      if (res.success && res.projects) {
+        if (res.projects.length > 0) {
+          saveMasterProjectsLibrary(res.projects);
+          setProjects(res.projects);
+        }
+        if (res.team && res.team.length > 0) {
+          saveMasterTeamLibrary(res.team);
+          setTeamMembers(res.team);
+        }
+        showToast(res.message || `ดึงข้อมูลจาก Google Sheet สำเร็จ (${res.projects.length} โครงการ)`);
+        alert(`✅ ดึงข้อมูลจาก Google Sheet สำเร็จ!\n\n• ผลงานโครงการ: ${res.projects.length} รายการ\n• บุคลากร: ${(res.team || []).length} ท่าน\n\nข้อมูลในระบบได้รับการอัปเดตตรงกับ Google Sheet เรียบร้อยแล้ว`);
+      } else {
+        alert(`⚠️ ไม่สามารถดึงข้อมูลได้: ${res.error}\n\nคำแนะนำ:\n1. ตรวจสอบว่า Google Apps Script Web App URL ได้รับการตั้งค่าแล้ว\n2. หรือสามารถเปิด Google Sheet แล้วกด "ไฟล์ > ดาวน์โหลด > ค่าที่คั่นด้วยจุลภาค (.csv)" แล้วกดปุ่ม "นำเข้า (.csv)" ได้ทันที`);
+      }
+    } catch (e: any) {
+      alert(`เกิดข้อผิดพลาด: ${e.message}`);
+    } finally {
+      setIsPullingFromSheet(false);
+    }
+  };
+
+  const handleImportProjectsCsvFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const res = importMasterProjectsFromCsv(text);
+      if (res.success) {
+        setProjects(getMasterProjectsLibrary());
+        alert(`นำเข้าผลงานโครงการจาก CSV สำเร็จ! ปัจจุบันมีทั้งหมด ${res.count} โครงการ`);
+        showToast(`นำเข้าผลงานโครงการสำเร็จ (${res.count} รายการ)`);
+      } else {
+        alert(`เกิดข้อผิดพลาดในการนำเข้า CSV: ${res.error}`);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleImportTeamCsvFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const res = importMasterTeamFromCsv(text);
+      if (res.success) {
+        setTeamMembers(getMasterTeamLibrary());
+        alert(`นำเข้าบุคลากรจาก CSV สำเร็จ! ปัจจุบันมีทั้งหมด ${res.count} ท่าน`);
+        showToast(`นำเข้าบุคลากรสำเร็จ (${res.count} ท่าน)`);
+      } else {
+        alert(`เกิดข้อผิดพลาดในการนำเข้า CSV: ${res.error}`);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   // -------------------------------------------------------------------------
@@ -785,6 +859,13 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                 accept=".json"
                 style={{ display: 'none' }}
                 onChange={handleImportProjectsFile}
+              />
+              <input
+                ref={fileInputProjectsCsvRef}
+                type="file"
+                accept=".csv,text/csv"
+                style={{ display: 'none' }}
+                onChange={handleImportProjectsCsvFile}
               />
 
               {isEditingProject ? (
@@ -1380,6 +1461,25 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                       </button>
                       <button
                         type="button"
+                        onClick={handlePullFromGoogleSheet}
+                        disabled={isPullingFromSheet}
+                        className="btn btn-outline"
+                        style={{ fontSize: '0.78rem', padding: '0.4rem 0.65rem', color: '#047857', borderColor: '#6EE7B7', backgroundColor: '#ECFDF5', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
+                        title="ดึงข้อมูลที่แก้ไขล่าสุดจากแท็บ [คลังกลาง] ใน Google Sheet กลับมาอัปเดตลงระบบ"
+                      >
+                        <Download size={13} /> {isPullingFromSheet ? 'กำลังดึง...' : '📥 ดึงจาก Google Sheet (Pull)'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => fileInputProjectsCsvRef.current?.click()}
+                        className="btn btn-outline"
+                        style={{ fontSize: '0.78rem', padding: '0.4rem 0.65rem', color: '#0284C7', borderColor: '#BAE6FD', backgroundColor: '#F0F9FF', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
+                        title="นำเข้าไฟล์ .csv ที่ดาวน์โหลดจาก Google Sheet"
+                      >
+                        <Upload size={13} /> นำเข้า (.csv)
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => fileInputProjectsRef.current?.click()}
                         className="btn btn-outline"
                         style={{ fontSize: '0.78rem', padding: '0.4rem 0.65rem', color: '#1D4ED8', borderColor: '#93C5FD', backgroundColor: '#EFF6FF', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
@@ -1594,6 +1694,13 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                 accept=".json"
                 style={{ display: 'none' }}
                 onChange={handleImportTeamFile}
+              />
+              <input
+                ref={fileInputTeamCsvRef}
+                type="file"
+                accept=".csv,text/csv"
+                style={{ display: 'none' }}
+                onChange={handleImportTeamCsvFile}
               />
 
               {isEditingMember ? (
@@ -2007,6 +2114,25 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                         title="จัดระเบียบและเรียงรหัสบุคลากรทั้งหมดใหม่"
                       >
                         <RotateCcw size={13} /> จัดระเบียบรหัสใหม่ (Auto Re-code)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handlePullFromGoogleSheet}
+                        disabled={isPullingFromSheet}
+                        className="btn btn-outline"
+                        style={{ fontSize: '0.78rem', padding: '0.4rem 0.65rem', color: '#047857', borderColor: '#6EE7B7', backgroundColor: '#ECFDF5', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
+                        title="ดึงข้อมูลที่แก้ไขล่าสุดจากแท็บ [คลังกลาง] ใน Google Sheet กลับมาอัปเดตลงระบบ"
+                      >
+                        <Download size={13} /> {isPullingFromSheet ? 'กำลังดึง...' : '📥 ดึงจาก Google Sheet (Pull)'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => fileInputTeamCsvRef.current?.click()}
+                        className="btn btn-outline"
+                        style={{ fontSize: '0.78rem', padding: '0.4rem 0.65rem', color: '#0284C7', borderColor: '#BAE6FD', backgroundColor: '#F0F9FF', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
+                        title="นำเข้าไฟล์ .csv ที่ดาวน์โหลดจาก Google Sheet"
+                      >
+                        <Upload size={13} /> นำเข้า (.csv)
                       </button>
                       <button
                         type="button"
