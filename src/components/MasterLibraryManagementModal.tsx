@@ -27,6 +27,9 @@ import {
   MASTER_COMPANY_UPDATED_EVENT,
   generateMasterProjectCode,
   generateMasterMemberId,
+  findDuplicateProjectCodes,
+  resequenceAllMasterProjectsCodes,
+  resequenceAllMasterTeamCodes,
 } from '../services/masterLibraryService';
 import { sortPastProjects } from './Section5Editor';
 import { ReportImageManager } from './ReportImageManager';
@@ -214,6 +217,47 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
       console.warn('Certificate file processing error:', err);
       alert('เกิดข้อผิดพลาดในการประมวลผลไฟล์เอกสาร');
     }
+  };
+
+  // -------------------------------------------------------------------------
+  // Code Duplicate Analysis & Re-sequencing
+  // -------------------------------------------------------------------------
+  const duplicateProjectCodesInfo = React.useMemo(() => {
+    return findDuplicateProjectCodes(projects);
+  }, [projects]);
+
+  const duplicateProjectsCount = React.useMemo(() => {
+    return projects.filter((p) => {
+      const c = (p.projectCode || '').trim().toUpperCase();
+      return c && (duplicateProjectCodesInfo.countMap[c] || 0) > 1;
+    }).length;
+  }, [projects, duplicateProjectCodesInfo]);
+
+  const isFormProjectCodeDuplicated = React.useMemo(() => {
+    const code = (projectFormData.projectCode || '').trim().toUpperCase();
+    if (!code) return false;
+    return projects.some((p) => {
+      if (p.id === projectFormData.id || (p.originalMasterId && p.originalMasterId === projectFormData.originalMasterId)) return false;
+      return (p.projectCode || '').trim().toUpperCase() === code;
+    });
+  }, [projectFormData.projectCode, projectFormData.id, projectFormData.originalMasterId, projects]);
+
+  const handleResequenceProjects = () => {
+    if (!confirm(`ต้องการจัดระเบียบรหัสผลงานโครงการทั้งหมด (${projects.length} รายการ) ใหม่ตามปีสัญญา (${currentYearBE}-PRJ-001, 002, ...) หรือไม่?\n\nระบบจะเรียงลำดับตามปีสัญญาและกำหนดรหัสใหม่ที่ไม่ซ้ำกันอย่างแน่นอน 100%`)) {
+      return;
+    }
+    const updated = resequenceAllMasterProjectsCodes();
+    setProjects(updated);
+    showToast(`จัดระเบียบรหัสผลงานโครงการ ${updated.length} รายการเรียบร้อยแล้ว`);
+  };
+
+  const handleResequenceTeam = () => {
+    if (!confirm(`ต้องการจัดระเบียบรหัสบุคลากรทั้งหมด (${teamMembers.length} ท่าน) ใหม่ (${currentYearBE}-EMP-001, 002, ...) หรือไม่?`)) {
+      return;
+    }
+    const updated = resequenceAllMasterTeamCodes();
+    setTeamMembers(updated);
+    showToast(`จัดระเบียบรหัสบุคลากร ${updated.length} ท่านเรียบร้อยแล้ว`);
   };
 
   // -------------------------------------------------------------------------
@@ -762,18 +806,63 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
 
                   <div className="grid-2">
                     <div className="form-group">
-                      <label className="form-label">
-                        รหัสโครงการ (Project Code) <span className="required">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        className="form-input"
-                        required
-                        placeholder="เช่น 2567-PRJ-001"
-                        value={projectFormData.projectCode || ''}
-                        onChange={(e) => setProjectFormData({ ...projectFormData, projectCode: e.target.value })}
-                        title="รหัสโครงการขึ้นต้นด้วยปี พ.ศ. ที่ได้สัญญา"
-                      />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <label className="form-label" style={{ marginBottom: 0 }}>
+                          รหัสโครงการ (Project Code) <span className="required">*</span>
+                        </label>
+                        {isFormProjectCodeDuplicated && (
+                          <span style={{ fontSize: '0.68rem', color: '#DC2626', backgroundColor: '#FEE2E2', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                            ⚠️ รหัสนี้ซ้ำในคลัง
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px', marginTop: '0.25rem' }}>
+                        <input
+                          type="text"
+                          className="form-input"
+                          required
+                          placeholder="เช่น 2567-PRJ-001"
+                          style={{
+                            fontWeight: 600,
+                            color: isFormProjectCodeDuplicated ? '#DC2626' : undefined,
+                            borderColor: isFormProjectCodeDuplicated ? '#F87171' : undefined,
+                            backgroundColor: isFormProjectCodeDuplicated ? '#FEF2F2' : undefined,
+                            flex: 1,
+                          }}
+                          value={projectFormData.projectCode || ''}
+                          onChange={(e) => setProjectFormData({ ...projectFormData, projectCode: e.target.value })}
+                          title="รหัสโครงการขึ้นต้นด้วยปี พ.ศ. ที่ได้สัญญา"
+                        />
+                        {isFormProjectCodeDuplicated && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const yr = Number(projectFormData.contractYearBE) || Number(projectFormData.completionYearBE) || currentYearBE;
+                              const nextCode = generateMasterProjectCode(yr, projects, projectFormData.id);
+                              setProjectFormData({ ...projectFormData, projectCode: nextCode });
+                            }}
+                            style={{
+                              fontSize: '0.72rem',
+                              padding: '0 8px',
+                              background: '#EFF6FF',
+                              color: '#1D4ED8',
+                              border: '1px solid #BFDBFE',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              fontWeight: 600,
+                              whiteSpace: 'nowrap',
+                            }}
+                            title="เปลี่ยนเป็นรหัสถัดไปที่ไม่ซ้ำอัตโนมัติ"
+                          >
+                            ⚡ รหัสถัดไป
+                          </button>
+                        )}
+                      </div>
+                      {isFormProjectCodeDuplicated && (
+                        <div style={{ fontSize: '0.7rem', color: '#DC2626', marginTop: '3px' }}>
+                          รหัส "{projectFormData.projectCode}" มีโครงการอื่นในคลังกลางใช้อยู่แล้ว คลิก "⚡ รหัสถัดไป" เพื่อสร้างรหัสใหม่
+                        </div>
+                      )}
                     </div>
 
                     <div className="form-group">
@@ -786,17 +875,14 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                         value={projectFormData.contractYearBE || projectFormData.completionYearBE || currentYearBE}
                         onChange={(e) => {
                           const yr = parseInt(e.target.value) || currentYearBE;
-                          const currentCode = projectFormData.projectCode || '';
-                          const newCode = currentCode && /^\d{4}-/.test(currentCode)
-                            ? currentCode.replace(/^\d{4}/, String(yr))
-                            : `${yr}-PRJ-001`;
+                          const nextCode = generateMasterProjectCode(yr, projects, projectFormData.id);
                           setProjectFormData({
                             ...projectFormData,
                             contractYearBE: yr,
-                            projectCode: newCode,
+                            projectCode: nextCode,
                           });
                         }}
-                        title="ปี พ.ศ. ที่ลงนามหรือได้สัญญาโครงการ"
+                        title="ปี พ.ศ. ที่ลงนามหรือได้สัญญาโครงการ (เปลี่ยนปีจะคำนวณรหัสถัดไปที่ไม่ซ้ำให้อัตโนมัติ)"
                       />
                     </div>
 
@@ -1285,6 +1371,15 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                       </button>
                       <button
                         type="button"
+                        onClick={handleResequenceProjects}
+                        className="btn btn-outline"
+                        style={{ fontSize: '0.78rem', padding: '0.4rem 0.65rem', color: '#B45309', borderColor: '#FDE68A', backgroundColor: '#FEF3C7', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
+                        title="จัดระเบียบและเรียงรหัสผลงานโครงการทั้งหมดใหม่ตามปีสัญญาโดยไม่ซ้ำกัน"
+                      >
+                        <RotateCcw size={13} /> จัดระเบียบรหัสใหม่ (Auto Re-code)
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => fileInputProjectsRef.current?.click()}
                         className="btn btn-outline"
                         style={{ fontSize: '0.78rem', padding: '0.4rem 0.65rem', color: '#1D4ED8', borderColor: '#93C5FD', backgroundColor: '#EFF6FF', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
@@ -1325,6 +1420,45 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                     </div>
                   </div>
 
+                  {/* Duplicate Alert Banner */}
+                  {duplicateProjectsCount > 0 && (
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '0.75rem',
+                        backgroundColor: '#FEF2F2',
+                        padding: '0.65rem 0.85rem',
+                        borderRadius: '6px',
+                        border: '1.5px solid #FCA5A5',
+                        marginBottom: '0.75rem',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#991B1B', fontSize: '0.825rem' }}>
+                        <AlertTriangle size={16} color="#DC2626" />
+                        <span>ตรวจพบรหัสโครงการซ้ำกันในคลังกลาง <strong>{duplicateProjectsCount}</strong> รายการ</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleResequenceProjects}
+                        style={{
+                          fontSize: '0.75rem',
+                          padding: '3px 8px',
+                          backgroundColor: '#DC2626',
+                          color: '#FFFFFF',
+                          border: 'none',
+                          borderRadius: '5px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        🔄 จัดระเบียบรหัสทั้งหมดใหม่
+                      </button>
+                    </div>
+                  )}
+
                   {/* List View */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     {filteredProjects.length === 0 ? (
@@ -1364,21 +1498,27 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                               )}
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                  <span
-                                    style={{
-                                      fontSize: '0.72rem',
-                                      padding: '2px 7px',
-                                      borderRadius: '4px',
-                                      fontWeight: 700,
-                                      backgroundColor: '#E0F2FE',
-                                      color: '#0369A1',
-                                      border: '1px solid #BAE6FD',
-                                      letterSpacing: '0.02em',
-                                    }}
-                                    title="รหัสโครงการขึ้นต้นด้วยปี พ.ศ. ที่ได้สัญญา"
-                                  >
-                                    {item.projectCode || item.id}
-                                  </span>
+                                  {(() => {
+                                    const codeUpper = (item.projectCode || '').trim().toUpperCase();
+                                    const isItemCodeDup = codeUpper && (duplicateProjectCodesInfo.countMap[codeUpper] || 0) > 1;
+                                    return (
+                                      <span
+                                        style={{
+                                          fontSize: '0.72rem',
+                                          padding: '2px 7px',
+                                          borderRadius: '4px',
+                                          fontWeight: 700,
+                                          backgroundColor: isItemCodeDup ? '#FEE2E2' : '#E0F2FE',
+                                          color: isItemCodeDup ? '#DC2626' : '#0369A1',
+                                          border: `1px solid ${isItemCodeDup ? '#FCA5A5' : '#BAE6FD'}`,
+                                          letterSpacing: '0.02em',
+                                        }}
+                                        title={isItemCodeDup ? '⚠️ รหัสโครงการนี้ซ้ำกับโครงการอื่นในคลังกลาง' : 'รหัสโครงการขึ้นต้นด้วยปี พ.ศ. ที่ได้สัญญา'}
+                                      >
+                                        {item.projectCode || item.id} {isItemCodeDup && '⚠️ ซ้ำ'}
+                                      </span>
+                                    );
+                                  })()}
                                   <span
                                     style={{
                                       fontSize: '0.7rem',
@@ -1858,6 +1998,15 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                         title="รวมและตัดรายการบุคลากรที่ซ้ำซ้อนในคลังกลาง"
                       >
                         <Sparkles size={13} /> รวมรายการซ้ำ
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleResequenceTeam}
+                        className="btn btn-outline"
+                        style={{ fontSize: '0.78rem', padding: '0.4rem 0.65rem', color: '#B45309', borderColor: '#FDE68A', backgroundColor: '#FEF3C7', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
+                        title="จัดระเบียบและเรียงรหัสบุคลากรทั้งหมดใหม่"
+                      >
+                        <RotateCcw size={13} /> จัดระเบียบรหัสใหม่ (Auto Re-code)
                       </button>
                       <button
                         type="button"

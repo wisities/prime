@@ -22,6 +22,8 @@ import {
   initMasterLibraryRealtime,
   exportMasterProjectsToJson,
   importMasterProjectsFromJson,
+  generateMasterProjectCode,
+  findDuplicateProjectCodes,
 } from '../services/masterLibraryService';
 import { Building2, Plus, Trash2, Library, Filter, Calendar, AlertTriangle, CheckCircle, Upload, Image, FileText, Paperclip, FileCheck, BookmarkCheck, RotateCcw, ArrowUp, ArrowDown, ArrowUpDown, BookmarkPlus, Check, Database, Save, Download, List, Table as TableIcon, ChevronDown, ChevronUp, ChevronRight, ExternalLink } from 'lucide-react';
 
@@ -247,9 +249,61 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
     handleProjectFieldsChange(id, { [field]: value });
   };
 
+  // ตรวจจับและวิเคราะห์รหัสโครงการที่ซ้ำกัน
+  const duplicateCodesInfo = React.useMemo(() => {
+    return findDuplicateProjectCodes(section5.pastProjects);
+  }, [section5.pastProjects]);
+
+  const isProjectCodeDuplicated = (p: PastProject): boolean => {
+    const code = (p.projectCode || '').trim().toUpperCase();
+    if (!code) return false;
+    // 1. ตรวจว่าซ้ำในเล่มข้อเสนอตัวเองหรือไม่
+    if ((duplicateCodesInfo.countMap[code] || 0) > 1) return true;
+    // 2. ตรวจว่าชนกับโครงการอื่นในคลังกลางหรือไม่ (ที่ไม่ใช่โครงการเดียวกัน)
+    const collidesInLib = projectsLibrary.some((lp) => {
+      const libCode = (lp.projectCode || '').trim().toUpperCase();
+      if (libCode !== code) return false;
+      const isSame = (p.originalMasterId && (lp.id === p.originalMasterId || lp.originalMasterId === p.originalMasterId)) ||
+                     (p.id && (lp.id === p.id || lp.originalMasterId === p.id));
+      return !isSame;
+    });
+    return collidesInLib;
+  };
+
+  const duplicateProjectsCount = React.useMemo(() => {
+    return section5.pastProjects.filter((p) => isProjectCodeDuplicated(p)).length;
+  }, [section5.pastProjects, duplicateCodesInfo, projectsLibrary]);
+
+  const handleAutoFixAllDuplicateCodes = () => {
+    if (duplicateProjectsCount === 0) return;
+    if (!confirm(`ตรวจพบโครงการที่มีรหัสซ้ำ ${duplicateProjectsCount} รายการ ต้องการให้ระบบสร้างรหัสใหม่ที่ไม่ซ้ำให้อัตโนมัติหรือไม่?`)) {
+      return;
+    }
+    const currentList = [...section5.pastProjects];
+    const updatedList: PastProject[] = [];
+
+    currentList.forEach((p) => {
+      const isDup = isProjectCodeDuplicated(p);
+      if (!isDup) {
+        updatedList.push(p);
+      } else {
+        const yr = p.contractYearBE || p.completionYearBE || currentYearBE;
+        const allKnown = [...projectsLibrary, ...updatedList, ...currentList.filter(item => item.id !== p.id)];
+        const nextCode = generateMasterProjectCode(yr, allKnown, p.id);
+        updatedList.push({
+          ...p,
+          projectCode: nextCode,
+        });
+      }
+    });
+
+    onChange({ ...section5, pastProjects: updatedList });
+  };
+
   const handleAddProject = () => {
     const newId = `proj-${Date.now()}`;
-    const autoCode = `${currentYearBE}-PRJ-${String(section5.pastProjects.length + 1).padStart(3, '0')}`;
+    const allKnown = [...projectsLibrary, ...section5.pastProjects];
+    const autoCode = generateMasterProjectCode(currentYearBE, allKnown);
     const newProj: PastProject = {
       id: newId,
       projectCode: autoCode,
@@ -834,6 +888,50 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
           </div>
         </div>
 
+        {/* Duplicate Project Codes Alert Banner */}
+        {duplicateProjectsCount > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '0.75rem',
+              backgroundColor: '#FEF2F2',
+              padding: '0.75rem 1rem',
+              borderRadius: '8px',
+              border: '1.5px solid #FCA5A5',
+              marginBottom: '1rem',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#991B1B', fontSize: '0.85rem' }}>
+              <AlertTriangle size={18} color="#DC2626" />
+              <span>
+                ตรวจพบรหัสโครงการซ้ำกันในหน้านี้ <strong>{duplicateProjectsCount}</strong> รายการ (สามารถแก้ไขด้วยมือ หรือให้ระบบจัดรหัสใหม่ที่ไม่ซ้ำให้อัตโนมัติ)
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleAutoFixAllDuplicateCodes}
+              style={{
+                fontSize: '0.78rem',
+                padding: '0.35rem 0.85rem',
+                backgroundColor: '#DC2626',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '6px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+              }}
+            >
+              ⚡ จัดรหัสใหม่ที่ไม่ซ้ำทั้งหมด
+            </button>
+          </div>
+        )}
+
         {/* Filter Toolbar & Summary */}
         <div
           style={{
@@ -1113,9 +1211,9 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                     {p.projectCode && (
                       <span
                         style={{
-                          backgroundColor: '#FEF3C7',
-                          color: '#92400E',
-                          border: '1px solid #FDE68A',
+                          backgroundColor: isProjectCodeDuplicated(p) ? '#FEE2E2' : '#FEF3C7',
+                          color: isProjectCodeDuplicated(p) ? '#DC2626' : '#92400E',
+                          border: isProjectCodeDuplicated(p) ? '1px solid #FCA5A5' : '1px solid #FDE68A',
                           padding: '2px 8px',
                           borderRadius: '4px',
                           fontSize: '0.75rem',
@@ -1124,9 +1222,9 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                           fontFamily: 'monospace',
                           letterSpacing: '0.3px',
                         }}
-                        title={`รหัสโครงการ: ${p.projectCode}${p.originalMasterId ? ' (เชื่อมโยงคลังผลงานกลาง)' : ''}`}
+                        title={`รหัสโครงการ: ${p.projectCode}${isProjectCodeDuplicated(p) ? ' ⚠️ (รหัสนี้ซ้ำกับโครงการอื่น)' : ''}${p.originalMasterId ? ' (เชื่อมโยงคลังผลงานกลาง)' : ''}`}
                       >
-                        {p.projectCode}
+                        {p.projectCode} {isProjectCodeDuplicated(p) && '⚠️ ซ้ำ'}
                       </span>
                     )}
 
@@ -1312,19 +1410,67 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                   <div>
                     <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span>รหัสโครงการ (Project Code) <span className="required">*</span></span>
-                      {p.originalMasterId && (
-                        <span style={{ fontSize: '0.68rem', color: '#0284C7', fontWeight: 600 }}>🔗 คลังกลาง</span>
-                      )}
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        {isProjectCodeDuplicated(p) && (
+                          <span style={{ fontSize: '0.68rem', color: '#DC2626', backgroundColor: '#FEE2E2', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                            ⚠️ รหัสนี้ซ้ำ
+                          </span>
+                        )}
+                        {p.originalMasterId && (
+                          <span style={{ fontSize: '0.68rem', color: '#0284C7', fontWeight: 600 }}>🔗 คลังกลาง</span>
+                        )}
+                      </div>
                     </label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      style={{ fontWeight: 600, color: 'var(--primary-800)' }}
-                      placeholder="เช่น 2567-PRJ-001"
-                      value={p.projectCode || ''}
-                      onChange={(e) => handleProjectChange(p.id, 'projectCode', e.target.value)}
-                      title="รหัสโครงการขึ้นต้นด้วยปี พ.ศ. ที่ได้สัญญา"
-                    />
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <input
+                        type="text"
+                        className="form-input"
+                        style={{
+                          fontWeight: 600,
+                          color: isProjectCodeDuplicated(p) ? '#DC2626' : 'var(--primary-800)',
+                          borderColor: isProjectCodeDuplicated(p) ? '#F87171' : undefined,
+                          backgroundColor: isProjectCodeDuplicated(p) ? '#FEF2F2' : undefined,
+                          flex: 1,
+                        }}
+                        placeholder="เช่น 2567-PRJ-001"
+                        value={p.projectCode || ''}
+                        onChange={(e) => handleProjectChange(p.id, 'projectCode', e.target.value)}
+                        title="รหัสโครงการขึ้นต้นด้วยปี พ.ศ. ที่ได้สัญญา"
+                      />
+                      {isProjectCodeDuplicated(p) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const yr = p.contractYearBE || p.completionYearBE || currentYearBE;
+                            const allOthers = [
+                              ...projectsLibrary.filter(lp => lp.id !== p.originalMasterId && lp.id !== p.id),
+                              ...section5.pastProjects.filter(sp => sp.id !== p.id),
+                            ];
+                            const nextCode = generateMasterProjectCode(yr, allOthers, p.id);
+                            handleProjectChange(p.id, 'projectCode', nextCode);
+                          }}
+                          style={{
+                            fontSize: '0.72rem',
+                            padding: '0 8px',
+                            background: '#EFF6FF',
+                            color: '#1D4ED8',
+                            border: '1px solid #BFDBFE',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                            whiteSpace: 'nowrap',
+                          }}
+                          title="เปลี่ยนเป็นรหัสถัดไปที่ไม่ซ้ำอัตโนมัติ"
+                        >
+                          ⚡ รหัสถัดไป
+                        </button>
+                      )}
+                    </div>
+                    {isProjectCodeDuplicated(p) && (
+                      <div style={{ fontSize: '0.7rem', color: '#DC2626', marginTop: '3px' }}>
+                        รหัส "{p.projectCode}" ซ้ำกับโครงการอื่น สามารถแก้ไขด้วยตนเอง หรือคลิก "⚡ รหัสถัดไป" เพื่อสร้างรหัสใหม่
+                      </div>
+                    )}
                   </div>
 
                   <div>
@@ -1338,15 +1484,17 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                       value={p.contractYearBE || p.completionYearBE || currentYearBE}
                       onChange={(e) => {
                         const yr = parseInt(e.target.value) || currentYearBE;
+                        const allOthers = [
+                          ...projectsLibrary.filter(lp => lp.id !== p.originalMasterId && lp.id !== p.id),
+                          ...section5.pastProjects.filter(sp => sp.id !== p.id),
+                        ];
+                        const nextCode = generateMasterProjectCode(yr, allOthers, p.id);
                         handleProjectFieldsChange(p.id, {
                           contractYearBE: yr,
-                          // If projectCode matches old year format or is empty, update prefix
-                          projectCode: p.projectCode && /^\d{4}-/.test(p.projectCode)
-                            ? p.projectCode.replace(/^\d{4}/, String(yr))
-                            : (p.projectCode || `${yr}-PRJ-001`),
+                          projectCode: nextCode,
                         });
                       }}
-                      title="ปี พ.ศ. ที่ลงนามหรือได้สัญญาโครงการ"
+                      title="ปี พ.ศ. ที่ลงนามหรือได้สัญญาโครงการ (เปลี่ยนปีจะคำนวณรหัสถัดไปที่ไม่ซ้ำให้อัตโนมัติ)"
                     />
                   </div>
 

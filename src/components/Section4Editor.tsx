@@ -16,6 +16,7 @@ import {
   initMasterLibraryRealtime,
   exportMasterTeamToJson,
   importMasterTeamFromJson,
+  generateMasterMemberId,
 } from '../services/masterLibraryService';
 import { isSupabaseConfigured } from '../services/supabaseClient';
 import { Users, ShieldAlert, Plus, Trash2, Library, ChevronDown, ChevronUp, TableProperties, CheckCheck, Sparkles, RotateCcw, Clock, ArrowUp, ArrowDown, BookmarkPlus, BookmarkCheck, Check, Camera, Upload, User, Database, Download, Briefcase, List, Table as TableIcon } from 'lucide-react';
@@ -224,7 +225,8 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
   const handleAddMember = () => {
     const defaultStartYear = currentYearBE - 5;
     const newId = `member-${Date.now()}`;
-    const autoMemberCode = `${currentYearBE}-EMP-${String(section4.teamMembers.length + 1).padStart(3, '0')}`;
+    const allKnown = [...teamLibrary, ...section4.teamMembers];
+    const autoMemberCode = generateMasterMemberId(currentYearBE, allKnown);
     const newMember: TeamMember = {
       id: newId,
       memberCode: autoMemberCode,

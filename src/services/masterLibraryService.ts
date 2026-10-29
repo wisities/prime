@@ -363,15 +363,23 @@ function saveLocalCompanyProfile(profile: MasterCompanyProfile): void {
 
 /**
  * ฟังก์ชันสร้างรหัสโครงการอัตโนมัติ ขึ้นต้นด้วยปี พ.ศ. ที่ได้สัญญา เช่น 2567-PRJ-001
+ * รองรับการส่ง existingProjects และ excludeId (เพื่อไม่ให้นำตัวเองมานับ)
  */
-export function generateMasterProjectCode(yearBE: number, existingProjects: PastProject[]): string {
+export function generateMasterProjectCode(
+  yearBE: number,
+  existingProjects: (PastProject | Partial<PastProject>)[],
+  excludeId?: string
+): string {
   const y = Number(yearBE) || (new Date().getFullYear() + 543);
   const prefix = `${y}-PRJ-`;
   let maxNum = 0;
   for (const p of existingProjects) {
-    const code = p.projectCode || '';
-    if (code.startsWith(prefix)) {
-      const numPart = parseInt(code.substring(prefix.length), 10);
+    if (!p) continue;
+    if (excludeId && (p.id === excludeId || p.originalMasterId === excludeId)) continue;
+    const code = (p.projectCode || '').trim();
+    if (code.toUpperCase().startsWith(prefix.toUpperCase())) {
+      const remainder = code.substring(prefix.length).trim();
+      const numPart = parseInt(remainder, 10);
       if (!isNaN(numPart) && numPart > maxNum) {
         maxNum = numPart;
       }
@@ -383,20 +391,112 @@ export function generateMasterProjectCode(yearBE: number, existingProjects: Past
 /**
  * ฟังก์ชันสร้างรหัส ID บุคลากรอัตโนมัติ ขึ้นต้นด้วยปี พ.ศ. ที่มีการบันทึก เช่น 2568-EMP-001
  */
-export function generateMasterMemberId(yearBE: number, existingMembers: TeamMember[]): string {
+export function generateMasterMemberId(
+  yearBE: number,
+  existingMembers: (TeamMember | Partial<TeamMember>)[],
+  excludeId?: string
+): string {
   const y = Number(yearBE) || (new Date().getFullYear() + 543);
   const prefix = `${y}-EMP-`;
   let maxNum = 0;
   for (const m of existingMembers) {
-    const code = m.memberCode || (m.id && m.id.startsWith(prefix) ? m.id : '');
-    if (code.startsWith(prefix)) {
-      const numPart = parseInt(code.substring(prefix.length), 10);
+    if (!m) continue;
+    if (excludeId && (m.id === excludeId || m.originalMasterId === excludeId)) continue;
+    const code = ((m.memberCode || (m.id && m.id.startsWith(prefix) ? m.id : '')) || '').trim();
+    if (code.toUpperCase().startsWith(prefix.toUpperCase())) {
+      const remainder = code.substring(prefix.length).trim();
+      const numPart = parseInt(remainder, 10);
       if (!isNaN(numPart) && numPart > maxNum) {
         maxNum = numPart;
       }
     }
   }
   return `${prefix}${String(maxNum + 1).padStart(3, '0')}`;
+}
+
+/**
+ * ตรวจสอบหารหัสโครงการที่ซ้ำกัน
+ */
+export function findDuplicateProjectCodes(projects: (PastProject | Partial<PastProject>)[]): {
+  duplicateCodes: Set<string>;
+  countMap: { [code: string]: number };
+} {
+  const countMap: { [code: string]: number } = {};
+  for (const p of projects) {
+    const c = (p.projectCode || '').trim().toUpperCase();
+    if (c) {
+      countMap[c] = (countMap[c] || 0) + 1;
+    }
+  }
+  const duplicateCodes = new Set<string>();
+  for (const [code, count] of Object.entries(countMap)) {
+    if (count > 1) {
+      duplicateCodes.add(code);
+    }
+  }
+  return { duplicateCodes, countMap };
+}
+
+/**
+ * จัดระเบียบรหัสโครงการทั้งหมดในคลังกลางใหม่ตามลำดับปีสัญญา (พ.ศ.)
+ * เรียงตาม contractYearBE (หรือ completionYearBE) และกำหนดรหัส ${year}-PRJ-001, 002... โดยไม่ซ้ำกันแน่นอน
+ */
+export function resequenceAllMasterProjectsCodes(): PastProject[] {
+  const current = getMasterProjectsLibrary();
+  const sorted = [...current].sort((a, b) => {
+    const yrA = a.contractYearBE || a.completionYearBE || 0;
+    const yrB = b.contractYearBE || b.completionYearBE || 0;
+    if (yrA !== yrB) return yrA - yrB;
+    const compA = a.completionYearBE || 0;
+    const compB = b.completionYearBE || 0;
+    if (compA !== compB) return compA - compB;
+    return (a.projectName || '').localeCompare(b.projectName || '');
+  });
+
+  const yearCounters: { [year: number]: number } = {};
+  const updated = sorted.map((p) => {
+    const yr = p.contractYearBE || p.completionYearBE || (new Date().getFullYear() + 543);
+    yearCounters[yr] = (yearCounters[yr] || 0) + 1;
+    const newCode = `${yr}-PRJ-${String(yearCounters[yr]).padStart(3, '0')}`;
+    return {
+      ...p,
+      contractYearBE: yr,
+      projectCode: newCode,
+    };
+  });
+
+  saveLocalProjectsLibrary(updated);
+  dispatchProjectsUpdatedEvent(updated);
+  return updated;
+}
+
+/**
+ * จัดระเบียบรหัสบุคลากรทั้งหมดในคลังกลางใหม่ตามลำดับปีที่บันทึก (พ.ศ.)
+ * เรียงตาม recordedYearBE และกำหนดรหัส ${year}-EMP-001, 002... โดยไม่ซ้ำกันแน่นอน
+ */
+export function resequenceAllMasterTeamCodes(): TeamMember[] {
+  const current = getMasterTeamLibrary();
+  const sorted = [...current].sort((a, b) => {
+    const yrA = b.experienceYears || 0;
+    const yrB = a.experienceYears || 0;
+    if (yrA !== yrB) return yrB - yrA;
+    return (a.name || '').localeCompare(b.name || '');
+  });
+
+  const yearCounters: { [year: number]: number } = {};
+  const updated = sorted.map((m) => {
+    const yr = m.recordedYearBE || (new Date().getFullYear() + 543);
+    yearCounters[yr] = (yearCounters[yr] || 0) + 1;
+    const newCode = `${yr}-EMP-${String(yearCounters[yr]).padStart(3, '0')}`;
+    return {
+      ...m,
+      memberCode: newCode,
+    };
+  });
+
+  saveLocalTeamLibrary(updated);
+  dispatchTeamUpdatedEvent(updated);
+  return updated;
 }
 
 /**
