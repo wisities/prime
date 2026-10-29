@@ -34,26 +34,40 @@ import { Building2, Plus, Trash2, Library, Filter, Calendar, AlertTriangle, Chec
  * 3. หากปีเดียวกัน: ให้เอาโครงการที่มีมูลค่าสัญญา (contractValue) สูงกว่าขึ้นก่อน (Descending)
  */
 export const sortPastProjects = (projects: PastProject[]): PastProject[] => {
-  return [...projects].sort((a, b) => {
-    // 1. แยกผลงานอ้างอิงตาม TOR ('tor_reference') และโครงการอื่นๆ ('supplementary')
-    const aType = a.projectType || 'tor_reference';
-    const bType = b.projectType || 'tor_reference';
-    if (aType !== bType) {
-      return aType === 'tor_reference' ? -1 : 1;
-    }
+  if (!Array.isArray(projects)) return [];
+  return [...projects]
+    .filter((p) => p && typeof p === 'object')
+    .sort((a, b) => {
+      // 1. แยกผลงานอ้างอิงตาม TOR ('tor_reference') และโครงการอื่นๆ ('supplementary')
+      const aType = a.projectType || 'tor_reference';
+      const bType = b.projectType || 'tor_reference';
+      if (aType !== bType) {
+        return aType === 'tor_reference' ? -1 : 1;
+      }
 
-    // 2. เรียงตามปี ใหม่สุดขึ้นก่อน (completionYearBE มากไปน้อย)
-    const aYear = Number(a.completionYearBE) || 0;
-    const bYear = Number(b.completionYearBE) || 0;
-    if (bYear !== aYear) {
-      return bYear - aYear;
-    }
+      // 2. เรียงตามปี ใหม่สุดขึ้นก่อน (contractYearBE หรือ completionYearBE มากไปน้อย)
+      const aYear = Number(a.contractYearBE || a.completionYearBE) || 0;
+      const bYear = Number(b.contractYearBE || b.completionYearBE) || 0;
+      if (bYear !== aYear) {
+        return bYear - aYear;
+      }
 
-    // 3. หากปีเดียวกัน ให้เอาโครงการที่มูลค่าสูงกว่าขึ้นก่อน (contractValue มากไปน้อย)
-    const aVal = Number(a.contractValue) || 0;
-    const bVal = Number(b.contractValue) || 0;
-    return bVal - aVal;
-  });
+      // 3. หากปีเดียวกัน ให้เอาโครงการที่มูลค่าสูงกว่าขึ้นก่อน (contractValue มากไปน้อย)
+      const aVal = Number(a.contractValue) || 0;
+      const bVal = Number(b.contractValue) || 0;
+      if (bVal !== aVal) {
+        return bVal - aVal;
+      }
+
+      // 4. หากมูลค่าเท่ากัน เรียงตามรหัสโครงการ
+      const aCode = String(a.projectCode || '');
+      const bCode = String(b.projectCode || '');
+      if (aCode && bCode) {
+        return bCode.localeCompare(aCode);
+      }
+
+      return String(a.projectName || '').localeCompare(String(b.projectName || ''));
+    });
 };
 
 interface Section5EditorProps {
@@ -70,6 +84,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
   const [isLoadingCloud, setIsLoadingCloud] = useState(false);
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
   const [selectedLibraryIds, setSelectedLibraryIds] = useState<string[]>([]);
+  const [savedProjectToast, setSavedProjectToast] = useState<string | null>(null);
   const fileInputProjectsRef = React.useRef<HTMLInputElement>(null);
   const currentYearBE = 2568;
 
@@ -251,8 +266,8 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
 
   // ตรวจจับและวิเคราะห์รหัสโครงการที่ซ้ำกัน
   const duplicateCodesInfo = React.useMemo(() => {
-    return findDuplicateProjectCodes(section5.pastProjects);
-  }, [section5.pastProjects]);
+    return findDuplicateProjectCodes(section5?.pastProjects || []);
+  }, [section5?.pastProjects]);
 
   const isProjectCodeDuplicated = (p: PastProject): boolean => {
     const code = (p.projectCode || '').trim().toUpperCase();
@@ -437,7 +452,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
     onChange({ ...section5, pastProjects: reordered });
   };
 
-  const [savedProjectToast, setSavedProjectToast] = useState<string | null>(null);
+  
 
   const handleSaveProjectToLibrary = (project: PastProject) => {
     if (!project.projectName || project.projectName.trim() === '') {

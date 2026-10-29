@@ -373,10 +373,10 @@ export function generateMasterProjectCode(
   const y = Number(yearBE) || (new Date().getFullYear() + 543);
   const prefix = `${y}-PRJ-`;
   let maxNum = 0;
-  for (const p of existingProjects) {
+  for (const p of (existingProjects || [])) {
     if (!p) continue;
     if (excludeId && (p.id === excludeId || p.originalMasterId === excludeId)) continue;
-    const code = (p.projectCode || '').trim();
+    const code = String(p.projectCode || '').trim();
     if (code.toUpperCase().startsWith(prefix.toUpperCase())) {
       const remainder = code.substring(prefix.length).trim();
       const numPart = parseInt(remainder, 10);
@@ -399,10 +399,12 @@ export function generateMasterMemberId(
   const y = Number(yearBE) || (new Date().getFullYear() + 543);
   const prefix = `${y}-EMP-`;
   let maxNum = 0;
-  for (const m of existingMembers) {
+  for (const m of (existingMembers || [])) {
     if (!m) continue;
     if (excludeId && (m.id === excludeId || m.originalMasterId === excludeId)) continue;
-    const code = ((m.memberCode || (m.id && m.id.startsWith(prefix) ? m.id : '')) || '').trim();
+    const memberCodeStr = m.memberCode !== undefined && m.memberCode !== null ? String(m.memberCode) : '';
+    const idStr = m.id !== undefined && m.id !== null ? String(m.id) : '';
+    const code = (memberCodeStr || (idStr.startsWith(prefix) ? idStr : '')).trim();
     if (code.toUpperCase().startsWith(prefix.toUpperCase())) {
       const remainder = code.substring(prefix.length).trim();
       const numPart = parseInt(remainder, 10);
@@ -422,8 +424,9 @@ export function findDuplicateProjectCodes(projects: (PastProject | Partial<PastP
   countMap: { [code: string]: number };
 } {
   const countMap: { [code: string]: number } = {};
-  for (const p of projects) {
-    const c = (p.projectCode || '').trim().toUpperCase();
+  for (const p of (projects || [])) {
+    if (!p) continue;
+    const c = String(p.projectCode || '').trim().toUpperCase();
     if (c) {
       countMap[c] = (countMap[c] || 0) + 1;
     }
@@ -612,18 +615,21 @@ export function findMatchingMasterMemberIndex(target: Partial<TeamMember>, libra
  * รวมและตัดโครงการที่ซ้ำซ้อนในคลังกลาง โดยเลือกข้อมูลที่สมบูรณ์ที่สุด
  */
 export function deduplicateMasterProjects(projects: PastProject[]): PastProject[] {
+  if (!Array.isArray(projects)) return [];
   const result: PastProject[] = [];
-  const norm = (s?: string) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const norm = (s?: any) => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
 
   for (const p of projects) {
-    if (!p.projectName || p.projectName.trim() === '') continue;
+    if (!p || typeof p !== 'object' || !p.projectName || String(p.projectName).trim() === '') continue;
 
+    const pCodeStr = String(p.projectCode || '').trim().toLowerCase();
     const existingIdx = result.findIndex((item) => {
+      if (!item) return false;
       if (p.originalMasterId && item.originalMasterId && p.originalMasterId === item.originalMasterId) return true;
-      if (p.originalMasterId && (item.id === p.originalMasterId || item.projectCode === p.originalMasterId)) return true;
-      if (item.originalMasterId && (p.id === item.originalMasterId || p.projectCode === item.originalMasterId)) return true;
+      if (p.originalMasterId && (item.id === p.originalMasterId || String(item.projectCode || '').trim().toLowerCase() === String(p.originalMasterId).trim().toLowerCase())) return true;
+      if (item.originalMasterId && (p.id === item.originalMasterId || pCodeStr === String(item.originalMasterId).trim().toLowerCase())) return true;
       if (p.id && item.id && p.id === item.id) return true;
-      if (p.projectCode && item.projectCode && p.projectCode.trim().toLowerCase() === item.projectCode.trim().toLowerCase()) return true;
+      if (pCodeStr && item.projectCode && pCodeStr === String(item.projectCode).trim().toLowerCase()) return true;
       if (norm(p.projectName) === norm(item.projectName)) return true;
       return false;
     });
@@ -636,9 +642,9 @@ export function deduplicateMasterProjects(projects: PastProject[]): PastProject[
         id: existing.id,
         originalMasterId: existing.originalMasterId || existing.id,
         projectCode: existing.projectCode || p.projectCode,
-        contractYearBE: p.contractYearBE || existing.contractYearBE,
-        completionYearBE: p.completionYearBE || existing.completionYearBE,
-        contractValue: p.contractValue > 0 ? p.contractValue : existing.contractValue,
+        contractYearBE: Number(p.contractYearBE || existing.contractYearBE) || undefined,
+        completionYearBE: Number(p.completionYearBE || existing.completionYearBE) || 2567,
+        contractValue: (Number(p.contractValue) || 0) > 0 ? Number(p.contractValue) : (Number(existing.contractValue) || 0),
         description: (p.description && p.description.length > (existing.description || '').length) ? p.description : (existing.description || p.description),
         certificateFileUrl: p.certificateFileUrl || existing.certificateFileUrl,
         certificateFileName: p.certificateFileName || existing.certificateFileName,
@@ -659,18 +665,21 @@ export function deduplicateMasterProjects(projects: PastProject[]): PastProject[
  * รวมและตัดบุคลากรที่ซ้ำซ้อนในคลังกลาง
  */
 export function deduplicateMasterTeam(members: TeamMember[]): TeamMember[] {
+  if (!Array.isArray(members)) return [];
   const result: TeamMember[] = [];
-  const norm = (s?: string) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const norm = (s?: any) => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
 
   for (const m of members) {
-    if (!m.name || m.name.trim() === '' || m.name.includes('(ระบุชื่อ-นามสกุล)')) continue;
+    if (!m || typeof m !== 'object' || !m.name || String(m.name).trim() === '' || String(m.name).includes('(ระบุชื่อ-นามสกุล)')) continue;
 
+    const mCodeStr = String(m.memberCode || '').trim().toLowerCase();
     const existingIdx = result.findIndex((item) => {
+      if (!item) return false;
       if (m.originalMasterId && item.originalMasterId && m.originalMasterId === item.originalMasterId) return true;
-      if (m.originalMasterId && (item.id === m.originalMasterId || item.memberCode === m.originalMasterId)) return true;
-      if (item.originalMasterId && (m.id === item.originalMasterId || m.memberCode === item.originalMasterId)) return true;
+      if (m.originalMasterId && (item.id === m.originalMasterId || String(item.memberCode || '').trim().toLowerCase() === String(m.originalMasterId).trim().toLowerCase())) return true;
+      if (item.originalMasterId && (m.id === item.originalMasterId || mCodeStr === String(item.originalMasterId).trim().toLowerCase())) return true;
       if (m.id && item.id && m.id === item.id) return true;
-      if (m.memberCode && item.memberCode && m.memberCode.trim().toLowerCase() === item.memberCode.trim().toLowerCase()) return true;
+      if (mCodeStr && item.memberCode && mCodeStr === String(item.memberCode).trim().toLowerCase()) return true;
       if (norm(m.name) === norm(item.name)) return true;
       return false;
     });
@@ -683,7 +692,7 @@ export function deduplicateMasterTeam(members: TeamMember[]): TeamMember[] {
         id: existing.id,
         originalMasterId: existing.originalMasterId || existing.id,
         memberCode: existing.memberCode || m.memberCode,
-        recordedYearBE: m.recordedYearBE || existing.recordedYearBE,
+        recordedYearBE: Number(m.recordedYearBE || existing.recordedYearBE) || undefined,
         personalBio: (m.personalBio && m.personalBio.length > (existing.personalBio || '').length) ? m.personalBio : (existing.personalBio || m.personalBio),
         responsibilities: (m.responsibilities && m.responsibilities.length > (existing.responsibilities || '').length) ? m.responsibilities : (existing.responsibilities || m.responsibilities),
         highlightProjects: (m.highlightProjects && m.highlightProjects.length > (existing.highlightProjects || '').length) ? m.highlightProjects : (existing.highlightProjects || m.highlightProjects),
@@ -701,20 +710,22 @@ export function deduplicateMasterTeam(members: TeamMember[]): TeamMember[] {
   return result;
 }
 export function normalizeMasterProjects(projects: PastProject[]): PastProject[] {
+  if (!Array.isArray(projects)) return [];
+  const safeList = projects.filter((p): p is PastProject => !!p && typeof p === 'object');
   return deduplicateMasterProjects(
-    projects.map((p, idx) => {
-      const contractYear = p.contractYearBE || p.completionYearBE || 2568;
-      let code = p.projectCode?.trim();
+    safeList.map((p, idx) => {
+      const contractYear = Number(p.contractYearBE || p.completionYearBE) || 2568;
+      let code = p.projectCode !== undefined && p.projectCode !== null ? String(p.projectCode).trim() : '';
       if (!code) {
-        code = generateMasterProjectCode(contractYear, projects.slice(0, idx));
+        code = generateMasterProjectCode(contractYear, safeList.slice(0, idx));
       }
-      const finalId = p.id || `lib-proj-${idx + 1}`;
+      const finalId = p.id ? String(p.id) : `lib-proj-${idx + 1}`;
       return {
         ...p,
         id: finalId,
         contractYearBE: contractYear,
         projectCode: code,
-        originalMasterId: p.originalMasterId || finalId,
+        originalMasterId: p.originalMasterId ? String(p.originalMasterId) : finalId,
       };
     })
   );
@@ -724,21 +735,23 @@ export function normalizeMasterProjects(projects: PastProject[]): PastProject[] 
  * ปรับปรุงข้อมูลบุคลากรในคลังกลางให้มีรหัส ID บุคลากรขึ้นต้นด้วยปี พ.ศ. ที่บันทึกเสมอ พร้อมกำหนด originalMasterId
  */
 export function normalizeMasterTeam(members: TeamMember[]): TeamMember[] {
+  if (!Array.isArray(members)) return [];
+  const safeList = members.filter((m): m is TeamMember => !!m && typeof m === 'object');
   const currentYearBE = new Date().getFullYear() + 543;
   return deduplicateMasterTeam(
-    members.map((m, idx) => {
-      const recordedYear = m.recordedYearBE || currentYearBE;
-      let code = m.memberCode?.trim();
+    safeList.map((m, idx) => {
+      const recordedYear = Number(m.recordedYearBE) || currentYearBE;
+      let code = m.memberCode !== undefined && m.memberCode !== null ? String(m.memberCode).trim() : '';
       if (!code) {
-        code = generateMasterMemberId(recordedYear, members.slice(0, idx));
+        code = generateMasterMemberId(recordedYear, safeList.slice(0, idx));
       }
-      const finalId = m.id || code || `lib-team-${idx + 1}`;
+      const finalId = m.id ? String(m.id) : code || `lib-team-${idx + 1}`;
       return {
         ...m,
         id: finalId,
         recordedYearBE: recordedYear,
         memberCode: code,
-        originalMasterId: m.originalMasterId || finalId,
+        originalMasterId: m.originalMasterId ? String(m.originalMasterId) : finalId,
       };
     })
   );
@@ -749,14 +762,21 @@ export function normalizeMasterTeam(members: TeamMember[]): TeamMember[] {
 // ==============================================================================
 
 export function getMasterTeamLibrary(): TeamMember[] {
-  if (cachedTeam && cachedTeam.length > 0) return normalizeMasterTeam(cachedTeam);
   try {
-    const raw = localStorage.getItem(TEAM_LIBRARY_KEY);
-    if (raw !== null) {
-      cachedTeam = normalizeMasterTeam(JSON.parse(raw));
-      return cachedTeam!;
+    if (cachedTeam && Array.isArray(cachedTeam) && cachedTeam.length > 0) {
+      return normalizeMasterTeam(cachedTeam);
     }
-  } catch (e) {}
+    const raw = localStorage.getItem(TEAM_LIBRARY_KEY);
+    if (raw !== null && raw !== 'undefined' && raw !== 'null') {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        cachedTeam = normalizeMasterTeam(parsed);
+        return cachedTeam;
+      }
+    }
+  } catch (e) {
+    console.warn('Could not read master team library from localStorage:', e);
+  }
   cachedTeam = normalizeMasterTeam([...MASTER_TEAM_LIBRARY]);
   return cachedTeam;
 }
@@ -935,14 +955,21 @@ export function deduplicateMasterTeamLibrary(): TeamMember[] {
 // ==============================================================================
 
 export function getMasterProjectsLibrary(): PastProject[] {
-  if (cachedProjects && cachedProjects.length > 0) return normalizeMasterProjects(cachedProjects);
   try {
-    const raw = localStorage.getItem(PROJECTS_LIBRARY_KEY);
-    if (raw !== null) {
-      cachedProjects = normalizeMasterProjects(JSON.parse(raw));
-      return cachedProjects!;
+    if (cachedProjects && Array.isArray(cachedProjects) && cachedProjects.length > 0) {
+      return normalizeMasterProjects(cachedProjects);
     }
-  } catch (e) {}
+    const raw = localStorage.getItem(PROJECTS_LIBRARY_KEY);
+    if (raw !== null && raw !== 'undefined' && raw !== 'null') {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        cachedProjects = normalizeMasterProjects(parsed);
+        return cachedProjects;
+      }
+    }
+  } catch (e) {
+    console.warn('Could not read master projects library from localStorage:', e);
+  }
   cachedProjects = normalizeMasterProjects([...MASTER_PROJECTS_LIBRARY]);
   return cachedProjects;
 }
@@ -1218,19 +1245,25 @@ export function saveMultipleItemsToMasterBomLibrary(items: MasterBomItem[]): Mas
 // ==============================================================================
 
 export function getMasterCompanyProfile(): MasterCompanyProfile {
-  if (cachedCompany && (cachedCompany as MasterCompanyProfile).companyName) {
-    return cachedCompany as MasterCompanyProfile;
-  }
   try {
-    const raw = localStorage.getItem(COMPANY_PROFILE_KEY);
-    if (raw !== null) {
-      cachedCompany = JSON.parse(raw);
+    if (cachedCompany && (cachedCompany as MasterCompanyProfile).companyName) {
       return cachedCompany as MasterCompanyProfile;
     }
-  } catch (e) {}
+    const raw = localStorage.getItem(COMPANY_PROFILE_KEY);
+    if (raw !== null && raw !== 'undefined' && raw !== 'null') {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && parsed.companyName) {
+        cachedCompany = parsed;
+        return cachedCompany as MasterCompanyProfile;
+      }
+    }
+  } catch (e) {
+    console.warn('Could not read master company profile from localStorage:', e);
+  }
   cachedCompany = { ...DEFAULT_MASTER_COMPANY_PROFILE };
   return cachedCompany as MasterCompanyProfile;
 }
+
 
 export async function fetchMasterCompanyProfileFromCloud(): Promise<MasterCompanyProfile> {
   const fromIDB = await idbGet<MasterCompanyProfile>(IDB_STORES.MASTER_COMPANY, 'current');

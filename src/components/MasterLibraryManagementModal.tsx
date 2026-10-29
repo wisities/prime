@@ -131,6 +131,32 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
     clientName: string;
   }>>([]);
 
+  
+  // -------------------------------------------------------------------------
+  // Code Duplicate Analysis & Re-sequencing (Hooks must always run unconditionally)
+  // -------------------------------------------------------------------------
+  const duplicateProjectCodesInfo = React.useMemo(() => {
+    return findDuplicateProjectCodes(projects || []);
+  }, [projects]);
+
+  const duplicateProjectsCount = React.useMemo(() => {
+    return (projects || []).filter((p) => {
+      if (!p) return false;
+      const c = String(p.projectCode || '').trim().toUpperCase();
+      return c && (duplicateProjectCodesInfo?.countMap?.[c] || 0) > 1;
+    }).length;
+  }, [projects, duplicateProjectCodesInfo]);
+
+  const isFormProjectCodeDuplicated = React.useMemo(() => {
+    const code = String(projectFormData?.projectCode || '').trim().toUpperCase();
+    if (!code) return false;
+    return (projects || []).some((p) => {
+      if (!p) return false;
+      if (p.id === projectFormData.id || (p.originalMasterId && p.originalMasterId === projectFormData.originalMasterId)) return false;
+      return String(p.projectCode || '').trim().toUpperCase() === code;
+    });
+  }, [projectFormData?.projectCode, projectFormData?.id, projectFormData?.originalMasterId, projects]);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
@@ -264,9 +290,6 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
       window.removeEventListener(MASTER_COMPANY_UPDATED_EVENT, handleCompanyUpdate);
     };
   }, []);
-
-  if (!isOpen) return null;
-
   // File Upload Helper
   const handleFileUpload = (file: File, callback: (base64: string, fileName: string) => void) => {
     const reader = new FileReader();
@@ -314,28 +337,7 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
     }
   };
 
-  // -------------------------------------------------------------------------
-  // Code Duplicate Analysis & Re-sequencing
-  // -------------------------------------------------------------------------
-  const duplicateProjectCodesInfo = React.useMemo(() => {
-    return findDuplicateProjectCodes(projects);
-  }, [projects]);
-
-  const duplicateProjectsCount = React.useMemo(() => {
-    return projects.filter((p) => {
-      const c = (p.projectCode || '').trim().toUpperCase();
-      return c && (duplicateProjectCodesInfo.countMap[c] || 0) > 1;
-    }).length;
-  }, [projects, duplicateProjectCodesInfo]);
-
-  const isFormProjectCodeDuplicated = React.useMemo(() => {
-    const code = (projectFormData.projectCode || '').trim().toUpperCase();
-    if (!code) return false;
-    return projects.some((p) => {
-      if (p.id === projectFormData.id || (p.originalMasterId && p.originalMasterId === projectFormData.originalMasterId)) return false;
-      return (p.projectCode || '').trim().toUpperCase() === code;
-    });
-  }, [projectFormData.projectCode, projectFormData.id, projectFormData.originalMasterId, projects]);
+  
 
   const handleResequenceProjects = () => {
     if (!confirm(`ต้องการจัดระเบียบรหัสผลงานโครงการทั้งหมด (${projects.length} รายการ) ใหม่ตามปีสัญญา (${currentYearBE}-PRJ-001, 002, ...) หรือไม่?\n\nระบบจะเรียงลำดับตามปีสัญญาและกำหนดรหัสใหม่ที่ไม่ซ้ำกันอย่างแน่นอน 100%`)) {
@@ -664,13 +666,19 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
   };
 
   // Filtered & Sorted Lists: แสดงทั้งหมดเรียงจากปีใหม่ไปเก่า (Newest to Oldest)
-  const filteredProjects = projects
+  const filteredProjects = (projects || [])
     .filter((p) => {
+      if (!p) return false;
+      const pName = String(p.projectName || '');
+      const pCode = String(p.projectCode || '');
+      const pClient = String(p.clientName || '');
+      const pDesc = String(p.description || '');
+      const s = (projectSearch || '').toLowerCase();
       const matchSearch =
-        (p.projectName || '').toLowerCase().includes(projectSearch.toLowerCase()) ||
-        (p.projectCode || '').toLowerCase().includes(projectSearch.toLowerCase()) ||
-        (p.clientName || '').toLowerCase().includes(projectSearch.toLowerCase()) ||
-        (p.description || '').toLowerCase().includes(projectSearch.toLowerCase());
+        pName.toLowerCase().includes(s) ||
+        pCode.toLowerCase().includes(s) ||
+        pClient.toLowerCase().includes(s) ||
+        pDesc.toLowerCase().includes(s);
       const matchType =
         projectTypeFilter === 'all' ||
         (projectTypeFilter === 'tor_reference' && (p.projectType || 'tor_reference') === 'tor_reference') ||
@@ -678,26 +686,29 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
       return matchSearch && matchType;
     })
     .sort((a, b) => {
+      if (!a || !b) return 0;
       // 1. เรียงตามปีที่ได้สัญญา (หรือปีแล้วเสร็จ) จากใหม่ไปเก่า
       const yrA = Number(a.contractYearBE || a.completionYearBE || 0);
       const yrB = Number(b.contractYearBE || b.completionYearBE || 0);
       if (yrA !== yrB) return yrB - yrA;
 
       // 2. หากปีเดียวกัน เรียงตามรหัสโครงการ
-      const codeA = (a.projectCode || '').trim();
-      const codeB = (b.projectCode || '').trim();
+      const codeA = String(a.projectCode || '').trim();
+      const codeB = String(b.projectCode || '').trim();
       if (codeA && codeB) return codeB.localeCompare(codeA);
 
       // 3. เรียงตามชื่อโครงการ
-      return (a.projectName || '').localeCompare(b.projectName || '');
+      return String(a.projectName || '').localeCompare(String(b.projectName || ''));
     });
 
-  const filteredTeam = teamMembers.filter((m) => {
+  const filteredTeam = (teamMembers || []).filter((m) => {
+    if (!m) return false;
+    const s = (teamSearch || '').toLowerCase();
     return (
-      (m.name || '').toLowerCase().includes(teamSearch.toLowerCase()) ||
-      (m.proposedRole || '').toLowerCase().includes(teamSearch.toLowerCase()) ||
-      (m.certifications || '').toLowerCase().includes(teamSearch.toLowerCase()) ||
-      (m.education || '').toLowerCase().includes(teamSearch.toLowerCase())
+      String(m.name || '').toLowerCase().includes(s) ||
+      String(m.proposedRole || '').toLowerCase().includes(s) ||
+      String(m.certifications || '').toLowerCase().includes(s) ||
+      String(m.education || '').toLowerCase().includes(s)
     );
   });
   const handleClose = () => {
@@ -708,6 +719,7 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
     }
     onClose();
   };
+  if (!isOpen) return null;
 
   return (
     <div className="modal-overlay" style={{ zIndex: 1050 }}>

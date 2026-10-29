@@ -29,16 +29,24 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 
   handleReset = () => {
     try {
+      const gasUrl = localStorage.getItem('prime_google_apps_script_url');
+      const geminiKey = localStorage.getItem('prime_gemini_api_key');
       localStorage.clear();
       sessionStorage.clear();
+      if (gasUrl) localStorage.setItem('prime_google_apps_script_url', gasUrl);
+      if (geminiKey) localStorage.setItem('prime_gemini_api_key', geminiKey);
     } catch {}
     window.location.reload();
   };
 
   handleDeepReset = async () => {
     try {
+      const gasUrl = localStorage.getItem('prime_google_apps_script_url');
+      const geminiKey = localStorage.getItem('prime_gemini_api_key');
       localStorage.clear();
       sessionStorage.clear();
+      if (gasUrl) localStorage.setItem('prime_google_apps_script_url', gasUrl);
+      if (geminiKey) localStorage.setItem('prime_gemini_api_key', geminiKey);
     } catch {}
 
     if (typeof window !== 'undefined' && window.indexedDB) {

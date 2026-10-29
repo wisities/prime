@@ -38,6 +38,7 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
   const [teamLibrary, setTeamLibrary] = useState<TeamMember[]>(getMasterTeamLibrary());
   const [selectedLibraryIds, setSelectedLibraryIds] = useState<string[]>([]);
   const [isLoadingCloud, setIsLoadingCloud] = useState(false);
+  const [savedMemberToast, setSavedMemberToast] = useState<string | null>(null);
   const fileInputTeamRef = React.useRef<HTMLInputElement>(null);
 
   const handleImportTeamFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -293,7 +294,7 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
     onChange({ ...section4, teamMembers: reordered });
   };
 
-  const [savedMemberToast, setSavedMemberToast] = useState<string | null>(null);
+  
 
   const handleSaveMemberToLibrary = (member: TeamMember) => {
     if (!member.name || member.name.trim() === '' || member.name.includes('(ระบุชื่อ-นามสกุล)')) {

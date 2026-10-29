@@ -1514,10 +1514,12 @@ export const App: React.FC = () => {
         onKeyUpdated={(has) => setHasGeminiKey(has)}
       />
 
-      <MasterLibraryManagementModal
-        isOpen={showMasterLibraryModal}
-        onClose={() => setShowMasterLibraryModal(false)}
-      />
+      {showMasterLibraryModal && (
+        <MasterLibraryManagementModal
+          isOpen={showMasterLibraryModal}
+          onClose={() => setShowMasterLibraryModal(false)}
+        />
+      )}
 
       <DraftHistoryModal
         isOpen={showDraftHistoryModal}
