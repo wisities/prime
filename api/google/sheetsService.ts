@@ -99,8 +99,8 @@ export async function initializeSheetTabs(sheets: SheetsClient, spreadsheetId: s
         'ชื่อ-นามสกุล บุคลากร',
         'ตำแหน่งที่เสนอในโครงการ',
         'วุฒิการศึกษา',
-        'ประสบการณ์ทำงาน (ปี)',
-        'ภาระหน้าที่รับผิดชอบ',
+        'หน้าที่ความรับผิดชอบ',
+        'ประวัติย่อและความเชี่ยวชาญสำคัญ',
         'ใบรับรอง/Certifications',
         'ลิงก์รูปถ่าย (Google Drive)',
         'ตัวอย่างรูปถ่าย 1.5 นิ้ว',
@@ -390,6 +390,7 @@ export async function syncProjectToGoogleSheet(
         m.education || '',
         Number(m.experienceYears || 0),
         m.responsibilities || '',
+        m.personalBio || '',
         m.certifications || '',
         photoDriveLink,
         photoThumbnail,
@@ -398,7 +399,7 @@ export async function syncProjectToGoogleSheet(
 
     await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: `'${SHEET_TABS.TEAM}'!A:J`,
+      range: `'${SHEET_TABS.TEAM}'!A:K`,
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: teamRows },
     });
@@ -462,6 +463,7 @@ export async function syncMasterLibraryToGoogleSheet(
         'ปีเริ่มทำงาน (พ.ศ.)',
         'หน้าที่ความรับผิดชอบหลัก',
         'ผลงานเด่นที่ผ่านมา',
+        'ประวัติย่อและความเชี่ยวชาญสำคัญ',
         'ใบรับรอง/Certifications',
         'ลิงก์รูปถ่าย (Google Drive)',
         'ตัวอย่างรูปถ่าย 1.5 นิ้ว',
@@ -598,6 +600,7 @@ export async function syncMasterLibraryToGoogleSheet(
       Number(tm.startWorkYearBE || 2560),
       tm.responsibilities || '',
       tm.highlightProjects || '',
+      tm.personalBio || '',
       tm.certifications || '',
       photoFormula,
       photoThumbFormula,
@@ -607,7 +610,7 @@ export async function syncMasterLibraryToGoogleSheet(
 
   await sheets.spreadsheets.values.clear({
     spreadsheetId,
-    range: `'${MASTER_SHEET_TABS.TEAM}'!A:M`,
+    range: `'${MASTER_SHEET_TABS.TEAM}'!A:N`,
   });
   await sheets.spreadsheets.values.update({
     spreadsheetId,
@@ -760,11 +763,25 @@ export async function getMasterLibraryFromGoogleSheet(
   try {
     const teamRes = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `'${MASTER_SHEET_TABS.TEAM}'!A2:M`,
+      range: `'${MASTER_SHEET_TABS.TEAM}'!A1:N`,
       valueRenderOption: 'FORMULA',
     });
 
-    const tRows = teamRes.data.values || [];
+    const allRows = teamRes.data.values || [];
+    const tHeaders = allRows[0] || [];
+    let bioIdx = -1;
+    let certIdx = -1;
+    let photoIdx = -1;
+    for (let h = 0; h < tHeaders.length; h++) {
+      const hText = String(tHeaders[h] || '');
+      if (hText.includes('ประวัติย่อ')) bioIdx = h;
+      else if (hText.includes('ใบรับรอง') || hText.includes('Certification')) certIdx = h;
+      else if (hText.includes('ลิงก์รูปถ่าย')) photoIdx = h;
+    }
+    if (bioIdx === -1 && tHeaders.length >= 14) { bioIdx = 9; certIdx = 10; photoIdx = 11; }
+    else if (bioIdx === -1 && tHeaders.length < 14) { bioIdx = -1; certIdx = 9; photoIdx = 10; }
+
+    const tRows = allRows.slice(1);
     for (let j = 0; j < tRows.length; j++) {
       const tRow = tRows[j];
       const mCode = String(tRow[0] || '').trim();
@@ -772,7 +789,10 @@ export async function getMasterLibraryFromGoogleSheet(
       const tName = String(tRow[2] || '').trim();
       if (!tName && !mCode) continue;
 
-      const photoUrl = extractUrlFromCell(tRow[10]) || extractUrlFromCell(tRow[11]);
+      const pBio = bioIdx >= 0 ? String(tRow[bioIdx] || '').trim() : '';
+      const cCert = certIdx >= 0 ? String(tRow[certIdx] || '').trim() : '';
+      const pIdx = photoIdx >= 0 ? photoIdx : 11;
+      const photoUrl = extractUrlFromCell(tRow[pIdx]) || extractUrlFromCell(tRow[pIdx + 1]);
       const mId = 'lib-team-' + (mCode ? mCode.toLowerCase().replace(/[^a-z0-9_-]/g, '-') : `row-${j + 1}`);
 
       team.push({
@@ -787,7 +807,8 @@ export async function getMasterLibraryFromGoogleSheet(
         startWorkYearBE: Number(tRow[6]) || (recYear - 5),
         responsibilities: String(tRow[7] || '').trim(),
         highlightProjects: String(tRow[8] || '').trim(),
-        certifications: String(tRow[9] || '').trim(),
+        personalBio: pBio || undefined,
+        certifications: cCert || undefined,
         photoUrl: photoUrl || undefined,
       });
     }

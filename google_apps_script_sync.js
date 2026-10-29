@@ -433,8 +433,8 @@ function syncToSheets(spreadsheetId, project, projectFolder, uploadedFiles) {
   if (teamMembersList.length > 0) {
     var shTeam = getOrCreateSheet(ss, TAB_TEAM, [
       "รหัสโครงการ", "ชื่อโครงการ", "ชื่อ-นามสกุล บุคลากร", "ตำแหน่งที่เสนอในโครงการ",
-      "วุฒิการศึกษา", "ประสบการณ์ทำงาน (ปี)", "ภาระหน้าที่รับผิดชอบ", "ใบรับรอง/Certifications",
-      "ลิงก์รูปถ่าย (Google Drive)", "ตัวอย่างรูปถ่าย 1.5 นิ้ว"
+      "วุฒิการศึกษา", "ประสบการณ์ทำงาน (ปี)", "ภาระหน้าที่รับผิดชอบ", "ประวัติย่อและความเชี่ยวชาญสำคัญ",
+      "ใบรับรอง/Certifications", "ลิงก์รูปถ่าย (Google Drive)", "ตัวอย่างรูปถ่าย 1.5 นิ้ว"
     ]);
     deleteExistingProjectRows(shTeam, projectCode);
 
@@ -454,7 +454,8 @@ function syncToSheets(spreadsheetId, project, projectFolder, uploadedFiles) {
 
       shTeam.appendRow([
         projectCode, projectTitle, tm.name || "", tm.proposedRole || "",
-        tm.education || "", Number(tm.experienceYears || 0), tm.responsibilities || "", tm.certifications || "",
+        tm.education || "", Number(tm.experienceYears || 0), tm.responsibilities || "",
+        tm.personalBio || "", tm.certifications || "",
         photoDriveFormula, photoThumbnailFormula
       ]);
     }
@@ -663,12 +664,12 @@ function handleSyncMasterLibrary(data, rootFolder, spreadsheetId) {
     shProj.getRange(2, 1, projRows.length, projHeaders.length).setValues(projRows);
   }
 
-  // 4. แท็บ [คลังกลาง] บุคลากร (13 คอลัมน์)
+  // 4. แท็บ [คลังกลาง] บุคลากร (14 คอลัมน์)
   var TAB_M_TEAM = "[คลังกลาง] บุคลากร";
   var teamHeaders = [
     "รหัสบุคลากร", "ปีที่บันทึก (พ.ศ.)", "ชื่อ-นามสกุล", "ตำแหน่งหลักที่เสนอ",
     "วุฒิการศึกษา", "ประสบการณ์ (ปี)", "ปีเริ่มทำงาน (พ.ศ.)", "หน้าที่ความรับผิดชอบหลัก",
-    "ผลงานเด่นที่ผ่านมา", "ใบรับรอง/Certifications",
+    "ผลงานเด่นที่ผ่านมา", "ประวัติย่อและความเชี่ยวชาญสำคัญ", "ใบรับรอง/Certifications",
     "ลิงก์รูปถ่าย (Google Drive)", "ตัวอย่างรูปถ่าย 1.5 นิ้ว", "วันที่อัปเดตล่าสุด"
   ];
   var shTeam = getOrCreateSheet(ss, TAB_M_TEAM, teamHeaders);
@@ -696,6 +697,7 @@ function handleSyncMasterLibrary(data, rootFolder, spreadsheetId) {
       Number(tm.startWorkYearBE || 2560),
       tm.responsibilities || "",
       tm.highlightProjects || "",
+      tm.personalBio || "",
       tm.certifications || "",
       photoFormula,
       photoThumbFormula,
@@ -859,7 +861,20 @@ function handleGetMasterLibrary(spreadsheetId) {
   var team = [];
 
   if (shTeam && shTeam.getLastRow() > 1) {
-    var tCols = Math.max(shTeam.getLastColumn(), 13);
+    var tCols = Math.max(shTeam.getLastColumn(), 14);
+    var tHeaders = shTeam.getRange(1, 1, 1, tCols).getValues()[0] || [];
+    var bioIdx = -1;
+    var certIdx = -1;
+    var photoIdx = -1;
+    for (var h = 0; h < tHeaders.length; h++) {
+      var hText = String(tHeaders[h] || '');
+      if (hText.indexOf('ประวัติย่อ') !== -1) bioIdx = h;
+      else if (hText.indexOf('ใบรับรอง') !== -1 || hText.indexOf('Certification') !== -1) certIdx = h;
+      else if (hText.indexOf('ลิงก์รูปถ่าย') !== -1) photoIdx = h;
+    }
+    if (bioIdx === -1 && tCols >= 14) { bioIdx = 9; certIdx = 10; photoIdx = 11; }
+    else if (bioIdx === -1 && tCols < 14) { bioIdx = -1; certIdx = 9; photoIdx = 10; }
+
     var tData = shTeam.getRange(2, 1, shTeam.getLastRow() - 1, tCols).getValues();
     var tFormulas = shTeam.getRange(2, 1, shTeam.getLastRow() - 1, tCols).getFormulas();
     for (var j = 0; j < tData.length; j++) {
@@ -870,7 +885,10 @@ function handleGetMasterLibrary(spreadsheetId) {
       var tName = String(tRow[2] || '').trim();
       if (!tName && !mCode) continue;
 
-      var photoUrl = extractUrlFromCell(tRow[10], tfRow ? tfRow[10] : '') || extractUrlFromCell(tRow[11], tfRow ? tfRow[11] : '');
+      var pBio = bioIdx >= 0 ? String(tRow[bioIdx] || '').trim() : '';
+      var cCert = certIdx >= 0 ? String(tRow[certIdx] || '').trim() : '';
+      var pIdx = photoIdx >= 0 ? photoIdx : 11;
+      var photoUrl = extractUrlFromCell(tRow[pIdx], tfRow ? tfRow[pIdx] : '') || extractUrlFromCell(tRow[pIdx + 1], tfRow ? tfRow[pIdx + 1] : '');
 
       var mId = 'lib-team-' + (mCode ? mCode.toLowerCase().replace(/[^a-z0-9_-]/g, '-') : ('row-' + (j + 1)));
 
@@ -886,7 +904,8 @@ function handleGetMasterLibrary(spreadsheetId) {
         startWorkYearBE: Number(tRow[6]) || (recYear - 5),
         responsibilities: String(tRow[7] || '').trim(),
         highlightProjects: String(tRow[8] || '').trim(),
-        certifications: String(tRow[9] || '').trim(),
+        personalBio: pBio || undefined,
+        certifications: cCert || undefined,
         photoUrl: photoUrl || undefined
       });
     }

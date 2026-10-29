@@ -1595,6 +1595,12 @@ export function importMasterTeamFromCsv(csvText: string): { success: boolean; co
       return { success: false, count: 0, error: 'ไฟล์ CSV ไม่มีข้อมูลแถวบุคลากร' };
     }
 
+    const headerCols = parseCsvLine(lines[0]);
+    let bioIdx = headerCols.findIndex(c => c.includes('ประวัติย่อ'));
+    let certIdx = headerCols.findIndex(c => c.includes('ใบรับรอง') || c.includes('Certification'));
+    if (bioIdx === -1 && headerCols.length >= 14) { bioIdx = 9; certIdx = 10; }
+    else if (bioIdx === -1 && headerCols.length < 14) { bioIdx = -1; certIdx = 9; }
+
     const members: TeamMember[] = [];
     for (let i = 1; i < lines.length; i++) {
       const cols = parseCsvLine(lines[i]);
@@ -1611,7 +1617,8 @@ export function importMasterTeamFromCsv(csvText: string): { success: boolean; co
       const startWorkYr = parseInt(cols[6]) || (recYr - Math.round(expYears));
       const responsibilities = cols[7] || '';
       const highlightProjects = cols[8] || '';
-      const certifications = cols[9] || '';
+      const personalBio = bioIdx >= 0 ? (cols[bioIdx] || '') : '';
+      const certifications = certIdx >= 0 ? (cols[certIdx] || '') : (cols[9] || '');
 
       const id = code ? `lib-team-${code.toLowerCase().replace(/[^a-z0-9_-]/g, '-')}` : `lib-team-${Date.now()}-${i}`;
 
@@ -1627,6 +1634,7 @@ export function importMasterTeamFromCsv(csvText: string): { success: boolean; co
         startWorkYearBE: startWorkYr,
         responsibilities,
         highlightProjects,
+        personalBio: personalBio || undefined,
         certifications,
       });
     }
