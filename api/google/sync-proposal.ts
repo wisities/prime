@@ -5,7 +5,10 @@ import type { UploadedFileResult } from './driveService';
 import { syncProjectToGoogleSheet, syncMasterLibraryToGoogleSheet, getMasterLibraryFromGoogleSheet, getProposalFromGoogleSheet } from './sheetsService';
 import type { BiddingProject } from '../../src/types/proposal';
 
+export const maxDuration = 60;
+
 export const config = {
+  maxDuration: 60,
   api: {
     bodyParser: {
       sizeLimit: '25mb',

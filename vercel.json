@@ -4,6 +4,10 @@
     "api/**/*.ts": {
       "maxDuration": 60,
       "memory": 1024
+    },
+    "api/google/sync-proposal.ts": {
+      "maxDuration": 60,
+      "memory": 1024
     }
   },
   "rewrites": [
