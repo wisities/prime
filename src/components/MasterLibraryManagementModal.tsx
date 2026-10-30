@@ -456,6 +456,7 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
   const [sheetProjectsPool, setSheetProjectsPool] = useState<PastProject[]>([]);
   const [sheetTeamPool, setSheetTeamPool] = useState<TeamMember[]>([]);
   const [selectedPullProjectIds, setSelectedPullProjectIds] = useState<Set<string>>(new Set());
+  const [pullMode, setPullMode] = useState<'replace' | 'merge'>('replace');
   const [pullSearch, setPullSearch] = useState('');
   const [pullingSingleId, setPullingSingleId] = useState<string | null>(null);
 
@@ -469,11 +470,10 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
       if (res.success && res.projects) {
         setSheetProjectsPool(res.projects);
         setSheetTeamPool(res.team || []);
-        // ค่าเริ่มต้น ติ๊กถูกเลือกทุกโครงการที่พบในชีต
-        const validIds = res.projects
-          .map((p) => p.id || p.projectCode)
-          .filter((id): id is string => Boolean(id));
-        setSelectedPullProjectIds(new Set(validIds));
+        // ค่าเริ่มต้น: ไม่ติ๊กทั้งหมด เพื่อให้ผู้ใช้เลือกเฉพาะโครงการที่ต้องการหยิบลงมาแก้ไข
+        setSelectedPullProjectIds(new Set());
+        setPullSearch('');
+        setPullMode('replace');
         setShowSelectivePullModal(true);
       } else {
         alert(`⚠️ ไม่สามารถดึงข้อมูลจากชีตได้: ${res.error}`);
@@ -485,7 +485,7 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
     }
   };
 
-  const handleExecuteSelectivePull = (targetIds?: Set<string>) => {
+  const handleExecuteSelectivePull = (targetIds?: Set<string>, overrideMode?: 'replace' | 'merge') => {
     const idsToPull = targetIds || selectedPullProjectIds;
     if (idsToPull.size === 0) {
       alert('กรุณาเลือกอย่างน้อย 1 โครงการที่ต้องการดึงข้อมูลลงมา');
@@ -498,37 +498,49 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
     });
     if (projectsFromSheet.length === 0) return;
 
-    // ผสานเฉพาะโครงการที่เลือกลงในคลังโครงการ Local
-    const current = getMasterProjectsLibrary();
-    const norm = (s?: any) => String(s || '').trim().toLowerCase();
+    const mode = overrideMode || pullMode;
+    let updatedProjects: PastProject[] = [];
 
-    const updatedProjects = current.map((localP) => {
-      const matched = projectsFromSheet.find(
-        (sp) =>
-          (sp.id && (sp.id === localP.id || sp.id === localP.originalMasterId)) ||
-          (sp.projectCode && norm(sp.projectCode) === norm(localP.projectCode)) ||
-          (sp.projectName && norm(sp.projectName) === norm(localP.projectName))
-      );
-      return matched ? { ...localP, ...matched, id: localP.id } : localP;
-    });
+    if (mode === 'replace') {
+      // แทนที่คลังโครงการบนเว็บด้วยเฉพาะโครงการที่เลือก
+      updatedProjects = [...projectsFromSheet];
+    } else {
+      // ผสานเฉพาะโครงการที่เลือกลงในคลังโครงการ Local เดิม
+      const current = getMasterProjectsLibrary();
+      const norm = (s?: any) => String(s || '').trim().toLowerCase();
 
-    // หากมีโครงการใหม่จากชีตที่ยังไม่มีใน Local เลย ให้เพิ่มเข้าไปด้วย
-    for (const sp of projectsFromSheet) {
-      const exists = updatedProjects.some(
-        (up) =>
-          (sp.id && (up.id === sp.id || up.originalMasterId === sp.id)) ||
-          (sp.projectCode && norm(up.projectCode) === norm(sp.projectCode)) ||
-          (sp.projectName && norm(up.projectName) === norm(sp.projectName))
-      );
-      if (!exists) {
-        updatedProjects.push(sp);
+      updatedProjects = current.map((localP) => {
+        const matched = projectsFromSheet.find(
+          (sp) =>
+            (sp.id && (sp.id === localP.id || sp.id === localP.originalMasterId)) ||
+            (sp.projectCode && norm(sp.projectCode) === norm(localP.projectCode)) ||
+            (sp.projectName && norm(sp.projectName) === norm(localP.projectName))
+        );
+        return matched ? { ...localP, ...matched, id: localP.id } : localP;
+      });
+
+      // หากมีโครงการใหม่จากชีตที่ยังไม่มีใน Local เลย ให้เพิ่มเข้าไปด้วย
+      for (const sp of projectsFromSheet) {
+        const exists = updatedProjects.some(
+          (up) =>
+            (sp.id && (up.id === sp.id || up.originalMasterId === sp.id)) ||
+            (sp.projectCode && norm(up.projectCode) === norm(sp.projectCode)) ||
+            (sp.projectName && norm(up.projectName) === norm(sp.projectName))
+        );
+        if (!exists) {
+          updatedProjects.push(sp);
+        }
       }
     }
 
     saveMasterProjectsLibrary(updatedProjects);
     setProjects(updatedProjects);
     setShowSelectivePullModal(false);
-    showToast(`ดึงข้อมูล ${projectsFromSheet.length} โครงการจาก Google Sheet สำเร็จเรียบร้อย`);
+    showToast(
+      mode === 'replace'
+        ? `ดึงเฉพาะ ${projectsFromSheet.length} โครงการที่เลือกมาขึ้นเว็บเรียบร้อยแล้ว`
+        : `ผสานข้อมูล ${projectsFromSheet.length} โครงการจาก Google Sheet สำเร็จเรียบร้อย`
+    );
   };
 
   const handlePullSingleProject = async (localProj: PastProject) => {
@@ -997,7 +1009,7 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <button
               type="button"
-              onClick={handlePullFromGoogleSheet}
+              onClick={handleOpenSelectivePullModal}
               disabled={isPullingFromSheet || isSyncingGoogle}
               style={{
                 display: 'inline-flex',
@@ -1012,10 +1024,10 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                 fontWeight: 600,
                 cursor: isPullingFromSheet || isSyncingGoogle ? 'not-allowed' : 'pointer',
               }}
-              title="ดึงไฟล์และข้อมูลล่าสุดจาก Google Sheet & Drive ลงเครื่อง Local ก่อนแก้ไขเพิ่มเติม"
+              title="ดึงไฟล์และข้อมูลล่าสุดจาก Google Sheet & Drive (สามารถเลือกหยิบเฉพาะโครงการที่ต้องการ หรือดึงทั้งหมดได้)"
             >
               <Download size={14} />
-              <span>{isPullingFromSheet ? 'กำลังดึงข้อมูลล่าสุด...' : '📥 ดึงข้อมูลล่าสุดจาก Drive/Sheet'}</span>
+              <span>{isPullingFromSheet ? 'กำลังดึงข้อมูลล่าสุด...' : '📥 ดึงข้อมูลจาก Drive/Sheet'}</span>
             </button>
 
             {modifiedProjectIds.size > 0 && (
@@ -3528,6 +3540,49 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
               </button>
             </div>
 
+            {/* Mode Selection */}
+            <div
+              style={{
+                padding: '0.65rem 1.5rem',
+                backgroundColor: '#F0FDF4',
+                borderBottom: '1px solid #BBF7D0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
+              }}
+            >
+              <div style={{ fontSize: '0.8rem', color: '#166534', fontWeight: 700 }}>
+                โหมดการดึงข้อมูลเข้าสู่หน้าเว็บ:
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '18px', flexWrap: 'wrap' }}>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer', fontWeight: pullMode === 'replace' ? 700 : 400, color: pullMode === 'replace' ? '#15803D' : '#475569' }}>
+                  <input
+                    type="radio"
+                    name="pullMode"
+                    value="replace"
+                    checked={pullMode === 'replace'}
+                    onChange={() => setPullMode('replace')}
+                    style={{ cursor: 'pointer', accentColor: '#16A34A' }}
+                  />
+                  <span>แทนที่คลังบนเว็บด้วยเฉพาะโครงการที่เลือก (แนะนำ: แก้ไขสบายตา ไม่รก)</span>
+                </label>
+
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer', fontWeight: pullMode === 'merge' ? 700 : 400, color: pullMode === 'merge' ? '#15803D' : '#475569' }}>
+                  <input
+                    type="radio"
+                    name="pullMode"
+                    value="merge"
+                    checked={pullMode === 'merge'}
+                    onChange={() => setPullMode('merge')}
+                    style={{ cursor: 'pointer', accentColor: '#16A34A' }}
+                  />
+                  <span>ผสานเฉพาะโครงการที่เลือกลงในคลังเดิม (คงโครงการเดิมไว้)</span>
+                </label>
+              </div>
+            </div>
+
             {/* Filter Toolbar */}
             <div
               style={{
@@ -3609,17 +3664,19 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
 
                   const codeChanged = matchedLocal && matchedLocal.projectCode !== sp.projectCode;
 
+                  const toggleItem = () => {
+                    setSelectedPullProjectIds((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(pKey)) next.delete(pKey);
+                      else next.add(pKey);
+                      return next;
+                    });
+                  };
+
                   return (
                     <div
                       key={pKey}
-                      onClick={() => {
-                        setSelectedPullProjectIds((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(pKey)) next.delete(pKey);
-                          else next.add(pKey);
-                          return next;
-                        });
-                      }}
+                      onClick={toggleItem}
                       style={{
                         padding: '0.75rem 1rem',
                         borderRadius: '8px',
@@ -3635,7 +3692,11 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                       <input
                         type="checkbox"
                         checked={isChecked}
-                        onChange={() => {}} // handled by parent onClick
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          toggleItem();
+                        }}
+                        onClick={(e) => e.stopPropagation()}
                         style={{ marginTop: '4px', cursor: 'pointer', accentColor: '#16A34A', width: '16px', height: '16px' }}
                       />
 
@@ -3760,10 +3821,16 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                     gap: '6px',
                     backgroundColor: '#16A34A',
                     borderColor: '#16A34A',
+                    color: '#FFFFFF',
                     opacity: selectedPullProjectIds.size === 0 ? 0.5 : 1,
                   }}
                 >
-                  <ArrowDownToLine size={16} /> ดึงเฉพาะ {selectedPullProjectIds.size} โครงการที่เลือก
+                  <ArrowDownToLine size={16} />
+                  <span>
+                    {pullMode === 'replace'
+                      ? `ดึงเฉพาะ ${selectedPullProjectIds.size} รายการที่เลือกมาขึ้นเว็บ`
+                      : `ผสาน ${selectedPullProjectIds.size} รายการที่เลือกลงในคลัง`}
+                  </span>
                 </button>
               </div>
             </div>

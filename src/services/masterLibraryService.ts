@@ -1101,14 +1101,14 @@ export function deduplicateMasterTeamLibrary(): TeamMember[] {
 
 export function getMasterProjectsLibrary(): PastProject[] {
   try {
-    if (cachedProjects && Array.isArray(cachedProjects) && cachedProjects.length > 0) {
-      return normalizeMasterProjects([...MASTER_PROJECTS_LIBRARY, ...cachedProjects]);
+    if (cachedProjects && Array.isArray(cachedProjects)) {
+      return cachedProjects;
     }
     const raw = localStorage.getItem(PROJECTS_LIBRARY_KEY);
     if (raw !== null && raw !== 'undefined' && raw !== 'null') {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        cachedProjects = normalizeMasterProjects([...MASTER_PROJECTS_LIBRARY, ...parsed]);
+      if (Array.isArray(parsed)) {
+        cachedProjects = parsed;
         return cachedProjects;
       }
     }
@@ -1121,8 +1121,8 @@ export function getMasterProjectsLibrary(): PastProject[] {
 
 export async function fetchMasterProjectsLibraryFromCloud(): Promise<PastProject[]> {
   const fromIDB = await idbGet<PastProject[]>(IDB_STORES.MASTER_PROJECTS, 'current');
-  if (fromIDB && Array.isArray(fromIDB) && fromIDB.length > 0) {
-    cachedProjects = normalizeMasterProjects([...MASTER_PROJECTS_LIBRARY, ...fromIDB]);
+  if (fromIDB && Array.isArray(fromIDB)) {
+    cachedProjects = fromIDB;
     return cachedProjects;
   }
   return getMasterProjectsLibrary();
