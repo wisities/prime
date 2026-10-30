@@ -118,8 +118,71 @@ function bufferToStream(buffer: Buffer): Readable {
   return stream;
 }
 
+const DEFAULT_APPS_SCRIPT_BRIDGE_URL =
+  process.env.VITE_GOOGLE_APPS_SCRIPT_URL ||
+  'https://script.google.com/macros/s/AKfycbzE7jWQPQq16UgNWwZPopPiZg8na22WEvxoctreMNojrhK3s62avlqyyaBiEk3Zd4Bu5A/exec';
+
+async function uploadFileViaAppsScriptBridge(
+  fileName: string,
+  mimeType: string,
+  buffer: Buffer,
+  category: string,
+  projectRef?: string,
+  memberRef?: string
+): Promise<UploadedFileResult> {
+  const dataUri = `data:${mimeType || 'image/png'};base64,${buffer.toString('base64')}`;
+  const mappedCategory =
+    category === 'contract_cert' || category === 'master_cert'
+      ? 'contract_cert'
+      : category === 'tor' || category === 'announcement'
+      ? 'tor'
+      : 'other';
+
+  const res = await fetch(DEFAULT_APPS_SCRIPT_BRIDGE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({
+      project: {
+        projectCode: '__DRIVE_UPLOAD_BRIDGE__',
+        projectTitle: '00_คลังข้อมูลกลาง_Master_Library',
+        status: 'active',
+      },
+      files: [
+        {
+          name: fileName,
+          category: mappedCategory,
+          base64: dataUri,
+          type: mimeType || 'image/png',
+        },
+      ],
+    }),
+  });
+
+  const rawText = await res.text();
+  let parsed: any;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    throw new Error(`Apps Script Drive Bridge returned non-JSON: ${rawText.substring(0, 120)}`);
+  }
+
+  const uploaded = parsed?.uploadedFiles?.[0];
+  if (!parsed?.success || !uploaded?.fileId) {
+    throw new Error(parsed?.error || 'Apps Script Drive Bridge did not return a fileId');
+  }
+
+  return {
+    fileId: uploaded.fileId,
+    name: fileName,
+    webViewLink: uploaded.webViewLink || `https://drive.google.com/file/d/${uploaded.fileId}/view?usp=drivesdk`,
+    category,
+    projectRef,
+    memberRef,
+  };
+}
+
 /**
- * อัปโหลดไฟล์ขึ้น Google Drive
+ * อัปโหลดไฟล์ขึ้น Google Drive (รองรับ Fallback ผ่าน Apps Script Bridge อัตโนมัติเมื่อ Service Account ติดโควตา)
  */
 export async function uploadFileToDrive(
   drive: DriveClient,
@@ -143,60 +206,68 @@ export async function uploadFileToDrive(
     throw new Error('รูปแบบไฟล์ไม่ถูกต้อง ต้องเป็น Buffer หรือ Base64 string');
   }
 
-  // ตรวจสอบว่าไฟล์ชื่อซ้ำในโฟลเดอร์นั้นหรือไม่
-  const safeName = fileName.replace(/'/g, "\\'");
-  const q = `'${targetFolderId}' in parents and name = '${safeName}' and trashed = false`;
-  const existingFiles = await drive.files.list({
-    q,
-    fields: 'files(id, name, webViewLink)',
-    supportsAllDrives: true,
-    includeItemsFromAllDrives: true,
-  });
+  try {
+    if (targetFolderId) {
+      // ตรวจสอบว่าไฟล์ชื่อซ้ำในโฟลเดอร์นั้นหรือไม่
+      const safeName = fileName.replace(/'/g, "\\'");
+      const q = `'${targetFolderId}' in parents and name = '${safeName}' and trashed = false`;
+      const existingFiles = await drive.files.list({
+        q,
+        fields: 'files(id, name, webViewLink)',
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+      });
 
-  const media = {
-    mimeType: mimeType || 'application/octet-stream',
-    body: bufferToStream(buffer),
-  };
-
-  let fileId = '';
-  let webViewLink = '';
-  let webContentLink = '';
-
-  if (existingFiles.data.files && existingFiles.data.files.length > 0) {
-    // อัปเดตไฟล์เดิม (Overwrite version)
-    fileId = existingFiles.data.files[0].id!;
-    const updateRes = await drive.files.update({
-      fileId,
-      media,
-      fields: 'id, name, webViewLink, webContentLink',
-      supportsAllDrives: true,
-    });
-    webViewLink = updateRes.data.webViewLink || `https://drive.google.com/file/d/${fileId}/view`;
-    webContentLink = updateRes.data.webContentLink || undefined;
-  } else {
-    // สร้างไฟล์ใหม่
-    const createRes = await drive.files.create({
-      requestBody: {
-        name: fileName,
-        parents: [targetFolderId],
+      const media = {
         mimeType: mimeType || 'application/octet-stream',
-      },
-      media,
-      fields: 'id, name, webViewLink, webContentLink',
-      supportsAllDrives: true,
-    });
-    fileId = createRes.data.id!;
-    webViewLink = createRes.data.webViewLink || `https://drive.google.com/file/d/${fileId}/view`;
-    webContentLink = createRes.data.webContentLink || undefined;
+        body: bufferToStream(buffer),
+      };
+
+      let fileId = '';
+      let webViewLink = '';
+      let webContentLink = '';
+
+      if (existingFiles.data.files && existingFiles.data.files.length > 0) {
+        // อัปเดตไฟล์เดิม (Overwrite version)
+        fileId = existingFiles.data.files[0].id!;
+        const updateRes = await drive.files.update({
+          fileId,
+          media,
+          fields: 'id, name, webViewLink, webContentLink',
+          supportsAllDrives: true,
+        });
+        webViewLink = updateRes.data.webViewLink || `https://drive.google.com/file/d/${fileId}/view`;
+        webContentLink = updateRes.data.webContentLink || undefined;
+      } else {
+        // สร้างไฟล์ใหม่
+        const createRes = await drive.files.create({
+          requestBody: {
+            name: fileName,
+            parents: [targetFolderId],
+            mimeType: mimeType || 'application/octet-stream',
+          },
+          media,
+          fields: 'id, name, webViewLink, webContentLink',
+          supportsAllDrives: true,
+        });
+        fileId = createRes.data.id!;
+        webViewLink = createRes.data.webViewLink || `https://drive.google.com/file/d/${fileId}/view`;
+        webContentLink = createRes.data.webContentLink || undefined;
+      }
+
+      return {
+        fileId,
+        name: fileName,
+        webViewLink,
+        webContentLink,
+        category,
+        projectRef,
+        memberRef,
+      };
+    }
+  } catch (driveErr: any) {
+    console.warn(`Service Account Drive upload fallback to Apps Script Bridge for ${fileName}:`, driveErr?.message || driveErr);
   }
 
-  return {
-    fileId,
-    name: fileName,
-    webViewLink,
-    webContentLink,
-    category,
-    projectRef,
-    memberRef,
-  };
+  return uploadFileViaAppsScriptBridge(fileName, mimeType, buffer, category, projectRef, memberRef);
 }

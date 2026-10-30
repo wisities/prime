@@ -1,6 +1,6 @@
 import { getRecoveredTeamPhoto, getRecoveredProjectAssets, RECOVERED_FRAMEWORK_IMAGE } from '../data/defaultMediaAssets';
 import { BiddingProject, ProjectAttachment, ProposalData } from '../types/proposal';
-import { createBlankProposalData, createDefaultBlankProject, MASTER_TEAM_LIBRARY } from '../data/defaultData';
+import { createBlankProposalData, createDefaultBlankProject, MASTER_TEAM_LIBRARY, MASTER_PROJECTS_LIBRARY } from '../data/defaultData';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { idbSet, idbGet, idbGetAll, idbDelete, IDB_STORES, stripAllLargeBase64 } from './localDatabase';
 import { isSampleTeamMember } from './masterLibraryService';
@@ -158,7 +158,67 @@ export function normalizeProjectBudget(p: BiddingProject): BiddingProject {
       ...(rawData.section5 || {}),
       specializations: Array.isArray(rawData.section5?.specializations) ? rawData.section5.specializations : blank.section5.specializations,
       certifications: Array.isArray(rawData.section5?.certifications) ? rawData.section5.certifications : blank.section5.certifications,
-      pastProjects: Array.isArray(rawData.section5?.pastProjects) ? rawData.section5.pastProjects : [],
+      pastProjects: (() => {
+        const rawPast = Array.isArray(rawData.section5?.pastProjects) ? rawData.section5.pastProjects : [];
+        if (rawPast.length === 0) return [...MASTER_PROJECTS_LIBRARY];
+        const blockById = new Map<string, any>();
+        for (const mp of MASTER_PROJECTS_LIBRARY) {
+          for (const b of mp.imageBlocks || []) {
+            if (b && b.id && (b.url || b.leftUrl || b.rightUrl)) {
+              blockById.set(b.id, b);
+            }
+          }
+        }
+        return rawPast.map((p: any) => {
+          const pName = String(p?.projectName || p?.title || '').trim();
+          const matchMaster = MASTER_PROJECTS_LIBRARY.find(
+            (mp) =>
+              (pName && mp.projectName.trim().toLowerCase() === pName.toLowerCase()) ||
+              (p?.projectCode && mp.projectCode === p.projectCode)
+          );
+          const rawBlocks = Array.isArray(p?.imageBlocks) ? p.imageBlocks : [];
+          const restoredBlocks = rawBlocks
+            .map((b: any) => {
+              if (!b) return b;
+              if (b.url || b.leftUrl || b.rightUrl) return b;
+              const masterBlock = blockById.get(b.id);
+              if (masterBlock) {
+                return {
+                  ...b,
+                  type: masterBlock.type || b.type,
+                  url: masterBlock.url,
+                  leftUrl: masterBlock.leftUrl,
+                  rightUrl: masterBlock.rightUrl,
+                  caption: b.caption || masterBlock.caption,
+                };
+              }
+              return b;
+            })
+            .filter((b: any) => b && (b.url || b.leftUrl || b.rightUrl));
+
+          const effectiveBlocks =
+            restoredBlocks.length > 0
+              ? restoredBlocks
+              : matchMaster?.imageBlocks && matchMaster.imageBlocks.length > 0
+              ? matchMaster.imageBlocks
+              : rawBlocks;
+
+          return {
+            ...p,
+            projectName: pName || matchMaster?.projectName || '',
+            projectCode: p?.projectCode || matchMaster?.projectCode,
+            contractYearBE: p?.contractYearBE || Number(p?.completionYear || p?.completionYearBE) || matchMaster?.contractYearBE || 2568,
+            completionYearBE: p?.completionYearBE || Number(p?.completionYear || p?.contractYearBE) || matchMaster?.completionYearBE || 2568,
+            contractValue: Number(String(p?.contractValue || p?.budget || matchMaster?.contractValue || 0).replace(/,/g, '')) || 0,
+            periodDuration: p?.periodDuration || matchMaster?.periodDuration || 'ตามสัญญาจ้าง',
+            clientLogoUrl: p?.clientLogoUrl || matchMaster?.clientLogoUrl,
+            projectImageUrl: p?.projectImageUrl || matchMaster?.projectImageUrl,
+            certificateFileName: p?.certificateFileName || matchMaster?.certificateFileName,
+            certificateFileUrl: p?.certificateFileUrl || matchMaster?.certificateFileUrl,
+            imageBlocks: effectiveBlocks,
+          };
+        });
+      })(),
     },
   };
 
@@ -293,13 +353,21 @@ export function restoreImagesFromSource(targetProposal: ProposalData, sourceProp
 
       const assets = getRecoveredProjectAssets(p.projectCode, p.clientName, p.projectName);
 
+      const clientLogo = p.clientLogoUrl || s?.clientLogoUrl || assets.clientLogoUrl;
+      const projImg = p.projectImageUrl || s?.projectImageUrl || assets.projectImageUrl || clientLogo;
+      const initialBlocks = (Array.isArray(p.imageBlocks) && p.imageBlocks.length > 0)
+        ? p.imageBlocks
+        : (s?.imageBlocks && s.imageBlocks.length > 0)
+        ? s.imageBlocks
+        : (projImg ? [{ id: `img-${p.id}`, type: 'single' as const, url: projImg, caption: (p.projectImageCaption || `ภาพผลงาน / ตราสัญลักษณ์ ${p.clientName}`).trim() }] : []);
+
       return {
         ...p,
-        clientLogoUrl: p.clientLogoUrl || s?.clientLogoUrl || assets.clientLogoUrl,
-        projectImageUrl: p.projectImageUrl || s?.projectImageUrl || assets.projectImageUrl,
+        clientLogoUrl: clientLogo,
+        projectImageUrl: projImg,
         certificateFileUrl: p.certificateFileUrl || s?.certificateFileUrl || assets.certificateFileUrl,
         certificateFileName: p.certificateFileName || s?.certificateFileName || assets.certificateFileName,
-        imageBlocks: (Array.isArray(p.imageBlocks) && p.imageBlocks.length > 0) ? p.imageBlocks : (s?.imageBlocks || []),
+        imageBlocks: initialBlocks,
       };
     });
 
@@ -691,6 +759,11 @@ export async function saveProject(rawProject: BiddingProject): Promise<boolean> 
     let list: BiddingProject[] = saved ? JSON.parse(saved) : [];
     const index = list.findIndex((p) => p.id === sanitizedProject.id);
     if (index >= 0) {
+      const oldCode = list[index]?.projectCode;
+      if (oldCode && sanitizedProject.projectCode && oldCode !== sanitizedProject.projectCode) {
+        (sanitizedProject as any).previousProjectCode = oldCode;
+        (project as any).previousProjectCode = oldCode;
+      }
       list[index] = sanitizedProject;
     } else {
       list = [sanitizedProject, ...list];
@@ -1165,6 +1238,56 @@ export function sanitizeAllStoredProjectsAndLibraries(): void {
       }
     }).catch(() => {});
 
+    // 2.1 Sanitize Master Projects Library in LocalStorage
+    const rawMasterProjects = localStorage.getItem('prime_master_projects_library');
+    if (rawMasterProjects) {
+      try {
+        const parsed = JSON.parse(rawMasterProjects);
+        if (Array.isArray(parsed)) {
+          const restored = parsed.map((p: any) => {
+            const assets = getRecoveredProjectAssets(p.projectCode, p.clientName, p.projectName);
+            const clientLogo = p.clientLogoUrl || assets.clientLogoUrl;
+            const projImg = p.projectImageUrl || assets.projectImageUrl || clientLogo;
+            const initialBlocks = (Array.isArray(p.imageBlocks) && p.imageBlocks.length > 0)
+              ? p.imageBlocks
+              : (projImg ? [{ id: `img-${p.id}`, type: 'single' as const, url: projImg, caption: (p.projectImageCaption || `ภาพผลงาน / ตราสัญลักษณ์ ${p.clientName}`).trim() }] : []);
+            return {
+              ...p,
+              clientLogoUrl: clientLogo,
+              projectImageUrl: projImg,
+              certificateFileUrl: p.certificateFileUrl || assets.certificateFileUrl,
+              certificateFileName: p.certificateFileName || assets.certificateFileName,
+              imageBlocks: initialBlocks,
+            };
+          });
+          localStorage.setItem('prime_master_projects_library', JSON.stringify(restored));
+        }
+      } catch {}
+    }
+
+    // 2.2 Sanitize Master Projects in IndexedDB
+    idbGet<any[]>(IDB_STORES.MASTER_PROJECTS, 'current').then((fromIDB) => {
+      if (fromIDB && Array.isArray(fromIDB)) {
+        const restored = fromIDB.map((p: any) => {
+          const assets = getRecoveredProjectAssets(p.projectCode, p.clientName, p.projectName);
+          const clientLogo = p.clientLogoUrl || assets.clientLogoUrl;
+          const projImg = p.projectImageUrl || assets.projectImageUrl || clientLogo;
+          const initialBlocks = (Array.isArray(p.imageBlocks) && p.imageBlocks.length > 0)
+            ? p.imageBlocks
+            : (projImg ? [{ id: `img-${p.id}`, type: 'single' as const, url: projImg, caption: (p.projectImageCaption || `ภาพผลงาน / ตราสัญลักษณ์ ${p.clientName}`).trim() }] : []);
+          return {
+            ...p,
+            clientLogoUrl: clientLogo,
+            projectImageUrl: projImg,
+            certificateFileUrl: p.certificateFileUrl || assets.certificateFileUrl,
+            certificateFileName: p.certificateFileName || assets.certificateFileName,
+            imageBlocks: initialBlocks,
+          };
+        });
+        idbSet(IDB_STORES.MASTER_PROJECTS, 'current', restored).catch(() => {});
+      }
+    }).catch(() => {});
+
     // 3. Sanitize Projects list in LocalStorage
     const rawProjects = localStorage.getItem('prime_bidding_projects_v2');
     if (rawProjects) {
@@ -1178,6 +1301,24 @@ export function sanitizeAllStoredProjectsAndLibraries(): void {
                 ...m,
                 photoUrl: m.photoUrl || getRecoveredTeamPhoto(m.name),
               }));
+            }
+            if (p.proposalData?.section5?.pastProjects && Array.isArray(p.proposalData.section5.pastProjects)) {
+              p.proposalData.section5.pastProjects = p.proposalData.section5.pastProjects.map((proj: any) => {
+                const assets = getRecoveredProjectAssets(proj.projectCode, proj.clientName, proj.projectName);
+                const clientLogo = proj.clientLogoUrl || assets.clientLogoUrl;
+                const projImg = proj.projectImageUrl || assets.projectImageUrl || clientLogo;
+                const initialBlocks = (Array.isArray(proj.imageBlocks) && proj.imageBlocks.length > 0)
+                  ? proj.imageBlocks
+                  : (projImg ? [{ id: `img-${proj.id}`, type: 'single' as const, url: projImg, caption: (proj.projectImageCaption || `ภาพผลงาน / ตราสัญลักษณ์ ${proj.clientName}`).trim() }] : []);
+                return {
+                  ...proj,
+                  clientLogoUrl: clientLogo,
+                  projectImageUrl: projImg,
+                  certificateFileUrl: proj.certificateFileUrl || assets.certificateFileUrl,
+                  certificateFileName: proj.certificateFileName || assets.certificateFileName,
+                  imageBlocks: initialBlocks,
+                };
+              });
             }
             return p;
           });
@@ -1194,12 +1335,32 @@ export function sanitizeAllStoredProjectsAndLibraries(): void {
           const raw = localStorage.getItem(key);
           if (raw) {
             const parsed = JSON.parse(raw);
-            if (parsed && parsed.proposalData?.section4?.teamMembers) {
-              const cleaned = parsed.proposalData.section4.teamMembers.filter((m: any) => !isSampleTeamMember(m));
-              parsed.proposalData.section4.teamMembers = (cleaned.length > 0 ? cleaned : [...MASTER_TEAM_LIBRARY]).map((m: any) => ({
-                ...m,
-                photoUrl: m.photoUrl || getRecoveredTeamPhoto(m.name),
-              }));
+            if (parsed) {
+              if (parsed.proposalData?.section4?.teamMembers) {
+                const cleaned = parsed.proposalData.section4.teamMembers.filter((m: any) => !isSampleTeamMember(m));
+                parsed.proposalData.section4.teamMembers = (cleaned.length > 0 ? cleaned : [...MASTER_TEAM_LIBRARY]).map((m: any) => ({
+                  ...m,
+                  photoUrl: m.photoUrl || getRecoveredTeamPhoto(m.name),
+                }));
+              }
+              if (parsed.proposalData?.section5?.pastProjects && Array.isArray(parsed.proposalData.section5.pastProjects)) {
+                parsed.proposalData.section5.pastProjects = parsed.proposalData.section5.pastProjects.map((proj: any) => {
+                  const assets = getRecoveredProjectAssets(proj.projectCode, proj.clientName, proj.projectName);
+                  const clientLogo = proj.clientLogoUrl || assets.clientLogoUrl;
+                  const projImg = proj.projectImageUrl || assets.projectImageUrl || clientLogo;
+                  const initialBlocks = (Array.isArray(proj.imageBlocks) && proj.imageBlocks.length > 0)
+                    ? proj.imageBlocks
+                    : (projImg ? [{ id: `img-${proj.id}`, type: 'single' as const, url: projImg, caption: (proj.projectImageCaption || `ภาพผลงาน / ตราสัญลักษณ์ ${proj.clientName}`).trim() }] : []);
+                  return {
+                    ...proj,
+                    clientLogoUrl: clientLogo,
+                    projectImageUrl: projImg,
+                    certificateFileUrl: proj.certificateFileUrl || assets.certificateFileUrl,
+                    certificateFileName: proj.certificateFileName || assets.certificateFileName,
+                    imageBlocks: initialBlocks,
+                  };
+                });
+              }
               localStorage.setItem(key, JSON.stringify(parsed));
             }
           }
@@ -1211,12 +1372,35 @@ export function sanitizeAllStoredProjectsAndLibraries(): void {
     idbGetAll<BiddingProject>(IDB_STORES.BIDDING_PROJECTS).then((allProjects) => {
       if (allProjects && Array.isArray(allProjects)) {
         allProjects.forEach((p) => {
+          let modified = false;
           if (p.proposalData?.section4?.teamMembers) {
             const cleaned = p.proposalData.section4.teamMembers.filter((m) => !isSampleTeamMember(m));
             if (cleaned.length !== p.proposalData.section4.teamMembers.length) {
               p.proposalData.section4.teamMembers = cleaned.length > 0 ? cleaned : [...MASTER_TEAM_LIBRARY];
-              idbSet(IDB_STORES.BIDDING_PROJECTS, p.id, p).catch(() => {});
+              modified = true;
             }
+          }
+          if (p.proposalData?.section5?.pastProjects && Array.isArray(p.proposalData.section5.pastProjects)) {
+            p.proposalData.section5.pastProjects = p.proposalData.section5.pastProjects.map((proj: any) => {
+              const assets = getRecoveredProjectAssets(proj.projectCode, proj.clientName, proj.projectName);
+              const clientLogo = proj.clientLogoUrl || assets.clientLogoUrl;
+              const projImg = proj.projectImageUrl || assets.projectImageUrl || clientLogo;
+              const initialBlocks = (Array.isArray(proj.imageBlocks) && proj.imageBlocks.length > 0)
+                ? proj.imageBlocks
+                : (projImg ? [{ id: `img-${proj.id}`, type: 'single' as const, url: projImg, caption: (proj.projectImageCaption || `ภาพผลงาน / ตราสัญลักษณ์ ${proj.clientName}`).trim() }] : []);
+              return {
+                ...proj,
+                clientLogoUrl: clientLogo,
+                projectImageUrl: projImg,
+                certificateFileUrl: proj.certificateFileUrl || assets.certificateFileUrl,
+                certificateFileName: proj.certificateFileName || assets.certificateFileName,
+                imageBlocks: initialBlocks,
+              };
+            });
+            modified = true;
+          }
+          if (modified) {
+            idbSet(IDB_STORES.BIDDING_PROJECTS, p.id, p).catch(() => {});
           }
         });
       }

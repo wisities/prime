@@ -96,7 +96,7 @@ export function getRecoveredProjectAssets(projectCode?: string, clientName?: str
   } else if (cName.includes('เอสวีโอเอ') || cName.includes('SVOA')) {
     clientLogoUrl = RECOVERED_LOGOS.onde;
     projectImageUrl = RECOVERED_LOGOS.onde;
-  } else if (cName.includes('ดิจิทัลเพื่อเศรษฐกิจและสังคม') || cName.includes('สดช')) {
+  } else if (cName.includes('ดิจิทัลเพื่อเศรษฐกิจและสังคม') || cName.includes('สดช') || cName.includes('ส่งเสริมเศรษฐกิจดิจิทัล') || cName.includes('depa')) {
     if (pName.includes('2566')) {
       clientLogoUrl = RECOVERED_LOGOS.onde2566;
       projectImageUrl = RECOVERED_LOGOS.onde2566;
@@ -104,21 +104,42 @@ export function getRecoveredProjectAssets(projectCode?: string, clientName?: str
       clientLogoUrl = RECOVERED_LOGOS.onde;
       projectImageUrl = RECOVERED_LOGOS.onde;
     }
-  } else if (cName.includes('รักษาความมั่นคงปลอดภัยไซเบอร์') || cName.includes('สกมช')) {
+  } else if (cName.includes('รักษาความมั่นคงปลอดภัยไซเบอร์') || cName.includes('สกมช') || cName.includes('ไซเบอร์') || pName.includes('ไซเบอร์')) {
     clientLogoUrl = RECOVERED_LOGOS.ncsa;
     projectImageUrl = RECOVERED_LOGOS.ncsa;
   } else if (cName.includes('สมุทรปราการ')) {
     clientLogoUrl = RECOVERED_LOGOS.samutprakan;
     projectImageUrl = RECOVERED_LOGOS.samutprakan;
-  } else if (cName.includes('อวกาศและภูมิสารสนเทศ') || cName.includes('สทอภ') || cName.includes('GISTDA')) {
+  } else if (cName.includes('อวกาศและภูมิสารสนเทศ') || cName.includes('สทอภ') || cName.includes('GISTDA') || pName.includes('เมตาเวิร์ส')) {
     clientLogoUrl = RECOVERED_LOGOS.gistda;
     projectImageUrl = RECOVERED_LOGOS.gistda;
-  } else if (cName.includes('ควบคุมมลพิษ')) {
+  } else if (cName.includes('ควบคุมมลพิษ') || cName.includes('มลพิษ')) {
     clientLogoUrl = RECOVERED_LOGOS.pcd;
     projectImageUrl = RECOVERED_LOGOS.pcd;
-  } else if (cName.includes('สาธารณสุข') || cName.includes('นโยบายสุขภาพ')) {
+  } else if (cName.includes('สวนสัตว์')) {
+    clientLogoUrl = RECOVERED_LOGOS.pcd || RECOVERED_LOGOS.onde;
+    projectImageUrl = clientLogoUrl;
+  } else if (cName.includes('สาธารณสุข') || cName.includes('นโยบายสุขภาพ') || cName.includes('หลักประกันสุขภาพ') || cName.includes('สปสช') || cName.includes('การแพทย์') || cName.includes('สมุนไพร')) {
     clientLogoUrl = RECOVERED_LOGOS.nso;
     projectImageUrl = RECOVERED_LOGOS.nso;
+  } else if (cName.includes('ขนส่งทางบก')) {
+    clientLogoUrl = RECOVERED_LOGOS.onde;
+    projectImageUrl = RECOVERED_LOGOS.onde;
+  } else if (cName.includes('จิตอาสา')) {
+    clientLogoUrl = RECOVERED_LOGOS.samutprakan;
+    projectImageUrl = RECOVERED_LOGOS.samutprakan;
+  } else {
+    // โครงการอื่นๆ ของหน่วยงานภาครัฐ/รัฐวิสาหกิจ ให้มีภาพตราสัญลักษณ์และภาพผลงานมาตรฐานเสมอ
+    clientLogoUrl = RECOVERED_LOGOS.nso || RECOVERED_LOGOS.onde;
+    projectImageUrl = clientLogoUrl;
+  }
+
+  // รับประกันว่ามีภาพผลงานและตราสัญลักษณ์เสมอ 100%
+  if (!clientLogoUrl) {
+    clientLogoUrl = RECOVERED_LOGOS.nso || RECOVERED_LOGOS.onde;
+  }
+  if (!projectImageUrl) {
+    projectImageUrl = clientLogoUrl;
   }
 
   return {

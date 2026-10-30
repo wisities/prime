@@ -19,7 +19,8 @@ import {
   generateMasterMemberId,
 } from '../services/masterLibraryService';
 import { isSupabaseConfigured } from '../services/supabaseClient';
-import { Users, ShieldAlert, Plus, Trash2, Library, ChevronDown, ChevronUp, TableProperties, CheckCheck, Sparkles, RotateCcw, Clock, ArrowUp, ArrowDown, BookmarkPlus, BookmarkCheck, Check, Camera, Upload, User, Database, Download, Briefcase, List, Table as TableIcon } from 'lucide-react';
+import { syncMasterLibraryToGoogle } from '../services/googleSyncService';
+import { Users, ShieldAlert, Plus, Trash2, Library, ChevronDown, ChevronUp, TableProperties, CheckCheck, Sparkles, RotateCcw, Clock, ArrowUp, ArrowDown, BookmarkPlus, BookmarkCheck, Check, Camera, Upload, User, Database, Download, Briefcase, List, Table as TableIcon, CloudUpload, Loader2 } from 'lucide-react';
 
 interface Section4EditorProps {
   section4: Section4TeamAndRisk;
@@ -39,6 +40,7 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
   const [selectedLibraryIds, setSelectedLibraryIds] = useState<string[]>([]);
   const [isLoadingCloud, setIsLoadingCloud] = useState(false);
   const [savedMemberToast, setSavedMemberToast] = useState<string | null>(null);
+  const [syncingMemberId, setSyncingMemberId] = useState<string | null>(null);
   const fileInputTeamRef = React.useRef<HTMLInputElement>(null);
 
   const handleImportTeamFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -328,6 +330,71 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
       `✓ ${actionText} "${savedMember.name}" (รหัส: ${savedMember.memberCode || savedMember.id}) ในคลังบุคลากรกลางเรียบร้อยแล้ว`
     );
     setTimeout(() => setSavedMemberToast(null), 3000);
+  };
+
+  const handleSyncSingleMemberToSheet = async (member: TeamMember) => {
+    if (!member.name || member.name.trim() === '' || member.name.includes('(ระบุชื่อ-นามสกุล)')) {
+      alert('กรุณาระบุชื่อ-นามสกุลของบุคลากรก่อนซิงค์ขึ้น Google Sheet');
+      return;
+    }
+    try {
+      setSyncingMemberId(member.id);
+      const { updatedLibrary, savedMember } = saveMemberToMasterLibraryResult(member);
+      setTeamLibrary(updatedLibrary);
+
+      const updatedMembers = section4.teamMembers.map((m) => {
+        if (m.id === member.id || (member.originalMasterId && m.originalMasterId === member.originalMasterId)) {
+          return {
+            ...m,
+            originalMasterId: savedMember.id,
+            memberCode: savedMember.memberCode,
+            recordedYearBE: savedMember.recordedYearBE,
+            photoUrl: savedMember.photoUrl || m.photoUrl,
+          };
+        }
+        return m;
+      });
+      onChange({
+        ...section4,
+        teamMembers: updatedMembers,
+      });
+
+      const res = await syncMasterLibraryToGoogle({
+        incremental: true,
+        projectsToSync: [],
+        teamToSync: [savedMember],
+      });
+
+      if (res.success) {
+        const syncedMember = res.updatedTeam?.[0] || savedMember;
+        setTeamLibrary(getMasterTeamLibrary());
+        const afterSyncMembers = updatedMembers.map((m) =>
+          m.id === member.id || (m.originalMasterId && m.originalMasterId === savedMember.id)
+            ? {
+                ...m,
+                originalMasterId: savedMember.id,
+                memberCode: syncedMember.memberCode || savedMember.memberCode,
+                photoUrl: syncedMember.photoUrl || m.photoUrl,
+                bioImageBlocks: (syncedMember as any).bioImageBlocks || m.bioImageBlocks,
+              }
+            : m
+        );
+        onChange({
+          ...section4,
+          teamMembers: afterSyncMembers,
+        });
+        setSavedMemberToast(
+          `☁️ ซิงค์ข้อมูลบุคลากร "${savedMember.name}" (${savedMember.memberCode || savedMember.id}) ขึ้น Google Sheet & Drive สำเร็จแล้ว!`
+        );
+        setTimeout(() => setSavedMemberToast(null), 4000);
+      } else {
+        alert(res.error || res.message || 'ซิงค์ข้อมูลบุคลากรไม่สำเร็จ');
+      }
+    } catch (err: any) {
+      alert(err?.message || 'เกิดข้อผิดพลาดในการซิงค์ข้อมูลบุคลากร');
+    } finally {
+      setSyncingMemberId(null);
+    }
   };
 
   const handleSaveAllMembersToLibrary = () => {
@@ -673,6 +740,36 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
                     title="บันทึกข้อมูลบุคลากรท่านนี้ลงคลังกลางสำหรับใช้ในโครงการอื่น"
                   >
                     <BookmarkPlus size={14} /> บันทึกลงคลังกลาง
+                  </button>
+
+                  {/* Sync Single Member to Google Sheet & Drive */}
+                  <button
+                    type="button"
+                    disabled={syncingMemberId === member.id}
+                    onClick={() => handleSyncSingleMemberToSheet(member)}
+                    className="btn btn-outline"
+                    style={{
+                      color: '#15803D',
+                      borderColor: '#86EFAC',
+                      backgroundColor: '#F0FDF4',
+                      padding: '0.35rem 0.65rem',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                    title="ซิงค์เฉพาะบุคลากรท่านนี้ขึ้น Google Sheet & Drive ทันทีโดยไม่ต้องซิงค์ทั้งหมด"
+                  >
+                    {syncingMemberId === member.id ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" /> กำลังซิงค์...
+                      </>
+                    ) : (
+                      <>
+                        <CloudUpload size={14} /> ซิงค์เฉพาะคนนี้
+                      </>
+                    )}
                   </button>
 
                   {/* Delete */}
@@ -1620,6 +1717,36 @@ export const Section4Editor: React.FC<Section4EditorProps> = ({
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        disabled={syncingMemberId === item.id}
+                        onClick={() => handleSyncSingleMemberToSheet(item)}
+                        className="btn btn-outline"
+                        style={{
+                          color: '#15803D',
+                          borderColor: '#86EFAC',
+                          backgroundColor: '#F0FDF4',
+                          fontSize: '0.78rem',
+                          padding: '0.4rem 0.65rem',
+                          fontWeight: 600,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          whiteSpace: 'nowrap',
+                        }}
+                        title="ซิงค์เฉพาะบุคลากรท่านนี้ขึ้น Google Sheet & Drive ทันที"
+                      >
+                        {syncingMemberId === item.id ? (
+                          <>
+                            <Loader2 size={13} className="animate-spin" /> กำลังซิงค์...
+                          </>
+                        ) : (
+                          <>
+                            <CloudUpload size={13} /> ซิงค์คนนี้
+                          </>
+                        )}
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => handleAddFromLibrary(item)}

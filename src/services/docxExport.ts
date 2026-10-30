@@ -2655,7 +2655,7 @@ export async function generateProposalDocxBlob(data: ProposalData): Promise<{ bl
 
           // (ง) ภาพประกอบ (กว้าง 6 นิ้ว หรือคู่ 3 นิ้ว ปล่อยความสูงตามสัดส่วนเดิม แคปชันว่างถ้าไม่ได้ระบุ)
           const blocksToRender: ReportImageBlock[] = [];
-          if (proj.imageBlocks !== undefined) {
+          if (Array.isArray(proj.imageBlocks) && proj.imageBlocks.length > 0) {
             blocksToRender.push(...proj.imageBlocks);
           } else if (proj.projectImageUrl) {
             blocksToRender.push({
@@ -2780,7 +2780,7 @@ export async function generateProposalDocxBlob(data: ProposalData): Promise<{ bl
 
             // (ง) ภาพประกอบ (กว้าง 6 นิ้ว หรือคู่ 3 นิ้ว ปล่อยความสูงตามสัดส่วนเดิม แคปชันว่างถ้าไม่ได้ระบุ)
             const blocksToRender: ReportImageBlock[] = [];
-            if (proj.imageBlocks !== undefined) {
+            if (Array.isArray(proj.imageBlocks) && proj.imageBlocks.length > 0) {
               blocksToRender.push(...proj.imageBlocks);
             } else if (proj.projectImageUrl) {
               blocksToRender.push({

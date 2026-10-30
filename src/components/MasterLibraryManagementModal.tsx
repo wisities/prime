@@ -38,6 +38,7 @@ import {
 import { fetchMasterLibraryFromGoogleSheet } from '../services/googleSyncService';
 import { sortPastProjects } from './Section5Editor';
 import { ReportImageManager } from './ReportImageManager';
+import { ClientAgencySelect } from './ClientAgencySelect';
 import { compressImageFile } from '../utils/imageCompressor';
 import {
   Building2,
@@ -109,6 +110,7 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
 
   // Google Sync state
   const [isSyncingGoogle, setIsSyncingGoogle] = useState(false);
+  const [syncingItemId, setSyncingItemId] = useState<string | null>(null);
   const [syncGoogleProgress, setSyncGoogleProgress] = useState('');
   const [googleSyncResult, setGoogleSyncResult] = useState<MasterLibrarySyncResult | null>(null);
 
@@ -162,21 +164,50 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const executeFinalSyncToGoogle = async (projectsToSync?: PastProject[]) => {
+  const executeFinalSyncToGoogle = async (
+    allProjects?: PastProject[],
+    options?: { incremental?: boolean; targetProjects?: PastProject[]; targetTeam?: TeamMember[]; itemId?: string }
+  ) => {
     try {
       setIsSyncingGoogle(true);
+      if (options?.itemId) setSyncingItemId(options.itemId);
       setGoogleSyncResult(null);
-      setSyncGoogleProgress('กำลังเริ่มต้นการซิงค์ข้อมูลลง Google Sheets & Drive...');
-      if (projectsToSync && Array.isArray(projectsToSync) && projectsToSync.length > 0) {
-        saveMasterProjectsLibrary(projectsToSync);
-        setProjects(projectsToSync);
+      const hasTargetProjs = Boolean(options?.targetProjects && options.targetProjects.length > 0);
+      const hasTargetTeam = Boolean(options?.targetTeam && options.targetTeam.length > 0);
+      const isIncremental = Boolean(options?.incremental && (hasTargetProjs || hasTargetTeam));
+      setSyncGoogleProgress(
+        isIncremental
+          ? hasTargetProjs && !hasTargetTeam
+            ? `กำลังซิงค์เฉพาะโครงการที่เลือก (${options!.targetProjects!.length} โครงการ) ขึ้น Google Sheet & Drive...`
+            : !hasTargetProjs && hasTargetTeam
+            ? `กำลังซิงค์เฉพาะบุคลากรที่เลือก (${options!.targetTeam!.length} ท่าน) ขึ้น Google Sheet & Drive...`
+            : `กำลังซิงค์เฉพาะรายการที่เลือกขึ้น Google Sheet & Drive...`
+          : 'กำลังเริ่มต้นการซิงค์ข้อมูลทั้งหมดลง Google Sheets & Drive...'
+      );
+      if (allProjects && Array.isArray(allProjects) && allProjects.length > 0) {
+        saveMasterProjectsLibrary(allProjects);
+        setProjects(allProjects);
       }
       const res = await syncMasterLibraryToGoogle({
+        incremental: isIncremental,
+        projectsToSync: isIncremental ? (options?.targetProjects || []) : undefined,
+        teamToSync: isIncremental ? (options?.targetTeam || []) : undefined,
         onProgress: (msg) => setSyncGoogleProgress(msg),
       });
       setGoogleSyncResult(res);
       if (res.success) {
-        setModifiedProjectIds(new Set());
+        setProjects(getMasterProjectsLibrary());
+        setTeamMembers(getMasterTeamLibrary());
+        if (isIncremental && options?.targetProjects) {
+          const syncedIds = new Set(options.targetProjects.map((p) => p.id));
+          setModifiedProjectIds((prev) => {
+            const next = new Set(prev);
+            syncedIds.forEach((id) => next.delete(id));
+            return next;
+          });
+        } else if (!isIncremental) {
+          setModifiedProjectIds(new Set());
+        }
         showToast(res.message);
       } else {
         alert(res.message || res.error || 'เกิดข้อผิดพลาดในการซิงค์ข้อมูลกลาง');
@@ -185,10 +216,53 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
       alert(err?.message || 'การเชื่อมต่อขัดข้อง');
     } finally {
       setIsSyncingGoogle(false);
+      setSyncingItemId(null);
     }
   };
 
-  const handleInitiateSyncToGoogle = async () => {
+  const handleSyncSingleProject = async (proj: PastProject) => {
+    const needsCode =
+      !proj.projectCode ||
+      proj.projectCode.trim() === '' ||
+      proj.projectCode.includes('รอออกรหัส') ||
+      proj.projectCode === 'AUTO';
+
+    let projectReady = proj;
+    let updatedList = projects;
+    if (needsCode) {
+      const yr = Number(proj.contractYearBE) || Number(proj.completionYearBE) || currentYearBE;
+      const nextCode = generateMasterProjectCode(yr, projects, proj.id);
+      projectReady = { ...proj, projectCode: nextCode, contractYearBE: yr };
+      updatedList = projects.map((p) => (p.id === proj.id ? projectReady : p));
+    }
+
+    await executeFinalSyncToGoogle(updatedList, {
+      incremental: true,
+      targetProjects: [projectReady],
+      itemId: proj.id,
+    });
+  };
+
+  const handleSyncSingleMember = async (member: TeamMember) => {
+    const recYr = Number(member.recordedYearBE) || currentYearBE;
+    const code = member.memberCode?.trim() || generateMasterMemberId(recYr, teamMembers);
+    const memberReady: TeamMember = {
+      ...member,
+      memberCode: code,
+      recordedYearBE: recYr,
+    };
+    const { updatedLibrary, savedMember } = saveMemberToMasterLibraryResult(memberReady);
+    setTeamMembers(updatedLibrary);
+
+    await executeFinalSyncToGoogle(undefined, {
+      incremental: true,
+      targetProjects: [],
+      targetTeam: [savedMember],
+      itemId: member.id,
+    });
+  };
+
+  const handleInitiateSyncToGoogle = async (incrementalOnly?: boolean) => {
     // ตรวจสอบว่ามีโครงการใหม่ที่ต้องออกรหัสตามปีสัญญาหรือไม่
     const projectsNeedingCode = projects.filter(
       (p) => !p.projectCode || p.projectCode.trim() === '' || p.projectCode.includes('รอออกรหัส') || p.projectCode === 'AUTO'
@@ -235,11 +309,22 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
       return;
     }
 
-    // หากไม่มีโครงการใหม่ที่ต้องออกรหัส (เป็นการอัปเดตข้อมูลโครงการเดิม) บันทึกและซิงค์ได้ทันที
-    executeFinalSyncToGoogle(projects);
+    // หากเลือกซิงค์เฉพาะโครงการที่มีการแก้ไข (Incremental Sync)
+    const modifiedList = projects.filter((p) => modifiedProjectIds.has(p.id));
+    if (incrementalOnly && modifiedList.length > 0) {
+      await executeFinalSyncToGoogle(projects, {
+        incremental: true,
+        targetProjects: modifiedList,
+      });
+      return;
+    }
+
+    // ซิงค์ทั้งหมด (Full Sync)
+    await executeFinalSyncToGoogle(projects, { incremental: false });
   };
 
   const handleConfirmAndProceedSync = () => {
+    const confirmedIds = new Set(syncCodeConfirmations.map((c) => c.id));
     // อัปเดตรหัสใหม่ที่ผู้ใช้ยืนยันแล้วลงในรายการโครงการ
     const updatedProjects = projects.map((p) => {
       const foundConf = syncCodeConfirmations.find((c) => c.id === p.id);
@@ -256,10 +341,14 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
     saveMasterProjectsLibrary(updatedProjects);
     setProjects(updatedProjects);
     setShowSyncCodeConfirmModal(false);
-    setModifiedProjectIds(new Set());
 
-    // ซิงค์ทั้งหมดลง Google Sheet ทันที
-    executeFinalSyncToGoogle(updatedProjects);
+    // ซิงค์เฉพาะโครงการที่เพิ่งออกรหัสหรือถูกแก้ไขในรอบนี้ทันที
+    const targets = updatedProjects.filter((p) => confirmedIds.has(p.id) || modifiedProjectIds.has(p.id));
+    setModifiedProjectIds(new Set());
+    executeFinalSyncToGoogle(updatedProjects, {
+      incremental: targets.length > 0 && targets.length < updatedProjects.length,
+      targetProjects: targets.length > 0 ? targets : updatedProjects,
+    });
   };
 
   useEffect(() => {
@@ -377,10 +466,14 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
           saveMasterTeamLibrary(res.team);
           setTeamMembers(res.team);
         }
-        showToast(res.message || `ดึงข้อมูลจาก Google Sheet สำเร็จ (${res.projects.length} โครงการ)`);
-        alert(`✅ ดึงข้อมูลจาก Google Sheet สำเร็จ!\n\n• ผลงานโครงการ: ${res.projects.length} รายการ\n• บุคลากร: ${(res.team || []).length} ท่าน\n\nข้อมูลในระบบได้รับการอัปเดตตรงกับ Google Sheet เรียบร้อยแล้ว`);
+        setModifiedProjectIds(new Set());
+        const totalBlocks = res.projects.reduce((sum, p) => sum + ((p.imageBlocks || []).length), 0);
+        showToast(res.message || `ดึงข้อมูลล่าสุดจาก Google Sheet & Drive สำเร็จ (${res.projects.length} โครงการ)`);
+        alert(
+          `✅ ดึงข้อมูลล่าสุดจาก Google Sheet & Drive สำเร็จ!\n\n• ผลงานโครงการ: ${res.projects.length} รายการ (พร้อมบล็อกภาพประกอบ ${totalBlocks} บล็อก)\n• บุคลากร: ${(res.team || []).length} ท่าน\n\nข้อมูลในเครื่อง Local ได้รับการอัปเดตตรงกับ Google Drive & Sheet ล่าสุดเรียบร้อยแล้ว สามารถแก้ไขและกดซิงค์เฉพาะโครงการที่แก้ไขกลับขึ้นไปได้ทันที`
+        );
       } else {
-        alert(`⚠️ ไม่สามารถดึงข้อมูลได้: ${res.error}\n\nคำแนะนำ:\n1. ตรวจสอบว่า Google Apps Script Web App URL ได้รับการตั้งค่าแล้ว\n2. หรือสามารถเปิด Google Sheet แล้วกด "ไฟล์ > ดาวน์โหลด > ค่าที่คั่นด้วยจุลภาค (.csv)" แล้วกดปุ่ม "นำเข้า (.csv)" ได้ทันที`);
+        alert(`⚠️ ไม่สามารถดึงข้อมูลได้: ${res.error}\n\nคำแนะนำ:\n1. ตรวจสอบว่า Google Apps Script Web App URL หรือ Google Sheets API ได้รับการตั้งค่าแล้ว\n2. หรือสามารถเปิด Google Sheet แล้วกด "ไฟล์ > ดาวน์โหลด > ค่าที่คั่นด้วยจุลภาค (.csv)" แล้วกดปุ่ม "นำเข้า (.csv)" ได้ทันที`);
       }
     } catch (e: any) {
       alert(`เกิดข้อผิดพลาด: ${e.message}`);
@@ -432,9 +525,10 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
   // -------------------------------------------------------------------------
   const handleOpenAddProject = () => {
     const contractYr = currentYearBE;
+    const autoCode = generateMasterProjectCode(contractYr, projects);
     setProjectFormData({
       id: `lib-proj-${Date.now()}`,
-      projectCode: '[รอออกรหัสอัตโนมัติ]',
+      projectCode: autoCode,
       contractYearBE: contractYr,
       projectName: '',
       clientName: '',
@@ -448,17 +542,21 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
       relevanceNote: '',
       imageBlocks: [],
     });
-    setAutoGenCodeOnSync(true);
+    setAutoGenCodeOnSync(false);
     setIsEditingProject(true);
   };
 
   const handleOpenEditProject = (proj: PastProject) => {
     const contractYr = proj.contractYearBE || proj.completionYearBE || currentYearBE;
     const isPendingCode = !proj.projectCode || proj.projectCode.includes('รอออกรหัส');
+    const fallbackBlocks = (Array.isArray(proj.imageBlocks) && proj.imageBlocks.length > 0)
+      ? proj.imageBlocks
+      : (proj.projectImageUrl ? [{ id: `img-${proj.id}`, type: 'single' as const, url: proj.projectImageUrl, caption: proj.projectImageCaption || '' }] : []);
     setProjectFormData({
       ...proj,
       contractYearBE: contractYr,
-      projectCode: proj.projectCode || '[รอออกรหัสอัตโนมัติ]',
+      projectCode: proj.projectCode || generateMasterProjectCode(contractYr, projects, proj.id),
+      imageBlocks: fallbackBlocks,
     });
     setAutoGenCodeOnSync(isPendingCode);
     setIsEditingProject(true);
@@ -472,9 +570,14 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
     }
 
     const contractYr = Number(projectFormData.contractYearBE) || Number(projectFormData.completionYearBE) || currentYearBE;
-    const code = autoGenCodeOnSync
-      ? (projectFormData.projectCode && !projectFormData.projectCode.includes('รอออกรหัส') ? projectFormData.projectCode : '[รอออกรหัสอัตโนมัติ]')
-      : (projectFormData.projectCode?.trim() || generateMasterProjectCode(contractYr, projects, projectFormData.id));
+    const code =
+      projectFormData.projectCode && !projectFormData.projectCode.includes('รอออกรหัส')
+        ? projectFormData.projectCode.trim()
+        : generateMasterProjectCode(contractYr, projects, projectFormData.id);
+    const firstBlockImg =
+      projectFormData.imageBlocks?.[0]?.type === 'single'
+        ? projectFormData.imageBlocks[0].url
+        : (projectFormData.imageBlocks?.[0]?.leftUrl || (projectFormData.imageBlocks?.[0] as any)?.urlLeft);
 
     const projToSave: PastProject = {
       id: projectFormData.id || `lib-proj-${Date.now()}`,
@@ -484,8 +587,10 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
       projectName: projectFormData.projectName.trim(),
       clientName: projectFormData.clientName || '',
       clientLogoUrl: projectFormData.clientLogoUrl,
+      projectImageUrl: firstBlockImg || projectFormData.projectImageUrl || projectFormData.clientLogoUrl,
+      projectImageCaption: projectFormData.projectImageCaption || (projectFormData.imageBlocks?.[0]?.caption || ''),
       contractValue: Number(projectFormData.contractValue) || 0,
-      completionYearBE: Number(projectFormData.completionYearBE) || currentYearBE,
+      completionYearBE: Number(projectFormData.completionYearBE) || contractYr,
       periodDuration: projectFormData.periodDuration || '',
       description: projectFormData.description || '',
       category: projectFormData.category || '',
@@ -774,10 +879,59 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
               สร้างและจัดการข้อมูลหลักของผลงานโครงการ บุคลากร และข้อมูลนิติบุคคล ไว้ล่วงหน้าก่อนเลือกนำไปใช้ในแต่ละเล่มข้อเสนอ
             </p>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <button
               type="button"
-              onClick={handleInitiateSyncToGoogle}
+              onClick={handlePullFromGoogleSheet}
+              disabled={isPullingFromSheet || isSyncingGoogle}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                backgroundColor: '#ECFDF5',
+                color: '#047857',
+                border: '1px solid #6EE7B7',
+                borderRadius: '8px',
+                padding: '0.45rem 0.85rem',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                cursor: isPullingFromSheet || isSyncingGoogle ? 'not-allowed' : 'pointer',
+              }}
+              title="ดึงไฟล์และข้อมูลล่าสุดจาก Google Sheet & Drive ลงเครื่อง Local ก่อนแก้ไขเพิ่มเติม"
+            >
+              <Download size={14} />
+              <span>{isPullingFromSheet ? 'กำลังดึงข้อมูลล่าสุด...' : '📥 ดึงข้อมูลล่าสุดจาก Drive/Sheet'}</span>
+            </button>
+
+            {modifiedProjectIds.size > 0 && (
+              <button
+                type="button"
+                onClick={() => handleInitiateSyncToGoogle(true)}
+                disabled={isSyncingGoogle}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backgroundColor: isSyncingGoogle ? '#86EFAC' : '#16A34A',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '0.45rem 0.9rem',
+                  fontSize: '0.825rem',
+                  fontWeight: 700,
+                  cursor: isSyncingGoogle ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 1px 3px rgba(22,163,74,0.25)',
+                }}
+                title="ซิงค์เฉพาะโครงการที่มีการแก้ไขในเครื่องขึ้น Google Sheet & Drive โดยไม่ต้องซิงค์ทั้งหมด"
+              >
+                <CloudUpload size={15} />
+                <span>⚡ ซิงค์เฉพาะที่แก้ไข ({modifiedProjectIds.size} โครงการ)</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => handleInitiateSyncToGoogle(false)}
               disabled={isSyncingGoogle}
               style={{
                 display: 'inline-flex',
@@ -804,7 +958,7 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
               ) : (
                 <>
                   <CloudUpload size={15} />
-                  <span>ซิงค์ข้อมูลกลางขึ้น Google Sheets & Drive</span>
+                  <span>{modifiedProjectIds.size > 0 ? 'ซิงค์ทั้งหมด' : 'ซิงค์ข้อมูลกลางขึ้น Google Sheets & Drive'}</span>
                 </>
               )}
             </button>
@@ -1165,13 +1319,24 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                     </div>
 
                     <div className="form-group">
-                      <label className="form-label">หน่วยงานผู้ว่าจ้าง</label>
-                      <input
-                        type="text"
-                        className="form-input"
-                        placeholder="เช่น กรมส่งเสริมการปกครองท้องถิ่น"
+                      <label className="form-label">หน่วยงานผู้ว่าจ้าง (เลือกจากรายการพร้อมโลโก้ หรือพิมพ์ใหม่)</label>
+                      <ClientAgencySelect
                         value={projectFormData.clientName || ''}
-                        onChange={(e) => setProjectFormData({ ...projectFormData, clientName: e.target.value })}
+                        logoUrl={projectFormData.clientLogoUrl}
+                        placeholder="เลือกหรือพิมพ์ชื่อหน่วยงานผู้ว่าจ้าง..."
+                        onChange={(newClientName, newLogoUrl) => {
+                          setProjectFormData({
+                            ...projectFormData,
+                            clientName: newClientName,
+                            clientLogoUrl: newLogoUrl,
+                          });
+                        }}
+                        onLogoChange={(newLogoUrl) => {
+                          setProjectFormData({
+                            ...projectFormData,
+                            clientLogoUrl: newLogoUrl,
+                          });
+                        }}
                       />
                     </div>
 
@@ -1535,10 +1700,20 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                     subtitle="รองรับทั้งภาพเดี่ยว 6 นิ้ว กึ่งกลาง และภาพคู่ 2 คอลัมน์ 3 นิ้ว สามารถบันทึกไว้ในคลังเพื่อนำไปใช้ในทุกเล่มข้อเสนอ"
                     imageBlocks={projectFormData.imageBlocks || []}
                     defaultCaptionPrefix="ภาพผลงาน"
-                    onChange={(newBlocks) => setProjectFormData({ ...projectFormData, imageBlocks: newBlocks })}
+                    onChange={(newBlocks) => {
+                      const firstUrl =
+                        newBlocks[0]?.type === 'single'
+                          ? newBlocks[0].url
+                          : (newBlocks[0]?.leftUrl || (newBlocks[0] as any)?.urlLeft || undefined);
+                      setProjectFormData({
+                        ...projectFormData,
+                        imageBlocks: newBlocks,
+                        projectImageUrl: firstUrl || projectFormData.clientLogoUrl || projectFormData.projectImageUrl,
+                      });
+                    }}
                   />
 
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem', borderTop: '1px solid var(--slate-200)', paddingTop: '0.75rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem', borderTop: '1px solid var(--slate-200)', paddingTop: '0.75rem', flexWrap: 'wrap' }}>
                     <button
                       type="button"
                       onClick={() => setIsEditingProject(false)}
@@ -1548,10 +1723,63 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                     </button>
                     <button
                       type="submit"
-                      className="btn btn-primary"
-                      style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                      className="btn btn-outline"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#047857', borderColor: '#6EE7B7', backgroundColor: '#ECFDF5', fontWeight: 600 }}
                     >
-                      <Save size={15} /> 💾 บันทึกในเครื่อง (รอซิงค์ลง Google Sheet)
+                      <Save size={15} /> 💾 บันทึกในเครื่อง (รอซิงค์ภายหลัง)
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSyncingGoogle}
+                      onClick={async () => {
+                        if (!projectFormData.projectName || projectFormData.projectName.trim() === '') {
+                          alert('กรุณาระบุชื่อโครงการ');
+                          return;
+                        }
+                        const contractYr = Number(projectFormData.contractYearBE) || Number(projectFormData.completionYearBE) || currentYearBE;
+                        const code =
+                          projectFormData.projectCode && !projectFormData.projectCode.includes('รอออกรหัส')
+                            ? projectFormData.projectCode.trim()
+                            : generateMasterProjectCode(contractYr, projects, projectFormData.id);
+                        const firstBlockImg =
+                          projectFormData.imageBlocks?.[0]?.type === 'single'
+                            ? projectFormData.imageBlocks[0].url
+                            : (projectFormData.imageBlocks?.[0]?.leftUrl || (projectFormData.imageBlocks?.[0] as any)?.urlLeft);
+                        const projToSave: PastProject = {
+                          id: projectFormData.id || `lib-proj-${Date.now()}`,
+                          originalMasterId: projectFormData.originalMasterId || projectFormData.id,
+                          projectCode: code,
+                          contractYearBE: contractYr,
+                          projectName: projectFormData.projectName.trim(),
+                          clientName: projectFormData.clientName || '',
+                          clientLogoUrl: projectFormData.clientLogoUrl,
+                          projectImageUrl: firstBlockImg || projectFormData.projectImageUrl || projectFormData.clientLogoUrl,
+                          projectImageCaption: projectFormData.projectImageCaption || (projectFormData.imageBlocks?.[0]?.caption || ''),
+                          contractValue: Number(projectFormData.contractValue) || 0,
+                          completionYearBE: Number(projectFormData.completionYearBE) || contractYr,
+                          periodDuration: projectFormData.periodDuration || '',
+                          description: projectFormData.description || '',
+                          category: projectFormData.category || '',
+                          isSelected: true,
+                          projectType: projectFormData.projectType || 'tor_reference',
+                          relevanceNote: projectFormData.relevanceNote || '',
+                          certificateFileUrl: projectFormData.certificateFileUrl,
+                          certificateFileName: projectFormData.certificateFileName,
+                          imageBlocks: projectFormData.imageBlocks || [],
+                        };
+                        const { updatedLibrary, savedProject } = saveProjectToMasterLibraryResult(projToSave);
+                        setProjects(updatedLibrary);
+                        setIsEditingProject(false);
+                        await executeFinalSyncToGoogle(updatedLibrary, {
+                          incremental: true,
+                          targetProjects: [savedProject],
+                        });
+                      }}
+                      className="btn btn-primary"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#16A34A', border: 'none' }}
+                      title="บันทึกและซิงค์เฉพาะโครงการนี้ขึ้น Google Sheet & Drive ทันทีโดยไม่ต้องซิงค์ทั้งหมด"
+                    >
+                      <CloudUpload size={15} /> ⚡ บันทึกและซิงค์เฉพาะโครงการนี้ทันที
                     </button>
                   </div>
                 </form>
@@ -1761,29 +1989,32 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#166534', fontSize: '0.825rem' }}>
                         <CheckCircle size={16} color="#16A34A" />
                         <span>
-                          มีการบันทึกการแก้ไขในเครื่องแล้ว <strong>{modifiedProjectIds.size + projects.filter(p => !p.projectCode || p.projectCode.includes('รอออกรหัส')).length}</strong> รายการ (เมื่อตรวจสอบเสร็จแล้ว ให้กดปุ่ม "ซิงค์ข้อมูลกลางขึ้น Google Sheets & Drive" เพื่อออกรหัสและบันทึกลง Sheet)
+                          มีการแก้ไขในเครื่องแล้ว <strong>{modifiedProjectIds.size + projects.filter(p => !p.projectCode || p.projectCode.includes('รอออกรหัส')).length}</strong> รายการ — สามารถกดซิงค์เฉพาะโครงการที่แก้ไขขึ้น Google Sheet & Drive ได้ทันทีโดยไม่ต้องซิงค์ทั้งหมด
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={handleInitiateSyncToGoogle}
-                        disabled={isSyncingGoogle}
-                        style={{
-                          fontSize: '0.78rem',
-                          padding: '4px 10px',
-                          backgroundColor: '#16A34A',
-                          color: '#FFFFFF',
-                          border: 'none',
-                          borderRadius: '5px',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                        }}
-                      >
-                        <CloudUpload size={13} /> ซิงค์ลง Google Sheet
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleInitiateSyncToGoogle(true)}
+                          disabled={isSyncingGoogle}
+                          style={{
+                            fontSize: '0.78rem',
+                            padding: '5px 12px',
+                            backgroundColor: '#16A34A',
+                            color: '#FFFFFF',
+                            border: 'none',
+                            borderRadius: '5px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                          title="ซิงค์เฉพาะรายการที่มีการแก้ไขขึ้น Google Sheet & Drive อย่างรวดเร็ว"
+                        >
+                          <CloudUpload size={13} /> ⚡ ซิงค์เฉพาะที่แก้ไข
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -1940,6 +2171,34 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                             </div>
 
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                              <button
+                                type="button"
+                                disabled={isSyncingGoogle}
+                                onClick={() => handleSyncSingleProject(item)}
+                                className="btn btn-outline"
+                                style={{
+                                  fontSize: '0.78rem',
+                                  padding: '0.35rem 0.6rem',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  color: modifiedProjectIds.has(item.id) ? '#15803D' : '#2563EB',
+                                  borderColor: modifiedProjectIds.has(item.id) ? '#86EFAC' : '#BFDBFE',
+                                  backgroundColor: modifiedProjectIds.has(item.id) ? '#F0FDF4' : '#EFF6FF',
+                                  fontWeight: 600,
+                                }}
+                                title="ซิงค์เฉพาะโครงการนี้ขึ้น Google Sheet & Drive ทันทีโดยไม่ต้องซิงค์ทั้งหมด"
+                              >
+                                {syncingItemId === item.id ? (
+                                  <>
+                                    <Loader2 size={13} className="animate-spin" /> กำลังซิงค์...
+                                  </>
+                                ) : (
+                                  <>
+                                    <CloudUpload size={13} /> ซิงค์เฉพาะโครงการนี้
+                                  </>
+                                )}
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => handleOpenEditProject(item)}
@@ -2308,7 +2567,7 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem', borderTop: '1px solid var(--slate-200)', paddingTop: '0.75rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem', borderTop: '1px solid var(--slate-200)', paddingTop: '0.75rem', flexWrap: 'wrap' }}>
                     <button
                       type="button"
                       onClick={() => setIsEditingMember(false)}
@@ -2318,10 +2577,58 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                     </button>
                     <button
                       type="submit"
-                      className="btn btn-primary"
-                      style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                      className="btn btn-outline"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#047857', borderColor: '#6EE7B7', backgroundColor: '#ECFDF5', fontWeight: 600 }}
                     >
-                      <Save size={15} /> 💾 บันทึกบุคลากรลงคลังกลาง
+                      <Save size={15} /> 💾 บันทึกในเครื่อง (รอซิงค์ภายหลัง)
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSyncingGoogle}
+                      onClick={async () => {
+                        if (!memberFormData.name || memberFormData.name.trim() === '') {
+                          alert('กรุณาระบุชื่อ-นามสกุลบุคลากร');
+                          return;
+                        }
+                        const calculatedExp = memberFormData.startWorkYearBE
+                          ? Math.max(0, currentYearBE - Number(memberFormData.startWorkYearBE))
+                          : Number(memberFormData.experienceYears) || 0;
+                        const recYr = Number(memberFormData.recordedYearBE) || currentYearBE;
+                        const code = memberFormData.memberCode?.trim() || generateMasterMemberId(recYr, teamMembers);
+                        const memberToSave: TeamMember = {
+                          id: memberFormData.id || `lib-team-${Date.now()}`,
+                          originalMasterId: memberFormData.originalMasterId || memberFormData.id,
+                          memberCode: code,
+                          recordedYearBE: recYr,
+                          name: memberFormData.name.trim(),
+                          proposedRole: memberFormData.proposedRole || '',
+                          education: memberFormData.education || '',
+                          certifications: memberFormData.certifications || '',
+                          startWorkYearBE: memberFormData.startWorkYearBE ? Number(memberFormData.startWorkYearBE) : undefined,
+                          experienceYears: calculatedExp,
+                          responsibilities: memberFormData.responsibilities || '',
+                          highlightProjects: memberFormData.highlightProjects || '',
+                          personalBio: memberFormData.personalBio || '',
+                          photoUrl: memberFormData.photoUrl,
+                          bioImageBlocks: memberFormData.bioImageBlocks || [],
+                          highlightImageBlocks: memberFormData.highlightImageBlocks || memberFormData.imageBlocks || [],
+                          imageBlocks: memberFormData.highlightImageBlocks || memberFormData.imageBlocks || [],
+                        };
+                        const { updatedLibrary, savedMember } = saveMemberToMasterLibraryResult(memberToSave);
+                        setTeamMembers(updatedLibrary);
+                        setIsEditingMember(false);
+                        await executeFinalSyncToGoogle(undefined, {
+                          incremental: true,
+                          targetProjects: [],
+                          targetTeam: [savedMember],
+                          itemId: savedMember.id,
+                        });
+                      }}
+                      className="btn btn-primary"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#16A34A', border: 'none' }}
+                      title="บันทึกและซิงค์เฉพาะบุคลากรท่านนี้ขึ้น Google Sheet & Drive ทันทีโดยไม่ต้องซิงค์ทั้งหมด"
+                    >
+                      <CloudUpload size={15} /> ⚡ บันทึกและซิงค์เฉพาะคนนี้ทันที
                     </button>
                   </div>
                 </form>
@@ -2538,6 +2845,34 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                           </div>
 
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                            <button
+                              type="button"
+                              disabled={isSyncingGoogle}
+                              onClick={() => handleSyncSingleMember(member)}
+                              className="btn btn-outline"
+                              style={{
+                                fontSize: '0.78rem',
+                                padding: '0.35rem 0.6rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                color: '#15803D',
+                                borderColor: '#86EFAC',
+                                backgroundColor: '#F0FDF4',
+                                fontWeight: 600,
+                              }}
+                              title="ซิงค์เฉพาะบุคลากรท่านนี้ขึ้น Google Sheet & Drive ทันทีโดยไม่ต้องซิงค์ทั้งหมด"
+                            >
+                              {syncingItemId === member.id ? (
+                                <>
+                                  <Loader2 size={13} className="animate-spin" /> กำลังซิงค์...
+                                </>
+                              ) : (
+                                <>
+                                  <CloudUpload size={13} /> ซิงค์เฉพาะคนนี้
+                                </>
+                              )}
+                            </button>
                             <button
                               type="button"
                               onClick={() => handleOpenEditMember(member)}

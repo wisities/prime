@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getGoogleClients, getGoogleCredentials } from './auth';
 import { setupProjectFolderHierarchy, uploadFileToDrive, UploadedFileResult } from './driveService';
-import { syncProjectToGoogleSheet, syncMasterLibraryToGoogleSheet, getMasterLibraryFromGoogleSheet } from './sheetsService';
+import { syncProjectToGoogleSheet, syncMasterLibraryToGoogleSheet, getMasterLibraryFromGoogleSheet, getProposalFromGoogleSheet } from './sheetsService';
 import { BiddingProject } from '../../src/types/proposal';
 
 export const config = {
@@ -63,9 +63,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // กรณีซิงค์ข้อมูลกลาง (Master Library)
+    // กรณีขออ่านข้อมูลล่าสุดของโครงการที่เสนอจาก Google Sheet (Pull Proposal + Master Library)
+    if (req.body.action === 'get_proposal_from_sheet') {
+      const { masterSheetId } = getGoogleCredentials();
+      const { sheets } = await getGoogleClients();
+      if (!sheets || !masterSheetId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Google Sheets API หรือ Master Sheet ID ยังไม่ได้ตั้งค่า',
+        });
+      }
+      const { projectCode = '', projectTitle = '' } = req.body;
+      const pullRes = await getProposalFromGoogleSheet(sheets, masterSheetId, projectCode, projectTitle);
+      return res.status(200).json({
+        success: true,
+        ...pullRes,
+        message: `ดึงข้อมูลล่าสุดของโครงการ ${projectCode || projectTitle} จาก Google Sheet สำเร็จ (${pullRes.pastProjects.length} ผลงานอ้างอิง)`,
+      });
+    }
+
+    // กรณีซิงค์ข้อมูลกลาง (Master Library) รองรับทั้ง Incremental (เฉพาะโครงการที่แก้ไข) และ Full Sync
     if (req.body.action === 'sync_master_library' || req.body.masterProjects) {
-      const { masterProjects = [], masterTeam = [], masterBom = [], masterCompany = {} } = req.body;
+      const { masterProjects = [], masterTeam = [], masterBom = [], masterCompany = {}, sheetOnly = false, incremental = false } = req.body;
       const { parentFolderId, masterSheetId } = getGoogleCredentials();
       const { drive, sheets } = await getGoogleClients();
 
@@ -74,27 +93,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const uploadedTeamPhotos: Record<string, { photoUrl: string; fileId: string }> = {};
       const uploadedTeamBioImages: Record<string, { mainUrl?: string; mainFileId?: string; count: number }> = {};
 
-      if (drive && parentFolderId) {
-        try {
-          const { getOrCreateFolder } = await import('./driveService');
-          const masterFolder = await getOrCreateFolder(drive, parentFolderId, '00_คลังข้อมูลกลาง_Master_Library');
-          const certsFolder = await getOrCreateFolder(drive, masterFolder.id, '01_สำเนาสัญญาและใบรับรองผลงานกลาง');
-          const projImagesFolder = await getOrCreateFolder(drive, masterFolder.id, '02_ภาพผลงานโครงการกลาง');
-          const teamPhotosFolder = await getOrCreateFolder(drive, masterFolder.id, '03_รูปถ่ายและภาพประกอบบุคลากรกลาง');
+      if (!sheetOnly && drive) {
+        let certsFolderId = '';
+        let projImagesFolderId = '';
+        let teamPhotosFolderId = '';
+        let uploadedAnyViaDrive = false;
 
-          // อัปโหลดสัญญาและภาพผลงานโครงการ
-          for (let i = 0; i < masterProjects.length; i++) {
-            const p = masterProjects[i];
-            if (!p) continue;
-            const pRef = p.id || p.projectCode || ('prj_' + i);
-            const pCode = (p.projectCode || p.projectName || ('PRJ-' + (i + 1))).replace(/[\/\\?%*:|"<>]/g, '_').substring(0, 30);
+        if (parentFolderId) {
+          try {
+            const { getOrCreateFolder } = await import('./driveService');
+            const masterFolder = await getOrCreateFolder(drive, parentFolderId, '00_คลังข้อมูลกลาง_Master_Library');
+            const certsFolder = await getOrCreateFolder(drive, masterFolder.id, '01_สำเนาสัญญาและใบรับรองผลงานกลาง');
+            const projImagesFolder = await getOrCreateFolder(drive, masterFolder.id, '02_ภาพผลงานโครงการกลาง');
+            const teamPhotosFolder = await getOrCreateFolder(drive, masterFolder.id, '03_รูปถ่ายและภาพประกอบบุคลากรกลาง');
+            certsFolderId = certsFolder.id;
+            projImagesFolderId = projImagesFolder.id;
+            teamPhotosFolderId = teamPhotosFolder.id;
+          } catch (folderErr) {
+            console.warn('Master folder lookup fallback to bridge:', folderErr);
+          }
+        }
 
+        // อัปโหลดสัญญา โลโก้หน่วยงาน และภาพผลงานโครงการ
+        for (let i = 0; i < masterProjects.length; i++) {
+          const p = masterProjects[i];
+          if (!p) continue;
+          const pRef = p.id || p.projectCode || ('prj_' + i);
+          const pCode = (p.projectCode || p.projectName || ('PRJ-' + (i + 1))).replace(/[\/\\?%*:|"<>]/g, '_').substring(0, 30);
+
+          try {
             if (p.certificateFileUrl && p.certificateFileUrl.startsWith('data:')) {
               const isPdf = p.certificateFileUrl.startsWith('data:application/pdf') || (p.certificateFileName || '').toLowerCase().endsWith('.pdf');
               const ext = isPdf ? '.pdf' : '.png';
               const certName = p.certificateFileName || `สัญญา_${pCode}${ext}`;
-              const upCert = await uploadFileToDrive(drive, certsFolder.id, certName, isPdf ? 'application/pdf' : 'image/png', p.certificateFileUrl, 'master_cert', pRef);
+              const upCert = await uploadFileToDrive(drive, certsFolderId, certName, isPdf ? 'application/pdf' : 'image/png', p.certificateFileUrl, 'master_cert', pRef);
               uploadedCerts[pRef] = upCert.webViewLink;
+              p.certificateFileUrl = upCert.webViewLink;
+              uploadedAnyViaDrive = true;
+            }
+
+            if (p.clientLogoUrl && p.clientLogoUrl.startsWith('data:')) {
+              const cleanClient = (p.clientName || pCode).replace(/[\/\\?%*:|"<>]/g, '_').substring(0, 30);
+              const logoName = `โลโก้หน่วยงาน_${cleanClient}.png`;
+              const upLogo = await uploadFileToDrive(drive, projImagesFolderId, logoName, 'image/png', p.clientLogoUrl, 'master_project_image', pRef);
+              p.clientLogoUrl = `https://drive.google.com/thumbnail?id=${upLogo.fileId}&sz=w1000`;
+              uploadedAnyViaDrive = true;
             }
 
             let mainUrl: string | undefined;
@@ -103,9 +146,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
             if (p.projectImageUrl && p.projectImageUrl.startsWith('data:')) {
               const imgName = `ภาพผลงาน_${pCode}_หลัก.png`;
-              const upImg = await uploadFileToDrive(drive, projImagesFolder.id, imgName, 'image/png', p.projectImageUrl, 'master_project_image', pRef);
+              const upImg = await uploadFileToDrive(drive, projImagesFolderId, imgName, 'image/png', p.projectImageUrl, 'master_project_image', pRef);
               mainUrl = upImg.webViewLink;
               mainFileId = upImg.fileId;
+              p.projectImageUrl = `https://drive.google.com/thumbnail?id=${upImg.fileId}&sz=w1000`;
+              uploadedAnyViaDrive = true;
             }
 
             if (p.imageBlocks && Array.isArray(p.imageBlocks)) {
@@ -114,26 +159,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 if (!block) continue;
                 if (block.type === 'single' && block.url && block.url.startsWith('data:')) {
                   const bName = `ภาพผลงาน_${pCode}_ภาพที่${b + 1}.png`;
-                  const upB = await uploadFileToDrive(drive, projImagesFolder.id, bName, 'image/png', block.url, 'master_project_image_block', pRef);
+                  const upB = await uploadFileToDrive(drive, projImagesFolderId, bName, 'image/png', block.url, 'master_project_image_block', pRef);
+                  const thumbUrl = `https://drive.google.com/thumbnail?id=${upB.fileId}&sz=w1000`;
+                  block.url = thumbUrl;
                   if (!mainUrl) {
                     mainUrl = upB.webViewLink;
                     mainFileId = upB.fileId;
                   }
                   blockUrls.push(upB.webViewLink);
-                } else if (block.type === 'double') {
-                  if (block.urlLeft && block.urlLeft.startsWith('data:')) {
+                  uploadedAnyViaDrive = true;
+                } else if (block.type === 'double' || block.type === 'pair') {
+                  const left = block.urlLeft || block.leftUrl;
+                  if (left && left.startsWith('data:')) {
                     const bNameL = `ภาพผลงาน_${pCode}_ภาพที่${b + 1}a.png`;
-                    const upBL = await uploadFileToDrive(drive, projImagesFolder.id, bNameL, 'image/png', block.urlLeft, 'master_project_image_block', pRef);
+                    const upBL = await uploadFileToDrive(drive, projImagesFolderId, bNameL, 'image/png', left, 'master_project_image_block', pRef);
+                    const thumbUrlL = `https://drive.google.com/thumbnail?id=${upBL.fileId}&sz=w1000`;
+                    block.leftUrl = thumbUrlL;
+                    if ('urlLeft' in block) block.urlLeft = thumbUrlL;
                     if (!mainUrl) {
                       mainUrl = upBL.webViewLink;
                       mainFileId = upBL.fileId;
                     }
                     blockUrls.push(upBL.webViewLink);
+                    uploadedAnyViaDrive = true;
                   }
-                  if (block.urlRight && block.urlRight.startsWith('data:')) {
+                  const right = block.urlRight || block.rightUrl;
+                  if (right && right.startsWith('data:')) {
                     const bNameR = `ภาพผลงาน_${pCode}_ภาพที่${b + 1}b.png`;
-                    const upBR = await uploadFileToDrive(drive, projImagesFolder.id, bNameR, 'image/png', block.urlRight, 'master_project_image_block', pRef);
+                    const upBR = await uploadFileToDrive(drive, projImagesFolderId, bNameR, 'image/png', right, 'master_project_image_block', pRef);
+                    const thumbUrlR = `https://drive.google.com/thumbnail?id=${upBR.fileId}&sz=w1000`;
+                    block.rightUrl = thumbUrlR;
+                    if ('urlRight' in block) block.urlRight = thumbUrlR;
+                    if (!mainUrl) {
+                      mainUrl = upBR.webViewLink;
+                      mainFileId = upBR.fileId;
+                    }
                     blockUrls.push(upBR.webViewLink);
+                    uploadedAnyViaDrive = true;
                   }
                 }
               }
@@ -144,25 +206,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 mainUrl,
                 mainFileId,
                 blockUrls,
-                count: (mainUrl ? 1 : 0) + blockUrls.length,
+                count: blockUrls.length > 0 ? blockUrls.length : (mainUrl ? 1 : 0),
               };
             }
+          } catch (projDriveErr) {
+            console.warn(`Could not upload files for project ${pCode}:`, projDriveErr);
           }
+        }
 
-          // อัปโหลดรูปถ่ายและภาพประกอบประวัติย่อบุคลากร
-          for (let k = 0; k < masterTeam.length; k++) {
-            const tm = masterTeam[k];
-            if (!tm) continue;
-            const tRef = tm.id || tm.memberCode || tm.name;
-            const cleanTName = (tm.name || (`บุคลากร_${k + 1}`)).replace(/[\/\\?%*:|"<>]/g, '_');
+        // อัปโหลดรูปถ่ายและภาพประกอบประวัติย่อบุคลากร
+        for (let k = 0; k < masterTeam.length; k++) {
+          const tm = masterTeam[k];
+          if (!tm) continue;
+          const tRef = tm.id || tm.memberCode || tm.name;
+          const cleanTName = (tm.name || (`บุคลากร_${k + 1}`)).replace(/[\/\\?%*:|"<>]/g, '_');
 
+          try {
             if (tm.photoUrl && tm.photoUrl.startsWith('data:')) {
               const phName = `รูปถ่าย_${cleanTName}.png`;
-              const upPhoto = await uploadFileToDrive(drive, teamPhotosFolder.id, phName, 'image/png', tm.photoUrl, 'master_team_photo', undefined, tRef);
+              const upPhoto = await uploadFileToDrive(drive, teamPhotosFolderId, phName, 'image/png', tm.photoUrl, 'master_team_photo', undefined, tRef);
+              tm.photoUrl = `https://drive.google.com/thumbnail?id=${upPhoto.fileId}&sz=w1000`;
               uploadedTeamPhotos[tRef] = {
                 photoUrl: upPhoto.webViewLink,
                 fileId: upPhoto.fileId,
               };
+              uploadedAnyViaDrive = true;
             }
 
             const bioBlocks = tm.bioImageBlocks || tm.imageBlocks || [];
@@ -176,28 +244,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 if (!block) continue;
                 if (block.type === 'single' && block.url && block.url.startsWith('data:')) {
                   const bName = `ภาพประวัติย่อ_${cleanTName}_ภาพที่${b + 1}.png`;
-                  const upBio = await uploadFileToDrive(drive, teamPhotosFolder.id, bName, 'image/png', block.url, 'master_team_bio_image', undefined, tRef);
+                  const upBio = await uploadFileToDrive(drive, teamPhotosFolderId, bName, 'image/png', block.url, 'master_team_bio_image', undefined, tRef);
+                  block.url = `https://drive.google.com/thumbnail?id=${upBio.fileId}&sz=w1000`;
                   if (!bioMainUrl) {
                     bioMainUrl = upBio.webViewLink;
                     bioMainFileId = upBio.fileId;
                   }
                   bioCount++;
+                  uploadedAnyViaDrive = true;
                 } else if (block.type === 'double' || block.type === 'pair') {
                   const left = block.urlLeft || block.leftUrl;
                   if (left && left.startsWith('data:')) {
                     const bNameL = `ภาพประวัติย่อ_${cleanTName}_ภาพที่${b + 1}a.png`;
-                    const upBioL = await uploadFileToDrive(drive, teamPhotosFolder.id, bNameL, 'image/png', left, 'master_team_bio_image', undefined, tRef);
+                    const upBioL = await uploadFileToDrive(drive, teamPhotosFolderId, bNameL, 'image/png', left, 'master_team_bio_image', undefined, tRef);
+                    const thumbBioL = `https://drive.google.com/thumbnail?id=${upBioL.fileId}&sz=w1000`;
+                    block.leftUrl = thumbBioL;
+                    if ('urlLeft' in block) block.urlLeft = thumbBioL;
                     if (!bioMainUrl) {
                       bioMainUrl = upBioL.webViewLink;
                       bioMainFileId = upBioL.fileId;
                     }
                     bioCount++;
+                    uploadedAnyViaDrive = true;
                   }
                   const right = block.urlRight || block.rightUrl;
                   if (right && right.startsWith('data:')) {
                     const bNameR = `ภาพประวัติย่อ_${cleanTName}_ภาพที่${b + 1}b.png`;
-                    const upBioR = await uploadFileToDrive(drive, teamPhotosFolder.id, bNameR, 'image/png', right, 'master_team_bio_image', undefined, tRef);
+                    const upBioR = await uploadFileToDrive(drive, teamPhotosFolderId, bNameR, 'image/png', right, 'master_team_bio_image', undefined, tRef);
+                    const thumbBioR = `https://drive.google.com/thumbnail?id=${upBioR.fileId}&sz=w1000`;
+                    block.rightUrl = thumbBioR;
+                    if ('urlRight' in block) block.urlRight = thumbBioR;
                     bioCount++;
+                    uploadedAnyViaDrive = true;
                   }
                 }
               }
@@ -210,9 +288,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 count: bioCount,
               };
             }
+          } catch (teamDriveErr) {
+            console.warn(`Could not upload files for team member ${cleanTName}:`, teamDriveErr);
           }
-        } catch (driveErr) {
-          console.warn('Could not upload master library images to Drive:', driveErr);
+        }
+
+        // ล้างแถวชั่วคราว __DRIVE_UPLOAD_BRIDGE__ ในแท็บ Overview หากมีการอัปโหลดผ่าน Bridge
+        if (uploadedAnyViaDrive && sheets && masterSheetId) {
+          try {
+            const ovRes = await sheets.spreadsheets.values.get({
+              spreadsheetId: masterSheetId,
+              range: `'ภาพรวมโครงการ (Overview)'!A1:M`,
+              valueRenderOption: 'FORMULA',
+            });
+            const ovRows = ovRes.data.values || [];
+            const filteredOv = ovRows.filter((r, idx) => idx === 0 || String(r?.[0] || '').trim() !== '__DRIVE_UPLOAD_BRIDGE__');
+            if (filteredOv.length !== ovRows.length) {
+              await sheets.spreadsheets.values.clear({
+                spreadsheetId: masterSheetId,
+                range: `'ภาพรวมโครงการ (Overview)'!A1:M`,
+              });
+              await sheets.spreadsheets.values.update({
+                spreadsheetId: masterSheetId,
+                range: `'ภาพรวมโครงการ (Overview)'!A1`,
+                valueInputOption: 'USER_ENTERED',
+                requestBody: { values: filteredOv },
+              });
+            }
+          } catch {}
         }
       }
 
@@ -221,16 +324,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         masterTeam,
         masterBom,
         masterCompany,
+        incremental: Boolean(incremental),
         uploadedCerts,
         uploadedProjectImages,
         uploadedTeamPhotos,
         uploadedTeamBioImages,
       });
 
+      let syncModeText = `ซิงค์คลังข้อมูลกลางทั้งหมด (${masterProjects.length} ผลงาน, ${masterTeam.length} บุคลากร, ${masterBom.length} BOM)`;
+      if (incremental) {
+        if (masterProjects.length > 0 && masterTeam.length === 0) {
+          syncModeText = masterProjects.length === 1
+            ? `ซิงค์โครงการ "${masterProjects[0]?.projectCode || ''} ${masterProjects[0]?.projectName || ''}"`
+            : `ซิงค์เฉพาะโครงการที่เลือก (${masterProjects.length} โครงการ)`;
+        } else if (masterProjects.length === 0 && masterTeam.length > 0) {
+          syncModeText = masterTeam.length === 1
+            ? `ซิงค์ข้อมูลบุคลากร "${masterTeam[0]?.name || ''}"`
+            : `ซิงค์เฉพาะบุคลากรที่เลือก (${masterTeam.length} ท่าน)`;
+        } else {
+          syncModeText = `ซิงค์เฉพาะรายการที่แก้ไข (${masterProjects.length} โครงการ, ${masterTeam.length} บุคลากร)`;
+        }
+      }
+
       return res.status(200).json({
         success: true,
-        message: `ซิงค์คลังข้อมูลกลางพร้อมภาพผลงานและรูปถ่ายบุคลากร (${masterProjects.length} ผลงาน, ${masterTeam.length} บุคลากร, ${masterBom.length} BOM) เข้าสู่ Google Sheet สำเร็จเรียบร้อย!`,
+        message: `${syncModeText} เข้าสู่ Google Sheet & Drive สำเร็จเรียบร้อย!`,
         sheetUrl,
+        updatedProjects: masterProjects,
+        updatedTeam: masterTeam,
         counts: {
           projects: masterProjects.length,
           team: masterTeam.length,
@@ -260,6 +381,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { parentFolderId, masterSheetId } = getGoogleCredentials();
     const { drive, sheets } = await getGoogleClients();
+
+    if (req.body.sheetOnly === true && masterSheetId) {
+      const fallbackFolderStructure: any = {
+        yearFolderId: '',
+        yearFolderUrl: req.body.driveFolderUrl || '',
+        projectFolderId: '',
+        projectFolderUrl: req.body.driveFolderUrl || 'https://drive.google.com/drive/folders/1Frre37vc1NZ1rnSa2Dbece1_j2W5KucX',
+        subfolders: {
+          tor: { id: '', url: req.body.folderStructure?.torFolderUrl || '-' },
+          contracts: { id: '', url: req.body.folderStructure?.contractsFolderUrl || '-' },
+          outputs: { id: '', url: req.body.folderStructure?.outputsFolderUrl || '-' },
+          other: { id: '', url: '-' },
+        },
+      };
+      const sheetUrl = await syncProjectToGoogleSheet(
+        sheets,
+        masterSheetId,
+        project,
+        fallbackFolderStructure,
+        req.body.uploadedFiles || []
+      );
+      return res.status(200).json({
+        success: true,
+        message: 'อัปเดตตาราง Google Sheets พร้อมลิงก์และรูปภาพผลงานครบถ้วนสำเร็จ',
+        sheetUrl,
+      });
+    }
 
     // กำหนดปี พ.ศ. ของโครงการ
     const yearBE =
@@ -363,28 +511,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               pRef
             );
             uploadedResults.push(upB);
-          } else if (block.type === 'double') {
-            if (block.urlLeft && block.urlLeft.startsWith('data:')) {
+          } else if (block.type === 'double' || block.type === 'pair') {
+            const left = block.urlLeft || block.leftUrl;
+            if (left && left.startsWith('data:')) {
               const bNameL = `ภาพผลงาน_${pCodeClean}_ภาพที่${b + 1}a.png`;
               const upBL = await uploadFileToDrive(
                 drive,
                 projImagesSubfolder.id,
                 bNameL,
                 'image/png',
-                block.urlLeft,
+                left,
                 'project_image_block',
                 pRef
               );
               uploadedResults.push(upBL);
             }
-            if (block.urlRight && block.urlRight.startsWith('data:')) {
+            const right = block.urlRight || block.rightUrl;
+            if (right && right.startsWith('data:')) {
               const bNameR = `ภาพผลงาน_${pCodeClean}_ภาพที่${b + 1}b.png`;
               const upBR = await uploadFileToDrive(
                 drive,
                 projImagesSubfolder.id,
                 bNameR,
                 'image/png',
-                block.urlRight,
+                right,
                 'project_image_block',
                 pRef
               );

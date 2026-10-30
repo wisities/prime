@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Section5Company, PastProject, MasterCompanyProfile } from '../types/proposal';
 import { ReportImageManager } from './ReportImageManager';
+import { ClientAgencySelect } from './ClientAgencySelect';
 import { compressImageFile } from '../utils/imageCompressor';
 import {
   getMasterProjectsLibrary,
@@ -24,8 +25,10 @@ import {
   importMasterProjectsFromJson,
   generateMasterProjectCode,
   findDuplicateProjectCodes,
+  saveMasterProjectsLibrary,
 } from '../services/masterLibraryService';
-import { Building2, Plus, Trash2, Library, Filter, Calendar, AlertTriangle, CheckCircle, Upload, Image, FileText, Paperclip, FileCheck, BookmarkCheck, RotateCcw, ArrowUp, ArrowDown, ArrowUpDown, BookmarkPlus, Check, Database, Save, Download, List, Table as TableIcon, ChevronDown, ChevronUp, ChevronRight, ExternalLink } from 'lucide-react';
+import { syncMasterLibraryToGoogle, fetchMasterLibraryFromGoogleSheet } from '../services/googleSyncService';
+import { Building2, Plus, Trash2, Library, Filter, Calendar, AlertTriangle, CheckCircle, Upload, Image, FileText, Paperclip, FileCheck, BookmarkCheck, RotateCcw, ArrowUp, ArrowDown, ArrowUpDown, BookmarkPlus, Check, Database, Save, Download, List, Table as TableIcon, ChevronDown, ChevronUp, ChevronRight, ExternalLink, CloudUpload, Loader2 } from 'lucide-react';
 
 /**
  * ฟังก์ชันจัดเรียงรายการผลงานโครงการตามเงื่อนไข:
@@ -90,6 +93,8 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
   const [selectedLibraryIds, setSelectedLibraryIds] = useState<string[]>([]);
   const [savedProjectToast, setSavedProjectToast] = useState<string | null>(null);
+  const [syncingProjectId, setSyncingProjectId] = useState<string | null>(null);
+  const [isPullingSheet, setIsPullingSheet] = useState(false);
   const fileInputProjectsRef = React.useRef<HTMLInputElement>(null);
   const currentYearBE = 2568;
 
@@ -495,6 +500,123 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
     setTimeout(() => setSavedProjectToast(null), 3500);
   };
 
+  const handlePullLatestProjectsFromSheet = async () => {
+    try {
+      setIsPullingSheet(true);
+      const res = await fetchMasterLibraryFromGoogleSheet();
+      if (res.success && res.projects && res.projects.length > 0) {
+        saveMasterProjectsLibrary(res.projects);
+        setProjectsLibrary(res.projects);
+
+        const norm = (s?: string) => String(s || '').trim().toLowerCase();
+        const byCode = new Map<string, PastProject>();
+        const byName = new Map<string, PastProject>();
+        res.projects.forEach((mp) => {
+          if (mp.projectCode) byCode.set(norm(mp.projectCode), mp);
+          if (mp.projectName) byName.set(norm(mp.projectName), mp);
+        });
+
+        // อัปเดตผลงานใน Section 5 ของเล่มข้อเสนอให้ตรงกับข้อมูลและรูปภาพล่าสุดจาก Google Sheet & Drive
+        const mergedPastProjects = section5.pastProjects.map((p) => {
+          const matched =
+            (p.projectCode ? byCode.get(norm(p.projectCode)) : undefined) ||
+            (p.projectName ? byName.get(norm(p.projectName)) : undefined);
+          if (!matched) return p;
+          return {
+            ...p,
+            ...matched,
+            id: p.id,
+            originalMasterId: matched.id,
+            isSelected: p.isSelected,
+            imageBlocks: matched.imageBlocks && matched.imageBlocks.length > 0 ? matched.imageBlocks : p.imageBlocks,
+          };
+        });
+
+        onChange({
+          ...section5,
+          pastProjects: mergedPastProjects,
+        });
+
+        const totalBlocks = mergedPastProjects.reduce((sum, p) => sum + ((p.imageBlocks || []).length), 0);
+        setSavedProjectToast(
+          `✅ ดึงข้อมูลผลงานและภาพประกอบล่าสุดจาก Google Sheet & Drive สำเร็จ (${res.projects.length} โครงการ, ${totalBlocks} บล็อกภาพ)`
+        );
+        setTimeout(() => setSavedProjectToast(null), 4500);
+      } else {
+        alert(res.error || 'ไม่สามารถดึงข้อมูลล่าสุดจาก Google Sheet ได้');
+      }
+    } catch (err: any) {
+      alert(err?.message || 'เกิดข้อผิดพลาดในการดึงข้อมูล');
+    } finally {
+      setIsPullingSheet(false);
+    }
+  };
+
+  const handleSyncSingleProjectToSheet = async (project: PastProject) => {
+    if (!project.projectName || project.projectName.trim() === '') {
+      alert('กรุณาระบุชื่อโครงการก่อนซิงค์ขึ้น Google Sheet');
+      return;
+    }
+    try {
+      setSyncingProjectId(project.id);
+      const { updatedLibrary, savedProject } = saveProjectToMasterLibraryResult(project);
+      setProjectsLibrary(updatedLibrary);
+
+      const updatedProjects = section5.pastProjects.map((p) =>
+        p.id === project.id
+          ? {
+              ...p,
+              originalMasterId: savedProject.id,
+              projectCode: savedProject.projectCode,
+              contractYearBE: savedProject.contractYearBE,
+            }
+          : p
+      );
+      onChange({
+        ...section5,
+        pastProjects: updatedProjects,
+      });
+
+      const res = await syncMasterLibraryToGoogle({
+        incremental: true,
+        projectsToSync: [savedProject],
+      });
+
+      if (res.success) {
+        const syncedProj = res.updatedProjects?.[0] || savedProject;
+        setProjectsLibrary(getMasterProjectsLibrary());
+        const afterSyncProjects = updatedProjects.map((p) =>
+          p.id === project.id || (p.originalMasterId && p.originalMasterId === savedProject.id)
+            ? {
+                ...p,
+                originalMasterId: savedProject.id,
+                projectCode: syncedProj.projectCode || savedProject.projectCode,
+                contractYearBE: syncedProj.contractYearBE || savedProject.contractYearBE,
+                certificateFileUrl: syncedProj.certificateFileUrl || p.certificateFileUrl,
+                clientLogoUrl: syncedProj.clientLogoUrl || p.clientLogoUrl,
+                projectImageUrl: syncedProj.projectImageUrl || p.projectImageUrl,
+                imageBlocks: syncedProj.imageBlocks || p.imageBlocks,
+              }
+            : p
+        );
+        onChange({
+          ...section5,
+          pastProjects: afterSyncProjects,
+        });
+        setSavedProjectToast(
+          `☁️ ซิงค์เฉพาะโครงการ "${savedProject.projectCode || ''} ${savedProject.projectName}" ขึ้น Google Sheet & Drive สำเร็จแล้ว!`
+        );
+        setTimeout(() => setSavedProjectToast(null), 4000);
+      } else {
+        alert(res.error || res.message || 'ซิงค์โครงการไม่สำเร็จ');
+      }
+    } catch (err: any) {
+      alert(err?.message || 'เกิดข้อผิดพลาดในการซิงค์โครงการ');
+    } finally {
+      setSyncingProjectId(null);
+    }
+  };
+
   const handleSaveAllProjectsToLibrary = () => {
     const validProjects = section5.pastProjects.filter(
       (p) => p.projectName && p.projectName.trim() !== ''
@@ -889,7 +1011,18 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
             </p>
           </div>
 
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={handlePullLatestProjectsFromSheet}
+              disabled={isPullingSheet}
+              className="btn btn-outline"
+              style={{ color: '#047857', borderColor: '#6EE7B7', backgroundColor: '#ECFDF5', fontWeight: 600 }}
+              title="ดึงไฟล์และข้อมูลผลงานล่าสุดจาก Google Sheet & Drive ลงเครื่องเพื่อแก้ไขต่อ"
+            >
+              {isPullingSheet ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+              <span>{isPullingSheet ? 'กำลังดึงข้อมูล...' : '📥 ดึงล่าสุดจาก Drive/Sheet'}</span>
+            </button>
             <button
               type="button"
               onClick={handleOpenLibrary}
@@ -1170,7 +1303,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
             const isTorRef = (p.projectType || 'tor_reference') === 'tor_reference';
             const isTooOld = isTorRef && p.completionYearBE < minAllowedYear;
             const isCollapsed = !!collapsedProjects[p.id];
-            const blocks = p.imageBlocks !== undefined
+            const blocks = (Array.isArray(p.imageBlocks) && p.imageBlocks.length > 0)
               ? p.imageBlocks
               : p.projectImageUrl
               ? [{ id: `img-${p.id}`, type: 'single' as const, url: p.projectImageUrl, caption: (p.projectImageCaption || '').trim() }]
@@ -1393,6 +1526,36 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                       <BookmarkPlus size={14} /> บันทึกลงคลังกลาง
                     </button>
 
+                    {/* Sync Single Project to Google Sheet & Drive */}
+                    <button
+                      type="button"
+                      disabled={syncingProjectId === p.id}
+                      onClick={() => handleSyncSingleProjectToSheet(p)}
+                      className="btn btn-outline"
+                      style={{
+                        color: '#15803D',
+                        borderColor: '#86EFAC',
+                        backgroundColor: '#F0FDF4',
+                        padding: '0.35rem 0.65rem',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                      title="ซิงค์เฉพาะโครงการนี้ขึ้น Google Sheet & Drive ทันทีโดยไม่ต้องซิงค์ทั้งหมด"
+                    >
+                      {syncingProjectId === p.id ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" /> กำลังซิงค์...
+                        </>
+                      ) : (
+                        <>
+                          <CloudUpload size={14} /> ซิงค์เฉพาะโครงการนี้
+                        </>
+                      )}
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => handleDeleteProject(p.id)}
@@ -1454,7 +1617,13 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                         }}
                         placeholder="เช่น 2567-PRJ-001"
                         value={p.projectCode || ''}
-                        onChange={(e) => handleProjectChange(p.id, 'projectCode', e.target.value)}
+                        onChange={(e) => {
+                          const prev = (p as any).previousProjectCode || p.projectCode;
+                          handleProjectFieldsChange(p.id, {
+                            projectCode: e.target.value,
+                            ...(prev && prev !== e.target.value ? { previousProjectCode: prev } : {}),
+                          } as any);
+                        }}
                         title="รหัสโครงการขึ้นต้นด้วยปี พ.ศ. ที่ได้สัญญา"
                       />
                       {isProjectCodeDuplicated(p) && (
@@ -1467,7 +1636,11 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                               ...section5.pastProjects.filter(sp => sp.id !== p.id),
                             ];
                             const nextCode = generateMasterProjectCode(yr, allOthers, p.id);
-                            handleProjectChange(p.id, 'projectCode', nextCode);
+                            const prev = (p as any).previousProjectCode || p.projectCode;
+                            handleProjectFieldsChange(p.id, {
+                              projectCode: nextCode,
+                              ...(prev && prev !== nextCode ? { previousProjectCode: prev } : {}),
+                            } as any);
                           }}
                           style={{
                             fontSize: '0.72rem',
@@ -1509,10 +1682,12 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                           ...section5.pastProjects.filter(sp => sp.id !== p.id),
                         ];
                         const nextCode = generateMasterProjectCode(yr, allOthers, p.id);
+                        const prev = (p as any).previousProjectCode || p.projectCode;
                         handleProjectFieldsChange(p.id, {
                           contractYearBE: yr,
                           projectCode: nextCode,
-                        });
+                          ...(prev && prev !== nextCode ? { previousProjectCode: prev } : {}),
+                        } as any);
                       }}
                       title="ปี พ.ศ. ที่ลงนามหรือได้สัญญาโครงการ (เปลี่ยนปีจะคำนวณรหัสถัดไปที่ไม่ซ้ำให้อัตโนมัติ)"
                     />
@@ -1533,101 +1708,30 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
 
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2rem' }}>
-                      <label className="form-label" style={{ marginBottom: 0 }}>หน่วยงานผู้ว่าจ้าง</label>
+                      <label className="form-label" style={{ marginBottom: 0 }}>หน่วยงานผู้ว่าจ้าง (เลือกจากรายการหรือพิมพ์ใหม่)</label>
                       {p.clientLogoUrl && (
                         <span style={{ fontSize: '0.7rem', color: '#16A34A', fontWeight: 600 }}>✓ มีโลโก้ลูกค้า</span>
                       )}
                     </div>
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                      {p.clientLogoUrl ? (
-                        <div style={{ position: 'relative', display: 'inline-block', flexShrink: 0 }}>
-                          <img
-                            src={p.clientLogoUrl}
-                            alt="Client Logo"
-                            style={{
-                              height: '36px',
-                              width: '44px',
-                              objectFit: 'contain',
-                              backgroundColor: '#FFFFFF',
-                              border: '1px solid var(--slate-300)',
-                              borderRadius: '4px',
-                              padding: '2px',
-                              display: 'block',
-                            }}
-                            title="โลโก้หน่วยงานผู้ว่าจ้าง"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleProjectFieldsChange(p.id, { clientLogoUrl: undefined })}
-                            style={{
-                              position: 'absolute',
-                              top: '-5px',
-                              right: '-5px',
-                              background: '#EF4444',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '50%',
-                              width: '16px',
-                              height: '16px',
-                              fontSize: '10px',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              lineHeight: 1,
-                            }}
-                            title="ลบโลโก้ลูกค้า"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      ) : (
-                        <label
-                          style={{
-                            padding: '0.4rem 0.55rem',
-                            border: '1px dashed var(--slate-300)',
-                            borderRadius: '6px',
-                            backgroundColor: '#FFFFFF',
-                            cursor: 'pointer',
-                            fontSize: '0.75rem',
-                            color: 'var(--primary-700)',
-                            fontWeight: 600,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            whiteSpace: 'nowrap',
-                            height: '36px',
-                            flexShrink: 0,
-                          }}
-                          title="อัปโหลดภาพโลโก้ของลูกค้า / หน่วยงานผู้ว่าจ้าง"
-                        >
-                          <input
-                            type="file"
-                            accept="image/*"
-                            style={{ display: 'none' }}
-                            onChange={(e) => {
-                              const f = e.target.files?.[0];
-                              if (f) {
-                                handleFileUpload(f, (b64) => {
-                                  handleProjectFieldsChange(p.id, { clientLogoUrl: b64 });
-                                });
-                                e.target.value = '';
-                              }
-                            }}
-                          />
-                          <Upload size={12} />
-                          <span>โลโก้</span>
-                        </label>
-                      )}
-                      <input
-                        type="text"
-                        className="form-input"
-                        style={{ flex: 1 }}
-                        placeholder="ระบุชื่อหน่วยงานผู้ว่าจ้าง..."
-                        value={p.clientName}
-                        onChange={(e) => handleProjectChange(p.id, 'clientName', e.target.value)}
-                      />
-                    </div>
+                    <ClientAgencySelect
+                      value={p.clientName || ''}
+                      logoUrl={p.clientLogoUrl}
+                      extraProjects={section5.pastProjects}
+                      placeholder="เลือกหรือพิมพ์ชื่อหน่วยงานผู้ว่าจ้าง..."
+                      onChange={(newClientName, newLogoUrl) => {
+                        handleProjectFieldsChange(p.id, {
+                          clientName: newClientName,
+                          clientLogoUrl: newLogoUrl,
+                          projectImageUrl: p.projectImageUrl || newLogoUrl,
+                        });
+                      }}
+                      onLogoChange={(newLogoUrl) => {
+                        handleProjectFieldsChange(p.id, {
+                          clientLogoUrl: newLogoUrl,
+                          projectImageUrl: p.projectImageUrl || newLogoUrl,
+                        });
+                      }}
+                    />
                   </div>
 
                   <div>
@@ -1645,9 +1749,30 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                     <input
                       type="text"
                       className="form-input"
+                      placeholder="เช่น 6 เดือน, 180 วัน, 1 ปี"
                       value={p.periodDuration}
                       onChange={(e) => handleProjectChange(p.id, 'periodDuration', e.target.value)}
                     />
+                  </div>
+
+                  <div>
+                    <label className="form-label">หมวดหมู่งาน (Category)</label>
+                    <input
+                      type="text"
+                      list={`sec5-cat-list-${p.id}`}
+                      className="form-input"
+                      placeholder="เช่น พัฒนาระบบสารสนเทศ / ดิจิทัล"
+                      value={p.category || ''}
+                      onChange={(e) => handleProjectChange(p.id, 'category', e.target.value)}
+                    />
+                    <datalist id={`sec5-cat-list-${p.id}`}>
+                      <option value="พัฒนาระบบสารสนเทศ / ดิจิทัล" />
+                      <option value="ระบบฐานข้อมูลและคลังข้อมูล / AI" />
+                      <option value="โครงสร้างพื้นฐานและเครือข่าย / Cloud" />
+                      <option value="ความมั่นคงปลอดภัยไซเบอร์ (Cybersecurity)" />
+                      <option value="งานวิจัย / ที่ปรึกษาและฝึกอบรม" />
+                      <option value="สื่อประชาสัมพันธ์และรณรงค์สร้างความตระหนักรู้" />
+                    </datalist>
                   </div>
                 </div>
 
@@ -1934,7 +2059,7 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                   title={`ภาพประกอบสำหรับโครงการ: ${p.projectName || 'ผลงานนี้'}`}
                   subtitle="สามารถแทรกภาพเดี่ยว 6 นิ้ว กึ่งกลาง หรือภาพคู่ 3 นิ้ว 2 คอลัมน์ ได้ไม่จำกัดจำนวนเหมือนหัวข้อ 3.2"
                   imageBlocks={
-                    p.imageBlocks !== undefined
+                    (Array.isArray(p.imageBlocks) && p.imageBlocks.length > 0)
                       ? p.imageBlocks
                       : p.projectImageUrl
                       ? [
@@ -1948,10 +2073,18 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                       : []
                   }
                   onChange={(newBlocks) => {
+                    const firstUrl =
+                      newBlocks[0]?.type === 'single'
+                        ? newBlocks[0].url
+                        : (newBlocks[0]?.leftUrl || (newBlocks[0] as any)?.urlLeft || undefined);
+                    const firstCap =
+                      newBlocks[0]?.type === 'single'
+                        ? newBlocks[0]?.caption
+                        : (newBlocks[0]?.leftCaption || newBlocks[0]?.caption || undefined);
                     handleProjectFieldsChange(p.id, {
                       imageBlocks: newBlocks,
-                      projectImageUrl: undefined,
-                      projectImageCaption: undefined,
+                      projectImageUrl: firstUrl || p.clientLogoUrl || p.projectImageUrl,
+                      projectImageCaption: firstCap || p.projectImageCaption,
                     });
                   }}
                   defaultCaptionPrefix={`ภาพผลงาน ${idx + 1}`}
@@ -2393,6 +2526,36 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                           </div>
 
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                            <button
+                              type="button"
+                              disabled={syncingProjectId === item.id}
+                              onClick={() => handleSyncSingleProjectToSheet(item)}
+                              className="btn btn-outline"
+                              style={{
+                                color: '#15803D',
+                                borderColor: '#86EFAC',
+                                backgroundColor: '#F0FDF4',
+                                whiteSpace: 'nowrap',
+                                fontSize: '0.78rem',
+                                padding: '0.4rem 0.65rem',
+                                fontWeight: 600,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                              }}
+                              title="ซิงค์เฉพาะโครงการนี้ขึ้น Google Sheet & Drive ทันที"
+                            >
+                              {syncingProjectId === item.id ? (
+                                <>
+                                  <Loader2 size={13} className="animate-spin" /> กำลังซิงค์...
+                                </>
+                              ) : (
+                                <>
+                                  <CloudUpload size={13} /> ซิงค์โครงการนี้
+                                </>
+                              )}
+                            </button>
+
                             <button
                               type="button"
                               onClick={() => handleAddFromLibrary(item)}

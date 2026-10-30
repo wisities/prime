@@ -123,12 +123,18 @@ function loadInitialProjects(): BiddingProject[] {
       if (p.proposalData?.section5?.pastProjects) {
         p.proposalData.section5.pastProjects = p.proposalData.section5.pastProjects.map((proj) => {
           const assets = getRecoveredProjectAssets(proj.projectCode, proj.clientName, proj.projectName);
+          const clientLogo = proj.clientLogoUrl || assets.clientLogoUrl;
+          const projImg = proj.projectImageUrl || assets.projectImageUrl || clientLogo;
+          const initialBlocks = (Array.isArray(proj.imageBlocks) && proj.imageBlocks.length > 0)
+            ? proj.imageBlocks
+            : (projImg ? [{ id: `img-${proj.id}`, type: 'single' as const, url: projImg, caption: (proj.projectImageCaption || `ภาพผลงาน / ตราสัญลักษณ์ ${proj.clientName}`).trim() }] : []);
           return {
             ...proj,
-            clientLogoUrl: proj.clientLogoUrl || assets.clientLogoUrl,
-            projectImageUrl: proj.projectImageUrl || assets.projectImageUrl,
+            clientLogoUrl: clientLogo,
+            projectImageUrl: projImg,
             certificateFileUrl: proj.certificateFileUrl || assets.certificateFileUrl,
             certificateFileName: proj.certificateFileName || assets.certificateFileName,
+            imageBlocks: initialBlocks,
           };
         });
       }

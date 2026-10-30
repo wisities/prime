@@ -3,13 +3,17 @@ import { BiddingProject } from '../types/proposal';
 import {
   syncProposalToGoogle,
   syncMasterLibraryToGoogle,
+  fetchProposalFromGoogleSheet,
   checkGoogleSyncHealth,
   GoogleSyncResult,
   GoogleSyncHealth,
   getEffectiveAppsScriptUrl,
 } from '../services/googleSyncService';
+import { saveMasterProjectsLibrary } from '../services/masterLibraryService';
+import { saveProject } from '../services/projectStorageService';
 import {
   CloudUpload,
+  Download,
   CheckCircle2,
   AlertCircle,
   FolderOpen,
@@ -28,16 +32,19 @@ interface GoogleSyncModalProps {
   isOpen: boolean;
   project: BiddingProject;
   onClose: () => void;
+  onProjectUpdated?: (updated: BiddingProject) => void;
 }
 
-export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({ isOpen, project, onClose }) => {
+export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({ isOpen, project, onClose, onProjectUpdated }) => {
   const [health, setHealth] = useState<GoogleSyncHealth | null>(null);
   const [isChecking, setIsChecking] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isPulling, setIsPulling] = useState(false);
   const [progressMsg, setProgressMsg] = useState('');
   const [progressPercent, setProgressPercent] = useState(0);
   const [syncResult, setSyncResult] = useState<GoogleSyncResult | null>(null);
-  const [syncMasterLibrary, setSyncMasterLibrary] = useState(true);
+  const [includeDocx, setIncludeDocx] = useState(false);
+  const [syncMasterLibrary, setSyncMasterLibrary] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [appsScriptUrl, setAppsScriptUrl] = useState<string>(() => {
     return getEffectiveAppsScriptUrl();
@@ -72,13 +79,59 @@ export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({ isOpen, projec
   );
   const totalAttachments = (project.attachments || []).length;
 
+  const handlePullLatestFromGoogle = async () => {
+    try {
+      setIsPulling(true);
+      setSyncResult(null);
+      const res = await fetchProposalFromGoogleSheet(project.projectCode, project.projectTitle);
+      if (res.success) {
+        if (res.masterProjects && res.masterProjects.length > 0) {
+          saveMasterProjectsLibrary(res.masterProjects);
+        }
+        if (res.pastProjects && res.pastProjects.length > 0 && project.proposalData) {
+          const updatedProj: BiddingProject = {
+            ...project,
+            ...(res.overview
+              ? {
+                  clientAgency: res.overview.clientAgency || project.clientAgency,
+                  budgetAmount: res.overview.budgetAmount || project.budgetAmount,
+                  driveFolderUrl: res.overview.driveFolderUrl || project.driveFolderUrl,
+                }
+              : {}),
+            proposalData: {
+              ...project.proposalData,
+              section5: {
+                ...project.proposalData.section5,
+                pastProjects: res.pastProjects,
+              },
+            },
+          };
+          saveProject(updatedProj);
+          if (onProjectUpdated) {
+            onProjectUpdated(updatedProj);
+          }
+        }
+        const totalBlocks = (res.pastProjects || []).reduce((s, p) => s + ((p.imageBlocks || []).length), 0);
+        alert(
+          `✅ ดึงข้อมูลและไฟล์ล่าสุดจาก Google Sheet & Drive ลงเครื่องสำเร็จ!\n\n• โครงการอ้างอิงในข้อเสนอ: ${(res.pastProjects || []).length} โครงการ (${totalBlocks} บล็อกภาพประกอบ)\n• คลังผลงานกลาง: ${(res.masterProjects || []).length} โครงการ\n\nคุณสามารถแก้ไขเพิ่มเติมในเครื่อง แล้วกดซิงค์เฉพาะข้อมูลที่แก้ไขกลับขึ้นไปได้ทันที`
+        );
+      } else {
+        alert(res.error || 'ไม่สามารถดึงข้อมูลล่าสุดจาก Google Sheet ได้');
+      }
+    } catch (err: any) {
+      alert(err?.message || 'เกิดข้อผิดพลาดในการดึงข้อมูล');
+    } finally {
+      setIsPulling(false);
+    }
+  };
+
   const handleStartSync = async () => {
     try {
       setIsSyncing(true);
       setSyncResult(null);
 
       const result = await syncProposalToGoogle(project, {
-        generateDocx: true,
+        generateDocx: includeDocx,
         onProgress: (msg, percent) => {
           setProgressMsg(msg);
           setProgressPercent(syncMasterLibrary ? Math.min(percent, 75) : percent);
@@ -399,6 +452,84 @@ export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({ isOpen, projec
                 </div>
               </div>
 
+              {/* Step 1: Pull Latest from Drive & Sheet */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '10px',
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  backgroundColor: '#ECFDF5',
+                  border: '1.5px solid #6EE7B7',
+                  marginTop: '0.85rem',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div style={{ flex: 1, minWidth: '220px' }}>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#065F46' }}>
+                    📥 ดึงข้อมูลและไฟล์ล่าสุดจาก Google Drive & Sheet ลงเครื่อง (Get Latest)
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#047857' }}>
+                    อัปเดตข้อมูลโครงการและภาพผลงานจากไดรฟ์ลงเครื่อง Local ก่อนแก้ไขเพิ่มเติม
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handlePullLatestFromGoogle}
+                  disabled={isPulling || isSyncing}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    backgroundColor: '#059669',
+                    color: '#FFFFFF',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    cursor: isPulling || isSyncing ? 'not-allowed' : 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {isPulling ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                  <span>{isPulling ? 'กำลังดึงข้อมูล...' : 'ดึงข้อมูลล่าสุดลงเครื่อง'}</span>
+                </button>
+              </div>
+
+              {/* Selective DOCX Option */}
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  backgroundColor: '#F8FAFC',
+                  border: '1.5px solid #CBD5E1',
+                  cursor: 'pointer',
+                  marginTop: '0.65rem',
+                  transition: 'all 0.2s',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={includeDocx}
+                  onChange={(e) => setIncludeDocx(e.target.checked)}
+                  style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#2563EB' }}
+                />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1E293B' }}>
+                    📄 สร้างและอัปโหลดไฟล์เล่มข้อเสนอ Word (.docx) ใหม่ขึ้น Drive ด้วย
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748B' }}>
+                    หากเว้นว่างไว้ ระบบจะซิงค์เฉพาะข้อมูลและภาพที่แก้ไขขึ้น Google Sheet & Drive อย่างรวดเร็ว (ใช้เวลา ~2 วินาที)
+                  </div>
+                </div>
+              </label>
+
               {/* Master Library Sync Option */}
               <label
                 style={{
@@ -410,7 +541,7 @@ export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({ isOpen, projec
                   backgroundColor: '#F8FAFC',
                   border: '1.5px solid #CBD5E1',
                   cursor: 'pointer',
-                  marginTop: '0.85rem',
+                  marginTop: '0.65rem',
                   transition: 'all 0.2s',
                 }}
               >
@@ -425,7 +556,7 @@ export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({ isOpen, projec
                     🌐 ซิงค์คลังข้อมูลกลางทั้งหมด (Master Library) เข้าไปด้วย
                   </div>
                   <div style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                    อัปเดตแท็บ [คลังกลาง] ผลงานและสัญญา, บุคลากร, แคตตาล็อก BOM และข้อมูลบริษัทใน Google Sheet อัตโนมัติ
+                    หากต้องการซิงค์เฉพาะโครงการที่แก้ไข ไม่จำเป็นต้องติ๊กช่องนี้ (สามารถซิงค์แยกเฉพาะโครงการได้ในคลังกลาง)
                   </div>
                 </div>
               </label>

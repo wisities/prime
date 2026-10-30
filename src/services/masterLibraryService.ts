@@ -670,19 +670,38 @@ export function deduplicateMasterProjects(projects: PastProject[]): PastProject[
     if (!p || typeof p !== 'object' || !p.projectName || String(p.projectName).trim() === '') continue;
 
     const pCodeStr = String(p.projectCode || '').trim().toLowerCase();
+    const pNameNorm = norm(p.projectName);
     const existingIdx = result.findIndex((item) => {
       if (!item) return false;
+      const itemNameNorm = norm(item.projectName);
+      // ถ้าระบุชื่อโครงการไว้ทั้งคู่ ต้องเป็นชื่อโครงการเดียวกันเท่านั้นถึงจะยุบรวม (ป้องกันรหัสเก่า 20 โครงการชนกับรหัสใหม่ 26 โครงการ)
+      if (pNameNorm && itemNameNorm) {
+        return pNameNorm === itemNameNorm;
+      }
       if (p.originalMasterId && item.originalMasterId && p.originalMasterId === item.originalMasterId) return true;
-      if (p.originalMasterId && (item.id === p.originalMasterId || String(item.projectCode || '').trim().toLowerCase() === String(p.originalMasterId).trim().toLowerCase())) return true;
-      if (item.originalMasterId && (p.id === item.originalMasterId || pCodeStr === String(item.originalMasterId).trim().toLowerCase())) return true;
       if (p.id && item.id && p.id === item.id) return true;
       if (pCodeStr && item.projectCode && pCodeStr === String(item.projectCode).trim().toLowerCase()) return true;
-      if (norm(p.projectName) === norm(item.projectName)) return true;
       return false;
     });
 
     if (existingIdx >= 0) {
       const existing = result[existingIdx];
+      const hasRichBlocks = (blocks?: PastProject['imageBlocks']) =>
+        Array.isArray(blocks) &&
+        blocks.length > 0 &&
+        blocks.some((b) => b && !String(b.id || '').startsWith('img-lib-proj-') && Boolean(b.url || b.leftUrl || b.rightUrl));
+
+      const projImg = existing.projectImageUrl || p.projectImageUrl || existing.clientLogoUrl || p.clientLogoUrl;
+      const initialBlocks = hasRichBlocks(existing.imageBlocks)
+        ? existing.imageBlocks!
+        : hasRichBlocks(p.imageBlocks)
+        ? p.imageBlocks!
+        : (p.imageBlocks && p.imageBlocks.length > 0 && p.imageBlocks.some((b) => b.url || b.leftUrl || b.rightUrl))
+        ? p.imageBlocks
+        : (existing.imageBlocks && existing.imageBlocks.length > 0 && existing.imageBlocks.some((b) => b.url || b.leftUrl || b.rightUrl))
+        ? existing.imageBlocks
+        : (projImg ? [{ id: `img-${existing.id}`, type: 'single' as const, url: projImg, caption: (p.projectImageCaption || existing.projectImageCaption || '').trim() }] : []);
+
       result[existingIdx] = {
         ...existing,
         ...p,
@@ -693,9 +712,11 @@ export function deduplicateMasterProjects(projects: PastProject[]): PastProject[
         completionYearBE: Number(p.completionYearBE || existing.completionYearBE) || 2567,
         contractValue: (Number(p.contractValue) || 0) > 0 ? Number(p.contractValue) : (Number(existing.contractValue) || 0),
         description: (p.description && p.description.length > (existing.description || '').length) ? p.description : (existing.description || p.description),
+        clientLogoUrl: p.clientLogoUrl || existing.clientLogoUrl,
+        projectImageUrl: projImg,
         certificateFileUrl: p.certificateFileUrl || existing.certificateFileUrl,
         certificateFileName: p.certificateFileName || existing.certificateFileName,
-        imageBlocks: (p.imageBlocks && p.imageBlocks.length > 0) ? p.imageBlocks : (existing.imageBlocks || []),
+        imageBlocks: initialBlocks,
       };
     } else {
       result.push({
@@ -779,19 +800,40 @@ export function normalizeMasterProjects(projects: PastProject[]): PastProject[] 
         (p.projectName && e.projectName && e.projectName.trim().toLowerCase() === p.projectName.trim().toLowerCase())
       );
 
+      const matchDefault = MASTER_PROJECTS_LIBRARY.find((d) =>
+        (p.projectName && d.projectName && d.projectName.trim().toLowerCase() === p.projectName.trim().toLowerCase()) ||
+        (code && d.projectCode && d.projectCode.trim().toLowerCase() === code.toLowerCase())
+      );
+
+      const clientLogo = p.clientLogoUrl || matchLocal?.clientLogoUrl || matchDefault?.clientLogoUrl || assets.clientLogoUrl;
+      const projImg = p.projectImageUrl || matchLocal?.projectImageUrl || matchDefault?.projectImageUrl || assets.projectImageUrl || clientLogo;
+
+      const hasRichBlocks = (blocks?: PastProject['imageBlocks']) =>
+        Array.isArray(blocks) &&
+        blocks.length > 0 &&
+        blocks.some((b) => b && !String(b.id || '').startsWith('img-lib-proj-') && Boolean(b.url || b.leftUrl || b.rightUrl));
+
+      const fallbackBlocks = hasRichBlocks(p.imageBlocks)
+        ? p.imageBlocks!
+        : hasRichBlocks(matchLocal?.imageBlocks)
+        ? matchLocal!.imageBlocks!
+        : hasRichBlocks(matchDefault?.imageBlocks)
+        ? matchDefault!.imageBlocks!
+        : (Array.isArray(p.imageBlocks) && p.imageBlocks.length > 0 && p.imageBlocks.some((b) => b.url || b.leftUrl || b.rightUrl))
+        ? p.imageBlocks
+        : (projImg ? [{ id: `img-${finalId}`, type: 'single' as const, url: projImg, caption: (p.projectImageCaption || matchLocal?.projectImageCaption || `ภาพผลงาน / ตราสัญลักษณ์ ${p.clientName}`).trim() }] : []);
+
       return {
         ...p,
         id: finalId,
         contractYearBE: contractYear,
         projectCode: code,
         originalMasterId: p.originalMasterId ? String(p.originalMasterId) : finalId,
-        clientLogoUrl: p.clientLogoUrl || matchLocal?.clientLogoUrl || assets.clientLogoUrl,
-        projectImageUrl: p.projectImageUrl || matchLocal?.projectImageUrl || assets.projectImageUrl,
-        certificateFileUrl: p.certificateFileUrl || matchLocal?.certificateFileUrl || assets.certificateFileUrl,
-        certificateFileName: p.certificateFileName || matchLocal?.certificateFileName || assets.certificateFileName,
-        imageBlocks: (Array.isArray(p.imageBlocks) && p.imageBlocks.length > 0)
-          ? p.imageBlocks
-          : (matchLocal?.imageBlocks && matchLocal.imageBlocks.length > 0 ? matchLocal.imageBlocks : []),
+        clientLogoUrl: clientLogo,
+        projectImageUrl: projImg,
+        certificateFileUrl: p.certificateFileUrl || matchLocal?.certificateFileUrl || matchDefault?.certificateFileUrl || assets.certificateFileUrl,
+        certificateFileName: p.certificateFileName || matchLocal?.certificateFileName || matchDefault?.certificateFileName || assets.certificateFileName,
+        imageBlocks: fallbackBlocks,
       };
     })
   );
@@ -1056,13 +1098,13 @@ export function deduplicateMasterTeamLibrary(): TeamMember[] {
 export function getMasterProjectsLibrary(): PastProject[] {
   try {
     if (cachedProjects && Array.isArray(cachedProjects) && cachedProjects.length > 0) {
-      return normalizeMasterProjects(cachedProjects);
+      return normalizeMasterProjects([...MASTER_PROJECTS_LIBRARY, ...cachedProjects]);
     }
     const raw = localStorage.getItem(PROJECTS_LIBRARY_KEY);
     if (raw !== null && raw !== 'undefined' && raw !== 'null') {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        cachedProjects = normalizeMasterProjects(parsed);
+        cachedProjects = normalizeMasterProjects([...MASTER_PROJECTS_LIBRARY, ...parsed]);
         return cachedProjects;
       }
     }
@@ -1076,7 +1118,7 @@ export function getMasterProjectsLibrary(): PastProject[] {
 export async function fetchMasterProjectsLibraryFromCloud(): Promise<PastProject[]> {
   const fromIDB = await idbGet<PastProject[]>(IDB_STORES.MASTER_PROJECTS, 'current');
   if (fromIDB && Array.isArray(fromIDB) && fromIDB.length > 0) {
-    cachedProjects = normalizeMasterProjects(fromIDB);
+    cachedProjects = normalizeMasterProjects([...MASTER_PROJECTS_LIBRARY, ...fromIDB]);
     return cachedProjects;
   }
   return getMasterProjectsLibrary();
@@ -1118,7 +1160,17 @@ export function saveProjectToMasterLibraryResult(project: PastProject): {
   isNew: boolean;
 } {
   const current = getMasterProjectsLibrary();
-  const contractYear = project.contractYearBE || project.completionYearBE || 2568;
+  const contractYear = Number(project.contractYearBE || project.completionYearBE || 2568) || 2568;
+  const completionYear = Number(project.completionYearBE || project.contractYearBE || contractYear) || contractYear;
+
+  if (project.clientName && project.clientLogoUrl) {
+    saveClientAgencyLogo(project.clientName, project.clientLogoUrl);
+  }
+
+  const firstBlockImg =
+    project.imageBlocks?.[0]?.type === 'single'
+      ? project.imageBlocks[0].url
+      : (project.imageBlocks?.[0]?.leftUrl || (project.imageBlocks?.[0] as any)?.urlLeft);
 
   const existingIdx = findMatchingMasterProjectIndex(project, current);
 
@@ -1126,32 +1178,59 @@ export function saveProjectToMasterLibraryResult(project: PastProject): {
   let updated: PastProject[];
   let isNew = false;
 
+  const rawCode = (project.projectCode || '').trim();
+  const hasValidCode = Boolean(rawCode && !rawCode.includes('รอออกรหัส'));
+
   if (existingIdx >= 0) {
     // ซ้ำกัน: ให้อัปเดตข้อมูลเดิมในคลังกลาง แทนการบันทึกเป็นโครงการใหม่
     const target = current[existingIdx];
-    const finalCode = project.projectCode?.trim() || target.projectCode || generateMasterProjectCode(contractYear, current);
+    const finalCode = hasValidCode
+      ? rawCode
+      : (target.projectCode && !target.projectCode.includes('รอออกรหัส')
+          ? target.projectCode
+          : generateMasterProjectCode(contractYear, current, target.id));
+    const prevCode =
+      (project as any).previousProjectCode ||
+      (target.projectCode && target.projectCode !== finalCode ? target.projectCode : undefined);
+
+    const projImg = firstBlockImg || project.projectImageUrl || target.projectImageUrl || project.clientLogoUrl || target.clientLogoUrl;
+    const finalBlocks = (project.imageBlocks && project.imageBlocks.length > 0)
+      ? project.imageBlocks
+      : (target.imageBlocks && target.imageBlocks.length > 0)
+      ? target.imageBlocks
+      : (projImg ? [{ id: `img-${target.id}`, type: 'single' as const, url: projImg, caption: (project.projectImageCaption || target.projectImageCaption || '').trim() }] : []);
+
     updatedProject = {
       ...target,
       ...project,
       id: target.id, // คง ID เดิมของคลังกลางไว้เสมอ
       originalMasterId: target.id,
       projectCode: finalCode,
+      ...(prevCode ? { previousProjectCode: prevCode } : {}),
       contractYearBE: contractYear,
+      completionYearBE: completionYear,
+      clientLogoUrl: project.clientLogoUrl || target.clientLogoUrl,
+      projectImageUrl: projImg,
       certificateFileUrl: project.certificateFileUrl || target.certificateFileUrl,
       certificateFileName: project.certificateFileName || target.certificateFileName,
-      imageBlocks: (project.imageBlocks && project.imageBlocks.length > 0) ? project.imageBlocks : (target.imageBlocks || []),
-    };
+      imageBlocks: finalBlocks,
+    } as PastProject;
     updated = [...current];
     updated[existingIdx] = updatedProject;
   } else {
     // โครงการใหม่ในคลังกลาง:
     isNew = true;
-    const finalCode = project.projectCode?.trim() || generateMasterProjectCode(contractYear, current);
+    const finalCode = hasValidCode ? rawCode : generateMasterProjectCode(contractYear, current, project.id);
     const newId = (project.originalMasterId && project.originalMasterId.startsWith('lib-proj-'))
       ? project.originalMasterId
       : (project.id && project.id.startsWith('lib-proj-'))
         ? project.id
         : `lib-proj-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+
+    const projImg = firstBlockImg || project.projectImageUrl || project.clientLogoUrl;
+    const finalBlocks = (project.imageBlocks && project.imageBlocks.length > 0)
+      ? project.imageBlocks
+      : (projImg ? [{ id: `img-${newId}`, type: 'single' as const, url: projImg, caption: (project.projectImageCaption || '').trim() }] : []);
 
     updatedProject = {
       ...project,
@@ -1159,6 +1238,9 @@ export function saveProjectToMasterLibraryResult(project: PastProject): {
       originalMasterId: newId,
       projectCode: finalCode,
       contractYearBE: contractYear,
+      completionYearBE: completionYear,
+      projectImageUrl: projImg,
+      imageBlocks: finalBlocks,
     };
     updated = [updatedProject, ...current];
   }
@@ -1182,33 +1264,60 @@ export function saveMultipleProjectsToMasterLibraryResult(projects: PastProject[
 
   for (const p of projects) {
     if (!p.projectName || p.projectName.trim() === '') continue;
-    const contractYear = p.contractYearBE || p.completionYearBE || 2568;
+    const contractYear = Number(p.contractYearBE || p.completionYearBE || 2568) || 2568;
+    const completionYear = Number(p.completionYearBE || p.contractYearBE || contractYear) || contractYear;
+
+    if (p.clientName && p.clientLogoUrl) {
+      saveClientAgencyLogo(p.clientName, p.clientLogoUrl);
+    }
+
+    const firstBlockImg =
+      p.imageBlocks?.[0]?.type === 'single'
+        ? p.imageBlocks[0].url
+        : (p.imageBlocks?.[0]?.leftUrl || (p.imageBlocks?.[0] as any)?.urlLeft);
+
+    const rawCode = (p.projectCode || '').trim();
+    const hasValidCode = Boolean(rawCode && !rawCode.includes('รอออกรหัส'));
 
     const existingIdx = findMatchingMasterProjectIndex(p, current);
     let updatedProject: PastProject;
 
     if (existingIdx >= 0) {
       const target = current[existingIdx];
-      const finalCode = p.projectCode?.trim() || target.projectCode || generateMasterProjectCode(contractYear, current);
+      const finalCode = hasValidCode
+        ? rawCode
+        : (target.projectCode && !target.projectCode.includes('รอออกรหัส')
+            ? target.projectCode
+            : generateMasterProjectCode(contractYear, current, target.id));
+      const prevCode =
+        (p as any).previousProjectCode ||
+        (target.projectCode && target.projectCode !== finalCode ? target.projectCode : undefined);
+      const projImg = firstBlockImg || p.projectImageUrl || target.projectImageUrl || p.clientLogoUrl || target.clientLogoUrl;
+
       updatedProject = {
         ...target,
         ...p,
         id: target.id,
         originalMasterId: target.id,
         projectCode: finalCode,
+        ...(prevCode ? { previousProjectCode: prevCode } : {}),
         contractYearBE: contractYear,
+        completionYearBE: completionYear,
+        clientLogoUrl: p.clientLogoUrl || target.clientLogoUrl,
+        projectImageUrl: projImg,
         certificateFileUrl: p.certificateFileUrl || target.certificateFileUrl,
         certificateFileName: p.certificateFileName || target.certificateFileName,
         imageBlocks: (p.imageBlocks && p.imageBlocks.length > 0) ? p.imageBlocks : (target.imageBlocks || []),
-      };
+      } as PastProject;
       current[existingIdx] = updatedProject;
     } else {
-      const finalCode = p.projectCode?.trim() || generateMasterProjectCode(contractYear, current);
+      const finalCode = hasValidCode ? rawCode : generateMasterProjectCode(contractYear, current, p.id);
       const newId = (p.originalMasterId && p.originalMasterId.startsWith('lib-proj-'))
         ? p.originalMasterId
         : (p.id && p.id.startsWith('lib-proj-'))
           ? p.id
           : `lib-proj-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+      const projImg = firstBlockImg || p.projectImageUrl || p.clientLogoUrl;
 
       updatedProject = {
         ...p,
@@ -1216,6 +1325,8 @@ export function saveMultipleProjectsToMasterLibraryResult(projects: PastProject[
         originalMasterId: newId,
         projectCode: finalCode,
         contractYearBE: contractYear,
+        completionYearBE: completionYear,
+        projectImageUrl: projImg,
       };
       current.push(updatedProject);
     }
@@ -1238,6 +1349,182 @@ export function deduplicateMasterProjectsLibrary(): PastProject[] {
   saveLocalProjectsLibrary(deduped);
   dispatchProjectsUpdatedEvent(deduped);
   return deduped;
+}
+
+// ==============================================================================
+// Public API: Client Agencies & Logos (หน่วยงานผู้ว่าจ้างพร้อมโลโก้)
+// ==============================================================================
+
+const CLIENT_AGENCY_LOGOS_KEY = 'prime_client_agency_logos';
+
+export interface ClientAgencyOption {
+  clientName: string;
+  clientLogoUrl?: string;
+  projectCount: number;
+}
+
+export function normalizeClientAgencyName(name?: string): string {
+  let cleaned = String(name || '').replace(/\s+/g, ' ').trim();
+  if (cleaned.startsWith('ของสำนักงาน')) {
+    cleaned = cleaned.replace(/^ของ/, '').trim();
+  }
+  return cleaned;
+}
+
+function getCustomAgencyLogoMap(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(CLIENT_AGENCY_LOGOS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') return parsed;
+    }
+  } catch (e) {}
+  return {};
+}
+
+export function saveClientAgencyLogo(clientName: string, logoUrl?: string): void {
+  const cleanName = normalizeClientAgencyName(clientName);
+  if (!cleanName || typeof window === 'undefined') return;
+  try {
+    const map = getCustomAgencyLogoMap();
+    if (logoUrl) {
+      map[cleanName] = logoUrl;
+    } else {
+      delete map[cleanName];
+    }
+    localStorage.setItem(CLIENT_AGENCY_LOGOS_KEY, JSON.stringify(map));
+
+    // Propagate updated logo to matching projects in Master Projects Library
+    const current = getMasterProjectsLibrary();
+    let changed = false;
+    const updated = current.map((p) => {
+      if (normalizeClientAgencyName(p.clientName) === cleanName) {
+        if (p.clientLogoUrl !== logoUrl) {
+          changed = true;
+          return { ...p, clientLogoUrl: logoUrl };
+        }
+      }
+      return p;
+    });
+    if (changed) {
+      saveLocalProjectsLibrary(updated);
+      dispatchProjectsUpdatedEvent(updated);
+    }
+  } catch (e) {
+    console.warn('Could not save client agency logo:', e);
+  }
+}
+
+export function getUniqueClientAgencies(extraProjects?: PastProject[]): ClientAgencyOption[] {
+  const customLogos = getCustomAgencyLogoMap();
+  const masterProjects = getMasterProjectsLibrary();
+
+  const allProjects: PastProject[] = [
+    ...masterProjects,
+    ...MASTER_PROJECTS_LIBRARY,
+    ...(Array.isArray(extraProjects) ? extraProjects : []),
+  ];
+
+  const extraAgencyNames: string[] = [];
+
+  if (typeof window !== 'undefined') {
+    try {
+      const rawBidding = localStorage.getItem('prime_bidding_projects');
+      if (rawBidding) {
+        const parsedBidding = JSON.parse(rawBidding);
+        if (Array.isArray(parsedBidding)) {
+          for (const bp of parsedBidding) {
+            if (bp?.clientAgency) extraAgencyNames.push(bp.clientAgency);
+            if (bp?.proposalData?.cover?.clientAgency) extraAgencyNames.push(bp.proposalData.cover.clientAgency);
+            if (Array.isArray(bp?.proposalData?.section5?.pastProjects)) {
+              allProjects.push(...bp.proposalData.section5.pastProjects);
+            }
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
+  const agencyMap = new Map<
+    string,
+    {
+      clientName: string;
+      clientLogoUrl?: string;
+      projectKeys: Set<string>;
+    }
+  >();
+
+  for (const p of allProjects) {
+    if (!p || typeof p !== 'object') continue;
+    const cleanName = normalizeClientAgencyName(p.clientName);
+    if (!cleanName) continue;
+    const normKey = cleanName.toLowerCase();
+
+    let entry = agencyMap.get(normKey);
+    if (!entry) {
+      entry = {
+        clientName: cleanName,
+        clientLogoUrl: customLogos[cleanName],
+        projectKeys: new Set<string>(),
+      };
+      agencyMap.set(normKey, entry);
+    }
+
+    const projKey = String(p.projectName || p.projectCode || p.id || '').trim().toLowerCase();
+    if (projKey) {
+      entry.projectKeys.add(projKey);
+    }
+
+    if (p.clientLogoUrl && !entry.clientLogoUrl) {
+      entry.clientLogoUrl = p.clientLogoUrl;
+    } else if (
+      p.clientLogoUrl &&
+      entry.clientLogoUrl &&
+      !p.clientLogoUrl.startsWith('data:') &&
+      entry.clientLogoUrl.startsWith('data:')
+    ) {
+      // Prefer Google Drive URL or custom uploaded logo if available
+      entry.clientLogoUrl = p.clientLogoUrl;
+    }
+  }
+
+  for (const rawAgency of [...extraAgencyNames, ...Object.keys(customLogos)]) {
+    const cleanName = normalizeClientAgencyName(rawAgency);
+    if (!cleanName) continue;
+    const normKey = cleanName.toLowerCase();
+    if (!agencyMap.has(normKey)) {
+      const recovered = getRecoveredProjectAssets('', cleanName, '');
+      agencyMap.set(normKey, {
+        clientName: cleanName,
+        clientLogoUrl: customLogos[cleanName] || recovered.clientLogoUrl,
+        projectKeys: new Set<string>(),
+      });
+    }
+  }
+
+  const result: ClientAgencyOption[] = [];
+  for (const entry of agencyMap.values()) {
+    const finalLogo =
+      customLogos[entry.clientName] ||
+      entry.clientLogoUrl ||
+      getRecoveredProjectAssets('', entry.clientName, '').clientLogoUrl;
+    result.push({
+      clientName: entry.clientName,
+      clientLogoUrl: finalLogo,
+      projectCount: entry.projectKeys.size,
+    });
+  }
+
+  result.sort((a, b) => {
+    const isGenericA = a.clientName.includes('หน่วยงานภาครัฐ');
+    const isGenericB = b.clientName.includes('หน่วยงานภาครัฐ');
+    if (isGenericA !== isGenericB) return isGenericA ? 1 : -1;
+    if (b.projectCount !== a.projectCount) return b.projectCount - a.projectCount;
+    return a.clientName.localeCompare(b.clientName, 'th');
+  });
+
+  return result;
 }
 
 // ==============================================================================

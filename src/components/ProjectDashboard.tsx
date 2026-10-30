@@ -16,6 +16,7 @@ import { extractProjectMetadataFromFile, parseTorTextRules } from '../services/t
 import { MasterLibraryManagementModal } from './MasterLibraryManagementModal';
 import { ExportDocxModal } from './ExportDocxModal';
 import { GoogleSyncModal } from './GoogleSyncModal';
+import { ClientAgencySelect } from './ClientAgencySelect';
 import {
   FileText,
   ExternalLink,
@@ -2461,18 +2462,16 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
                   <div className="form-group" style={{ marginTop: '0.85rem', marginBottom: 0 }}>
                     <label className="form-label">
-                      <span>หน่วยงานผู้ว่าจ้าง / เจ้าของโครงการ</span>
+                      <span>หน่วยงานผู้ว่าจ้าง / เจ้าของโครงการ (เลือกจากรายการพร้อมโลโก้ หรือพิมพ์ใหม่)</span>
                       <span className="req-star">*</span>
                     </label>
-                    <input
-                      type="text"
-                      className="form-input"
+                    <ClientAgencySelect
+                      value={editingProject.clientAgency || ''}
                       placeholder="เช่น กรมพัฒนาธุรกิจการค้า กระทรวงพาณิชย์"
-                      value={editingProject.clientAgency}
-                      onChange={(e) =>
-                        setEditingProject({ ...editingProject, clientAgency: e.target.value })
-                      }
                       required
+                      onChange={(newClientAgency) =>
+                        setEditingProject({ ...editingProject, clientAgency: newClientAgency })
+                      }
                     />
                   </div>
                 </div>

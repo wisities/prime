@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
 import { CoverConfig } from '../types/proposal';
+import { ClientAgencySelect } from './ClientAgencySelect';
 import { compressImageFile } from '../utils/imageCompressor';
 import { Image as ImageIcon, Upload, Trash2, FileText, CheckCircle2, Layers } from 'lucide-react';
 
@@ -117,11 +118,10 @@ export const CoverEditor: React.FC<CoverEditorProps> = ({ cover, onChange }) => 
             <label className="form-label">
               หน่วยงานผู้ว่าจ้าง (กรม/กระทรวง/องค์กร) <span className="required">*</span>
             </label>
-            <input
-              type="text"
-              className="form-input"
-              value={cover.clientAgency}
-              onChange={(e) => handleFieldChange('clientAgency', e.target.value)}
+            <ClientAgencySelect
+              value={cover.clientAgency || ''}
+              placeholder="เลือกหรือพิมพ์ชื่อหน่วยงานผู้ว่าจ้าง..."
+              onChange={(newClientAgency) => handleFieldChange('clientAgency', newClientAgency)}
             />
           </div>
 
