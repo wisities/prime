@@ -702,12 +702,16 @@ export function deduplicateMasterProjects(projects: PastProject[]): PastProject[
         ? existing.imageBlocks
         : (projImg ? [{ id: `img-${existing.id}`, type: 'single' as const, url: projImg, caption: (p.projectImageCaption || existing.projectImageCaption || '').trim() }] : []);
 
+      const chosenCode = (p.projectCode && !String(p.projectCode).includes('รอออกรหัส'))
+        ? p.projectCode
+        : (existing.projectCode || p.projectCode);
+
       result[existingIdx] = {
         ...existing,
         ...p,
-        id: existing.id,
-        originalMasterId: existing.originalMasterId || existing.id,
-        projectCode: existing.projectCode || p.projectCode,
+        id: p.id || existing.id,
+        originalMasterId: p.originalMasterId || existing.originalMasterId || existing.id,
+        projectCode: chosenCode,
         contractYearBE: Number(p.contractYearBE || existing.contractYearBE) || undefined,
         completionYearBE: Number(p.completionYearBE || existing.completionYearBE) || 2567,
         contractValue: (Number(p.contractValue) || 0) > 0 ? Number(p.contractValue) : (Number(existing.contractValue) || 0),

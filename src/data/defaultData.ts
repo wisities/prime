@@ -26,17 +26,17 @@ export const DEFAULT_MASTER_COMPANY_PROFILE: MasterCompanyProfile = {
 
 const RAW_MASTER_PROJECTS: PastProject[] = [
   {
-    "id": "lib-proj-2569-prj-001",
-    "originalMasterId": "lib-proj-2569-prj-001",
-    "projectCode": "2569-PRJ-001",
-    "contractYearBE": 2569,
+    "id": "lib-proj-2568-prj-020",
+    "originalMasterId": "lib-proj-2568-prj-020",
+    "projectCode": "2568-PRJ-020",
+    "contractYearBE": 2568,
     "projectName": "โครงการส่งเสริมและพัฒนาทักษะความรู้เพื่อขับเคลื่อนและยกระดับกำลังคนดิจิทัลระดับอำเภอ 2568",
     "title": "โครงการส่งเสริมและพัฒนาทักษะความรู้เพื่อขับเคลื่อนและยกระดับกำลังคนดิจิทัลระดับอำเภอ 2568",
     "clientName": "บริษัท เอสวีโอเอจำกัด (มหาชน)",
     "contractValue": 20330000,
     "budget": "20330000",
-    "completionYearBE": 2569,
-    "completionYear": "2569",
+    "completionYearBE": 2568,
+    "completionYear": "2568",
     "periodDuration": "360 วัน",
     "description": "จัดทำหลักสูตรการพัฒนาทักษะดิจิทัล จัดอบรมเจ้าหน้าที่บริหารงานดิจิทัลระดับอำเภอและสถิติจังหวัดรวม 954 คน และจัดระบบการขยายผลความรู้กว่า 250,000 คน",
     "category": "พัฒนาระบบคลาวด์และ e-Service",
