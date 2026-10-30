@@ -80,6 +80,8 @@ import {
   FolderOpen,
   Sparkles,
   ArrowDownToLine,
+  CloudDownload,
+  FolderKanban,
 } from 'lucide-react';
 import { syncMasterLibraryToGoogle, MasterLibrarySyncResult } from '../services/googleSyncService';
 
@@ -1148,7 +1150,7 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <button
               type="button"
-              onClick={handleOpenSelectivePullModal}
+              onClick={() => handleOpenSelectivePullModal()}
               disabled={isPullingFromSheet || isSyncingGoogle}
               style={{
                 display: 'inline-flex',
@@ -1345,7 +1347,7 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
               <button
                 type="button"
                 onClick={() => handleInitiateSyncToGoogle(true)}
-                disabled={isSyncingToGoogle}
+                disabled={isSyncingGoogle}
                 className="btn btn-primary"
                 style={{
                   fontSize: '0.78rem',
