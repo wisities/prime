@@ -3,6 +3,7 @@ import type { BiddingProject, ProposalData } from '../../src/types/proposal';
 import type { UploadedFileResult, ProjectFolderStructure } from './driveService';
 
 type SheetsClient = ReturnType<typeof google.sheets>;
+type DriveClient = ReturnType<typeof google.drive>;
 
 export const SHEET_TABS = {
   OVERVIEW: 'ภาพรวมโครงการ (Overview)',
@@ -142,7 +143,8 @@ export function reconstructImageBlocksFromDriveIds(
   _projectCode: string,
   _projectName: string,
   projectId: string,
-  driveFileIds: string[]
+  driveFileIds: string[],
+  driveFileNameMap?: Map<string, string>
 ): { imageBlocks: any[]; projectImageUrl?: string; clientLogoUrl?: string } {
   if (driveFileIds.length === 0) {
     return { imageBlocks: [] };
@@ -151,12 +153,45 @@ export function reconstructImageBlocksFromDriveIds(
   const toThumbUrl = (fid: string) => `https://drive.google.com/thumbnail?id=${fid}&sz=w1200`;
   const mainImageUrl = toThumbUrl(driveFileIds[0]);
 
-  const blocks = driveFileIds.map((fid, idx) => ({
-    id: `img-${projectId}-${idx + 1}`,
-    type: 'single' as const,
-    url: toThumbUrl(fid),
-    caption: `ภาพประกอบผลงานที่ ${idx + 1}`,
-  }));
+  const blocks: any[] = [];
+  let i = 0;
+
+  while (i < driveFileIds.length) {
+    const fid = driveFileIds[i];
+    const fileName = driveFileNameMap?.get(fid) || '';
+    
+    // ตรวจสอบว่าเป็นภาพซีกซ้ายของภาพคู่ 3 นิ้ว (เช่น ภาพที่1a.png หรือ suffix a) หรือไม่
+    const isPairA = /[aA]\.(png|jpe?g|webp)$/i.test(fileName) || /ภาพที่\s*\d+[aA]/i.test(fileName);
+
+    if (isPairA && i + 1 < driveFileIds.length) {
+      const nextFid = driveFileIds[i + 1];
+      const nextFileName = driveFileNameMap?.get(nextFid) || '';
+      const isPairB = /[bB]\.(png|jpe?g|webp)$/i.test(nextFileName) || /ภาพที่\s*\d+[bB]/i.test(nextFileName);
+
+      if (isPairB) {
+        blocks.push({
+          id: `img-pair-${projectId}-${blocks.length + 1}`,
+          type: 'pair',
+          leftUrl: toThumbUrl(fid),
+          rightUrl: toThumbUrl(nextFid),
+          caption: '',
+          leftCaption: '',
+          rightCaption: '',
+        });
+        i += 2;
+        continue;
+      }
+    }
+
+    // กรณีเป็นภาพเดี่ยวขนาด 6 นิ้ว (Single Block)
+    blocks.push({
+      id: `img-single-${projectId}-${blocks.length + 1}`,
+      type: 'single',
+      url: toThumbUrl(fid),
+      caption: `ภาพประกอบผลงานที่ ${blocks.length + 1}`,
+    });
+    i++;
+  }
 
   return {
     imageBlocks: blocks,
@@ -1423,13 +1458,35 @@ export async function syncMasterLibraryToGoogleSheet(
  */
 export async function getMasterLibraryFromGoogleSheet(
   sheets: SheetsClient,
-  spreadsheetId: string
+  spreadsheetId: string,
+  drive?: DriveClient
 ): Promise<{
   projects: any[];
   team: any[];
 }> {
   const projects: any[] = [];
   const team: any[] = [];
+
+  // สร้าง Drive File Name Map เพื่อระบุบล็อกภาพคู่ 3 นิ้ว (ลงท้ายด้วย a/b หรือ ภาพที่1a/1b)
+  const driveFileNameMap = new Map<string, string>();
+  if (drive) {
+    try {
+      const driveListRes = await drive.files.list({
+        q: "trashed = false and mimeType contains 'image/'",
+        pageSize: 1000,
+        fields: 'files(id, name)',
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+      });
+      if (driveListRes.data.files) {
+        for (const f of driveListRes.data.files) {
+          if (f.id && f.name) driveFileNameMap.set(f.id, f.name);
+        }
+      }
+    } catch (driveMapErr) {
+      console.warn('Could not build Drive file name map:', driveMapErr);
+    }
+  }
 
   try {
     const projRes = await sheets.spreadsheets.values.get({
@@ -1454,7 +1511,8 @@ export async function getMasterLibraryFromGoogleSheet(
         code,
         name,
         id,
-        driveFileIds
+        driveFileIds,
+        driveFileNameMap
       );
       const fallbackImgUrl = projectImageUrl || extractUrlFromCell(row[13]) || extractUrlFromCell(row[15]);
 
@@ -1564,7 +1622,8 @@ export async function getProposalFromGoogleSheet(
   sheets: SheetsClient,
   spreadsheetId: string,
   projectCode: string,
-  projectTitle?: string
+  projectTitle?: string,
+  drive?: DriveClient
 ): Promise<{
   overview?: any;
   pastProjects: any[];
@@ -1581,8 +1640,8 @@ export async function getProposalFromGoogleSheet(
   const milestones: any[] = [];
   const teamMembers: any[] = [];
 
-  // ดึงคลังกลางมาเป็นฐานข้อมูลรายละเอียดและบล็อกภาพด้วย
-  const masterLib = await getMasterLibraryFromGoogleSheet(sheets, spreadsheetId);
+  // ดึงคลังกลางมาเป็นฐานข้อมูลรายละเอียดและบล็อกภาพด้วย (พร้อม Drive Map สำหรับภาพคู่ 3 นิ้ว)
+  const masterLib = await getMasterLibraryFromGoogleSheet(sheets, spreadsheetId, drive);
   const masterMapByCode = new Map<string, any>();
   const masterMapByName = new Map<string, any>();
   for (const mp of masterLib.projects) {

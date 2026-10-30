@@ -51,14 +51,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // กรณีขออ่านข้อมูลคลังกลางจาก Google Sheet (Pull / Read)
     if (req.body.action === 'get_master_library') {
       const { masterSheetId } = getGoogleCredentials();
-      const { sheets } = await getGoogleClients();
+      const { sheets, drive } = await getGoogleClients();
       if (!sheets || !masterSheetId) {
         return res.status(400).json({
           success: false,
           error: 'Google Sheets API หรือ Master Sheet ID ยังไม่ได้ตั้งค่า',
         });
       }
-      const readRes = await getMasterLibraryFromGoogleSheet(sheets, masterSheetId);
+      const readRes = await getMasterLibraryFromGoogleSheet(sheets, masterSheetId, drive);
       return res.status(200).json({
         success: true,
         projects: readRes.projects,
@@ -70,7 +70,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // กรณีขออ่านข้อมูลล่าสุดของโครงการที่เสนอจาก Google Sheet (Pull Proposal + Master Library)
     if (req.body.action === 'get_proposal_from_sheet') {
       const { masterSheetId } = getGoogleCredentials();
-      const { sheets } = await getGoogleClients();
+      const { sheets, drive } = await getGoogleClients();
       if (!sheets || !masterSheetId) {
         return res.status(400).json({
           success: false,
@@ -78,7 +78,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
       const { projectCode = '', projectTitle = '' } = req.body;
-      const pullRes = await getProposalFromGoogleSheet(sheets, masterSheetId, projectCode, projectTitle);
+      const pullRes = await getProposalFromGoogleSheet(sheets, masterSheetId, projectCode, projectTitle, drive);
       return res.status(200).json({
         success: true,
         ...pullRes,
