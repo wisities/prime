@@ -37,8 +37,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ isSupabaseReady, onBypassO
             'Google OAuth Consent Screen: ยังไม่ได้เพิ่ม Scope (email, profile, openid)',
             'Publishing status ของ Google App ยังเป็น "Testing": ผู้ใช้ต้องถูกเพิ่มในรายชื่อ "Test users" ใน Google Cloud Console หรือต้องคลิก "Publish App"',
             'Google People API: ยังไม่ได้เปิดใช้งาน (Enable) ใน Google Cloud Console',
-            'Redirect URI ใน Google Console ต้องระบุเป็น Supabase Callback URL: https://<project-ref>.supabase.co/auth/v1/callback',
-            'Client ID หรือ Client Secret ใน Supabase Dashboard (Authentication > Providers > Google) ไม่ตรงกับใน Google Console',
+            'Redirect URI ใน Google Console ต้องระบุ Callback URL ให้ถูกต้อง',
+            'Client ID หรือ Client Secret ไม่ตรงกับการตั้งค่าใน Google Console',
           ]);
         }
       }
@@ -187,7 +187,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ isSupabaseReady, onBypassO
                   onClick={() => setShowTroubleshoot(!showTroubleshoot)}
                 >
                   <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <HelpCircle size={14} /> สาเหตุและวิธีตรวจสอบใน Google Console & Supabase
+                    <HelpCircle size={14} /> สาเหตุและวิธีตรวจสอบใน Google Console
                   </span>
                   {showTroubleshoot ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                 </div>
@@ -336,11 +336,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ isSupabaseReady, onBypassO
           </div>
         )}
 
-        {!isSupabaseReady && (
-          <p style={{ fontSize: '0.75rem', color: '#DC2626', marginTop: '0.75rem' }}>
-            ⚠️ ยังไม่ได้ตั้งค่า VITE_SUPABASE_URL และ VITE_SUPABASE_ANON_KEY
-          </p>
-        )}
 
         {/* Security & Whitelist Notice */}
         <div

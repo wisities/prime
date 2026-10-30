@@ -18,7 +18,6 @@ import {
   importMasterTeamFromJson,
   generateMasterMemberId,
 } from '../services/masterLibraryService';
-import { isSupabaseConfigured } from '../services/supabaseClient';
 import { syncMasterLibraryToGoogle } from '../services/googleSyncService';
 import { Users, ShieldAlert, Plus, Trash2, Library, ChevronDown, ChevronUp, TableProperties, CheckCheck, Sparkles, RotateCcw, Clock, ArrowUp, ArrowDown, BookmarkPlus, BookmarkCheck, Check, Camera, Upload, User, Database, Download, Briefcase, List, Table as TableIcon, CloudUpload, Loader2 } from 'lucide-react';
 

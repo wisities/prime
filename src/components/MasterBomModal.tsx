@@ -9,7 +9,6 @@ import {
   resetMasterBomLibrary,
   initMasterLibraryRealtime,
 } from '../services/masterLibraryService';
-import { isSupabaseConfigured } from '../services/supabaseClient';
 import {
   Database,
   Search,
