@@ -159,13 +159,17 @@ export type ProjectTrackType = 'tor_reference' | 'supplementary';
 export interface PastProject {
   id: string;
   projectCode?: string; // รหัสโครงการ เช่น 2567-PRJ-001 (ขึ้นต้นด้วยปี พ.ศ. ที่ได้สัญญา)
+  previousProjectCode?: string; // รหัสโครงการเดิมก่อนเปลี่ยน เพื่อใช้อัปเดตแถวเดิมใน Google Sheet
   contractYearBE?: number; // ปีที่ได้สัญญา พ.ศ. (ค่าเริ่มต้นเท่ากับ completionYearBE)
   originalMasterId?: string; // รหัสอ้างอิงของโครงการเดิมในคลังกลาง เพื่อตรวจจับการอัปเดตกลับคลัง
+  title?: string; // legacy alias for projectName
   projectName: string;
   clientName: string;
   clientLogoUrl?: string; // ภาพโลโก้ของลูกค้า / หน่วยงานผู้ว่าจ้างที่เคยทำงานให้
   contractValue: number; // in Baht
+  budget?: string | number; // legacy alias for contractValue
   completionYearBE: number; // e.g. 2567
+  completionYear?: string | number; // legacy alias for completionYearBE
   periodDuration: string; // e.g. "12 เดือน"
   description: string;
   category: string;
@@ -254,10 +258,13 @@ export interface ProjectAttachment {
 export interface BiddingProject {
   id: string;
   projectCode: string;
+  previousProjectCode?: string;
   projectTitle: string;
   clientAgency: string;
   budgetAmount: number;
   egpUrl?: string;
+  driveFolderUrl?: string;
+  sheetUrl?: string;
   announcementDate?: string; // วันที่ประกาศจัดจ้าง YYYY-MM-DD
   submissionDeadline?: string; // วันเวลาที่จะต้องยื่นข้อเสนอโครงการในระบบ YYYY-MM-DDTHH:mm
   status: ProposalStatus; // 'draft' | 'submitted' | 'cancelled'
