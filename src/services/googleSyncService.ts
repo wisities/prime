@@ -264,7 +264,12 @@ export async function syncProposalToGoogle(
       });
 
       onProgress('กำลังบันทึกข้อมูลลง Google Sheet...', 85);
-      data = await response.json();
+      const rawText = await response.text();
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        throw new Error(`เซิร์ฟเวอร์ตอบกลับผิดรูปแบบ (HTTP ${response.status}): ${rawText.slice(0, 120)}`);
+      }
 
       if (!response.ok || !data.success) {
         throw new Error(data.error || 'การซิงค์ข้อมูลล้มเหลว กรุณาตรวจสอบการตั้งค่า Service Account');
@@ -384,7 +389,13 @@ export async function syncMasterLibraryToGoogle(options?: {
     });
 
     onProgress('กำลังบันทึกลงแท็บคลังกลางและตารางอ้างอิงใน Google Sheet...', 85);
-    const parsed = await response.json();
+    const rawText = await response.text();
+    let parsed: any = null;
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      throw new Error(`เซิร์ฟเวอร์ตอบกลับผิดรูปแบบ (HTTP ${response.status}): ${rawText.slice(0, 120)}`);
+    }
     if (!response.ok || !parsed?.success) {
       throw new Error(parsed?.error || `การซิงค์ผ่านเซิร์ฟเวอร์ล้มเหลว (HTTP ${response.status})`);
     }

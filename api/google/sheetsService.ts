@@ -1,7 +1,6 @@
 import { google } from 'googleapis';
-import { BiddingProject, ProposalData } from '../../src/types/proposal';
-import { UploadedFileResult, ProjectFolderStructure } from './driveService';
-import { MASTER_PROJECTS_LIBRARY } from '../../src/data/defaultData';
+import type { BiddingProject, ProposalData } from '../../src/types/proposal';
+import type { UploadedFileResult, ProjectFolderStructure } from './driveService';
 
 type SheetsClient = ReturnType<typeof google.sheets>;
 
@@ -140,85 +139,18 @@ export function extractAllDriveFileIdsFromSheetRow(
 }
 
 export function reconstructImageBlocksFromDriveIds(
-  projectCode: string,
-  projectName: string,
+  _projectCode: string,
+  _projectName: string,
   projectId: string,
   driveFileIds: string[]
 ): { imageBlocks: any[]; projectImageUrl?: string; clientLogoUrl?: string } {
-  const norm = (s?: string) => String(s || '').trim().toLowerCase();
-  const matchedTemplate = (MASTER_PROJECTS_LIBRARY || []).find(
-    (tp) =>
-      (projectCode && norm(tp.projectCode) === norm(projectCode)) ||
-      (projectName && norm(tp.projectName) === norm(projectName))
-  );
-
-  const clientLogoUrl = matchedTemplate?.clientLogoUrl;
-
   if (driveFileIds.length === 0) {
-    if (matchedTemplate?.imageBlocks && matchedTemplate.imageBlocks.length > 0) {
-      return {
-        imageBlocks: JSON.parse(JSON.stringify(matchedTemplate.imageBlocks)),
-        projectImageUrl: matchedTemplate.projectImageUrl,
-        clientLogoUrl,
-      };
-    }
-    return { imageBlocks: [], clientLogoUrl };
+    return { imageBlocks: [] };
   }
 
   const toThumbUrl = (fid: string) => `https://drive.google.com/thumbnail?id=${fid}&sz=w1200`;
   const mainImageUrl = toThumbUrl(driveFileIds[0]);
 
-  if (matchedTemplate?.imageBlocks && matchedTemplate.imageBlocks.length > 0) {
-    // ตรวจสอบว่าโครงสร้างบล็อกเดิมของโครงการนี้ใช้ได้กับรายการ Drive IDs หรือไม่
-    const reconstructed: any[] = [];
-    let cursor = 0;
-
-    for (let bIdx = 0; bIdx < matchedTemplate.imageBlocks.length; bIdx++) {
-      const tb: any = matchedTemplate.imageBlocks[bIdx];
-      if (!tb || cursor >= driveFileIds.length) break;
-
-      if ((tb.type === 'pair' || tb.type === 'double') && cursor + 1 < driveFileIds.length) {
-        reconstructed.push({
-          ...tb,
-          id: tb.id || `img-${projectId}-${bIdx + 1}`,
-          type: 'pair',
-          leftUrl: toThumbUrl(driveFileIds[cursor]),
-          rightUrl: toThumbUrl(driveFileIds[cursor + 1]),
-          leftCaption: tb.leftCaption || '',
-          rightCaption: tb.rightCaption || '',
-          caption: tb.caption || '',
-        });
-        cursor += 2;
-      } else {
-        reconstructed.push({
-          id: tb.id || `img-${projectId}-${bIdx + 1}`,
-          type: 'single',
-          url: toThumbUrl(driveFileIds[cursor]),
-          caption: tb.caption || tb.leftCaption || '',
-        });
-        cursor += 1;
-      }
-    }
-
-    // หากมีภาพใหม่เพิ่มเข้ามาใน Sheet เกินจากบล็อกเดิม ให้ต่อท้ายเป็น single block
-    while (cursor < driveFileIds.length) {
-      reconstructed.push({
-        id: `img-${projectId}-extra-${cursor + 1}`,
-        type: 'single',
-        url: toThumbUrl(driveFileIds[cursor]),
-        caption: `ภาพประกอบผลงานที่ ${cursor + 1}`,
-      });
-      cursor++;
-    }
-
-    return {
-      imageBlocks: reconstructed,
-      projectImageUrl: mainImageUrl,
-      clientLogoUrl,
-    };
-  }
-
-  // กรณีเป็นโครงการใหม่ที่ไม่อยู่ใน defaultData สร้างบล็อกจาก Drive IDs โดยตรง
   const blocks = driveFileIds.map((fid, idx) => ({
     id: `img-${projectId}-${idx + 1}`,
     type: 'single' as const,
@@ -229,7 +161,6 @@ export function reconstructImageBlocksFromDriveIds(
   return {
     imageBlocks: blocks,
     projectImageUrl: mainImageUrl,
-    clientLogoUrl,
   };
 }
 

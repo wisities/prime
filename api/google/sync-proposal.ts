@@ -1,8 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getGoogleClients, getGoogleCredentials } from './auth';
-import { setupProjectFolderHierarchy, uploadFileToDrive, getOrCreateFolder, UploadedFileResult } from './driveService';
+import { setupProjectFolderHierarchy, uploadFileToDrive, getOrCreateFolder } from './driveService';
+import type { UploadedFileResult } from './driveService';
 import { syncProjectToGoogleSheet, syncMasterLibraryToGoogleSheet, getMasterLibraryFromGoogleSheet, getProposalFromGoogleSheet } from './sheetsService';
-import { BiddingProject } from '../../src/types/proposal';
+import type { BiddingProject } from '../../src/types/proposal';
 
 export const config = {
   api: {
@@ -446,7 +447,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // 3. อัปโหลดสำเนาสัญญา / ภาพผลงาน / ภาพประกอบ (Section 5 Past Projects)
-    const { getOrCreateFolder } = await import('./driveService');
     const projImagesSubfolder = await getOrCreateFolder(drive, folderStructure.projectFolderId, '05_ภาพผลงานและกิจกรรมโครงการ');
     const teamPhotosSubfolder = await getOrCreateFolder(drive, folderStructure.projectFolderId, '06_รูปถ่ายบุคลากร');
 
@@ -510,8 +510,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               pRef
             );
             uploadedResults.push(upB);
-          } else if (block.type === 'double' || block.type === 'pair') {
-            const left = block.urlLeft || block.leftUrl;
+          } else if ((block.type as string) === 'double' || block.type === 'pair') {
+            const left = (block as any).urlLeft || block.leftUrl;
             if (left && left.startsWith('data:')) {
               const bNameL = `ภาพผลงาน_${pCodeClean}_ภาพที่${b + 1}a.png`;
               const upBL = await uploadFileToDrive(
@@ -525,7 +525,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               );
               uploadedResults.push(upBL);
             }
-            const right = block.urlRight || block.rightUrl;
+            const right = (block as any).urlRight || block.rightUrl;
             if (right && right.startsWith('data:')) {
               const bNameR = `ภาพผลงาน_${pCodeClean}_ภาพที่${b + 1}b.png`;
               const upBR = await uploadFileToDrive(
@@ -587,8 +587,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               mRef
             );
             uploadedResults.push(upB);
-          } else if (block.type === 'double' || block.type === 'pair') {
-            const left = block.urlLeft || block.leftUrl;
+          } else if ((block.type as string) === 'double' || block.type === 'pair') {
+            const left = (block as any).urlLeft || block.leftUrl;
             if (left && left.startsWith('data:')) {
               const bNameL = `ภาพประวัติย่อ_${cleanMemberName}_ภาพที่${b + 1}a.png`;
               const upBL = await uploadFileToDrive(
@@ -603,7 +603,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               );
               uploadedResults.push(upBL);
             }
-            const right = block.urlRight || block.rightUrl;
+            const right = (block as any).urlRight || block.rightUrl;
             if (right && right.startsWith('data:')) {
               const bNameR = `ภาพประวัติย่อ_${cleanMemberName}_ภาพที่${b + 1}b.png`;
               const upBR = await uploadFileToDrive(
