@@ -271,3 +271,105 @@ export async function uploadFileToDrive(
 
   return uploadFileViaAppsScriptBridge(fileName, mimeType, buffer, category, projectRef, memberRef);
 }
+
+/**
+ * ดาวน์โหลดและ parse ไฟล์ JSON (เช่น proposal_data.json) จากโฟลเดอร์โครงการบน Google Drive
+ */
+export async function downloadJsonFileFromDrive(
+  drive: DriveClient,
+  folderId: string,
+  fileName: string = 'proposal_data.json'
+): Promise<any | null> {
+  if (!drive || !folderId) return null;
+  try {
+    const safeName = fileName.replace(/'/g, "\\'");
+    const q = `'${folderId}' in parents and name = '${safeName}' and trashed = false`;
+    const searchRes = await drive.files.list({
+      q,
+      fields: 'files(id, name)',
+      spaces: 'drive',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+
+    if (!searchRes.data.files || searchRes.data.files.length === 0) {
+      return null;
+    }
+
+    const fileId = searchRes.data.files[0].id!;
+    const fileRes = await drive.files.get(
+      {
+        fileId,
+        alt: 'media',
+        supportsAllDrives: true,
+      },
+      { responseType: 'text' }
+    );
+
+    if (typeof fileRes.data === 'string') {
+      try {
+        return JSON.parse(fileRes.data);
+      } catch (pErr) {
+        console.warn(`File ${fileName} is not valid JSON:`, pErr);
+        return null;
+      }
+    }
+    return fileRes.data;
+  } catch (err: any) {
+    console.warn(`Could not download ${fileName} from Drive folder ${folderId}:`, err?.message || err);
+    return null;
+  }
+}
+
+/**
+ * ค้นหาโฟลเดอร์ของโครงการใน Google Drive โดยใช้รหัสโครงการ หรือดึง ID จาก URL
+ */
+export async function findProjectFolderId(
+  drive: DriveClient,
+  parentFolderId: string,
+  projectCode: string,
+  driveFolderUrl?: string
+): Promise<string | null> {
+  if (!drive) return null;
+
+  // 1. ลองดึง File/Folder ID จาก URL ก่อน
+  if (driveFolderUrl) {
+    const idFromUrl = extractDriveFileIdFromUrl(driveFolderUrl);
+    if (idFromUrl) return idFromUrl;
+  }
+
+  // 2. ค้นหาโฟลเดอร์ที่มีรหัสโครงการในชื่อโฟลเดอร์ (เช่น [2568-PRJ-001] ...)
+  if (projectCode && parentFolderId) {
+    try {
+      const safeCode = projectCode.replace(/'/g, "\\'");
+      const q = `mimeType = 'application/vnd.google-apps.folder' and name contains '${safeCode}' and trashed = false`;
+      const searchRes = await drive.files.list({
+        q,
+        fields: 'files(id, name)',
+        spaces: 'drive',
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+      });
+
+      if (searchRes.data.files && searchRes.data.files.length > 0) {
+        return searchRes.data.files[0].id || null;
+      }
+    } catch (searchErr) {
+      console.warn('Could not search folder by projectCode:', searchErr);
+    }
+  }
+
+  return null;
+}
+
+function extractDriveFileIdFromUrl(url?: string): string {
+  if (!url || typeof url !== 'string') return '';
+  const m1 = url.match(/[?&]id=([a-zA-Z0-9_-]{15,})/);
+  if (m1 && m1[1]) return m1[1];
+  const m2 = url.match(/\/folders\/([a-zA-Z0-9_-]{15,})/);
+  if (m2 && m2[1]) return m2[1];
+  const m3 = url.match(/\/d\/([a-zA-Z0-9_-]{15,})/);
+  if (m3 && m3[1]) return m3[1];
+  return '';
+}
+

@@ -4,13 +4,14 @@ import {
   syncProposalToGoogle,
   syncMasterLibraryToGoogle,
   fetchProposalFromGoogleSheet,
+  fetchFullProposalFromCloud,
   checkGoogleSyncHealth,
   GoogleSyncResult,
   GoogleSyncHealth,
   getEffectiveAppsScriptUrl,
 } from '../services/googleSyncService';
 import { saveMasterProjectsLibrary } from '../services/masterLibraryService';
-import { saveProject } from '../services/projectStorageService';
+import { saveProject, markProposalAsSynced } from '../services/projectStorageService';
 import {
   CloudUpload,
   Download,
@@ -83,8 +84,20 @@ export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({ isOpen, projec
     try {
       setIsPulling(true);
       setSyncResult(null);
-      const res = await fetchProposalFromGoogleSheet(project.projectCode, project.projectTitle);
+      const res = await fetchFullProposalFromCloud(project.projectCode, project.projectTitle, project.driveFolderUrl);
       if (res.success) {
+        if (res.source === 'drive_json' && res.project) {
+          saveProject(res.project);
+          markProposalAsSynced(res.project.id);
+          if (onProjectUpdated) {
+            onProjectUpdated(res.project);
+          }
+          alert(
+            `✅ ดึงเล่มข้อเสนอโครงการจาก Google Drive สำเร็จสมบูรณ์แบบ 100%!\n\n• โครงการ: ${res.project.projectCode || '-'} - ${res.project.projectTitle}\n• ข้อมูล Section 1-5, ขอบเขตงาน, วิธีการดำเนินงาน, รูปผัง, งวดงาน และ BOM ได้รับการกู้คืนครบถ้วนสมบูรณ์`
+          );
+          return;
+        }
+
         if (res.masterProjects && res.masterProjects.length > 0) {
           saveMasterProjectsLibrary(res.masterProjects);
         }
@@ -107,6 +120,7 @@ export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({ isOpen, projec
             },
           };
           saveProject(updatedProj);
+          markProposalAsSynced(updatedProj.id);
           if (onProjectUpdated) {
             onProjectUpdated(updatedProj);
           }
@@ -137,6 +151,10 @@ export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({ isOpen, projec
           setProgressPercent(syncMasterLibrary ? Math.min(percent, 75) : percent);
         },
       });
+
+      if (result.success) {
+        markProposalAsSynced(project.id);
+      }
 
       if (result.success && syncMasterLibrary) {
         setProgressMsg('กำลังซิงค์คลังข้อมูลกลาง (ผลงานและบุคลากรกลาง)...');

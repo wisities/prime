@@ -17,6 +17,7 @@ import { MasterLibraryManagementModal } from './MasterLibraryManagementModal';
 import { ExportDocxModal } from './ExportDocxModal';
 import { GoogleSyncModal } from './GoogleSyncModal';
 import { ClientAgencySelect } from './ClientAgencySelect';
+import { CloudProposalPickerModal } from './CloudProposalPickerModal';
 import {
   FileText,
   ExternalLink,
@@ -54,6 +55,7 @@ import {
   Minimize2,
   Library,
   CloudUpload,
+  CloudDownload,
 } from 'lucide-react';
 
 export interface ClauseCompletionInfo {
@@ -200,8 +202,9 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   const [statusFilter, setStatusFilter] = useState<'all' | ProposalStatus>('all');
   const [sortBy, setSortBy] = useState<'deadline' | 'announcement' | 'budget'>('deadline');
   
-  // Master Library Modal State
+  // Master Library & Cloud Proposal Picker State
   const [showMasterLibrariesModal, setShowMasterLibrariesModal] = useState(false);
+  const [showCloudPickerModal, setShowCloudPickerModal] = useState(false);
   const [exportDocxModalProject, setExportDocxModalProject] = useState<BiddingProject | null>(null);
   const [syncGoogleModalProject, setSyncGoogleModalProject] = useState<BiddingProject | null>(null);
   const [isExportingPrimePackage, setIsExportingPrimePackage] = useState<string | null>(null);
@@ -1176,6 +1179,24 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
           >
             <CloudUpload size={16} color="#2563EB" />
             <span>ซิงค์ Google Drive & Sheets</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-primary hero-btn-cta"
+            onClick={() => setShowCloudPickerModal(true)}
+            title="เลือกดึงร่างข้อเสนอโครงการจาก Google Cloud ลงมาทำงานในเซสชันนี้ทีละเรื่อง"
+            style={{
+              backgroundColor: '#16A34A',
+              borderColor: '#15803D',
+              color: '#FFFFFF',
+              fontWeight: 700,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <CloudDownload size={18} /> 📥 ดึงเล่มข้อเสนอจาก Google Cloud
           </button>
 
           <button
@@ -2872,6 +2893,22 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       <MasterLibraryManagementModal
         isOpen={showMasterLibrariesModal}
         onClose={() => setShowMasterLibrariesModal(false)}
+      />
+
+      {/* Cloud Proposal Picker Modal (เลือกดึงเล่มข้อเสนอจาก Cloud ลงมาทำทีละเรื่อง) */}
+      <CloudProposalPickerModal
+        isOpen={showCloudPickerModal}
+        onClose={() => setShowCloudPickerModal(false)}
+        onSelectProject={(pulledProj) => {
+          // เพิ่มโครงการลงในลิสต์ หรืออัปเดตโครงการเดิมถ้ามีอยู่แล้ว
+          const exists = projects.some((p) => p.id === pulledProj.id || (p.projectCode && p.projectCode === pulledProj.projectCode));
+          const updated = exists
+            ? projects.map((p) => (p.id === pulledProj.id || (p.projectCode && p.projectCode === pulledProj.projectCode) ? pulledProj : p))
+            : [pulledProj, ...projects];
+          onUpdateProjects(updated);
+          onSelectProject(pulledProj.id);
+        }}
+        onCreateNewProject={handleOpenCreateModal}
       />
 
       {/* Export DOCX Confirmation / Annex Modal */}

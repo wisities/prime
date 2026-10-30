@@ -8,6 +8,100 @@ import { isSampleTeamMember } from './masterLibraryService';
 export { isSampleTeamMember };
 
 const LOCAL_STORAGE_KEY = 'prime_bidding_projects_v2';
+export const SESSION_ACTIVE_PROJECT_KEY = 'prime_session_active_proposal';
+export const UNSYNCED_PROPOSALS_KEY = 'prime_unsynced_proposals_vault';
+
+/**
+ * ดึงรายการเล่มข้อเสนอโครงการที่มีการแก้ไขค้างไว้แต่ยังไม่ได้ซิงก์ขึ้น Google Cloud
+ */
+export function getUnsyncedProposals(): BiddingProject[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(UNSYNCED_PROPOSALS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {}
+  return [];
+}
+
+/**
+ * บันทึกเล่มข้อเสนอที่มีการแก้ไขเข้าสู่ Unsynced Drafts Vault ชั่วคราว (กันไฟดับ/เน็ตหลุด)
+ */
+export function markProposalAsUnsynced(project: BiddingProject): void {
+  if (typeof window === 'undefined' || !project?.id) return;
+  try {
+    const current = getUnsyncedProposals();
+    const idx = current.findIndex((p) => p.id === project.id || (p.projectCode && p.projectCode === project.projectCode));
+    if (idx >= 0) {
+      current[idx] = project;
+    } else {
+      current.push(project);
+    }
+    localStorage.setItem(UNSYNCED_PROPOSALS_KEY, JSON.stringify(current));
+  } catch (e) {}
+}
+
+/**
+ * ปลดสถานะเล่มข้อเสนอออกจาก Unsynced Drafts เมื่อกดซิงก์ขึ้น Google Drive & Sheets สำเร็จแล้ว
+ */
+export function markProposalAsSynced(projectId: string): void {
+  if (typeof window === 'undefined' || !projectId) return;
+  try {
+    const current = getUnsyncedProposals();
+    const filtered = current.filter((p) => p.id !== projectId && p.projectCode !== projectId);
+    localStorage.setItem(UNSYNCED_PROPOSALS_KEY, JSON.stringify(filtered));
+  } catch (e) {}
+}
+
+/**
+ * บันทึกเล่มข้อเสนอลง Session Working Memory ชั่วคราว
+ */
+export function saveActiveSessionProposal(project: BiddingProject, markUnsynced: boolean = true): void {
+  if (typeof window === 'undefined' || !project) return;
+  try {
+    sessionStorage.setItem(SESSION_ACTIVE_PROJECT_KEY, JSON.stringify(project));
+    if (markUnsynced) {
+      markProposalAsUnsynced(project);
+    }
+  } catch (e) {}
+}
+
+/**
+ * อ่านเล่มข้อเสนอที่เปิดทำงานอยู่ในเซสชันปัจจุบัน (หรือกู้คืนจาก Unsynced Drafts)
+ */
+export function getActiveSessionProposal(): BiddingProject | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const sessionRaw = sessionStorage.getItem(SESSION_ACTIVE_PROJECT_KEY);
+    if (sessionRaw) {
+      const parsed = JSON.parse(sessionRaw);
+      if (parsed && typeof parsed === 'object') return parsed;
+    }
+
+    // หากเปิดเบราว์เซอร์ใหม่ และมีงานที่แก้ไขค้างไว้แต่ยังไม่ได้ซิงค์ ให้กู้คืนมาจากตู้เซฟ
+    const unsynced = getUnsyncedProposals();
+    if (unsynced.length > 0) {
+      const latest = unsynced[0];
+      try {
+        sessionStorage.setItem(SESSION_ACTIVE_PROJECT_KEY, JSON.stringify(latest));
+      } catch (e) {}
+      return latest;
+    }
+  } catch (e) {}
+  return null;
+}
+
+/**
+ * ล้างข้อมูลเล่มข้อเสนอในเซสชันออกจากหน้าจอเครื่อง 100%
+ */
+export function clearActiveSessionProposal(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.removeItem(SESSION_ACTIVE_PROJECT_KEY);
+  } catch (e) {}
+}
 
 // --- IndexedDB for unlimited, large attachment storage ---
 const DB_NAME = 'PrimeProposalAttachmentsDB';
@@ -705,6 +799,7 @@ export async function loadAllProjects(): Promise<{
  */
 export async function saveProject(rawProject: BiddingProject): Promise<boolean> {
   const project = normalizeProjectBudget(rawProject);
+  saveActiveSessionProposal(project, true);
 
   // บันทึกไฟล์แนบทุกไฟล์ลงใน IndexedDB ถาวร
   if (project.attachments && project.attachments.length > 0) {

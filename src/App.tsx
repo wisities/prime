@@ -62,9 +62,19 @@ import {
   Library,
   History,
   CloudUpload,
+  CloudDownload,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 
-import { loadAllProjects, saveProject, normalizeProjectBudget, isSampleTeamMember } from './services/projectStorageService';
+import {
+  loadAllProjects,
+  saveProject,
+  normalizeProjectBudget,
+  isSampleTeamMember,
+  clearActiveSessionProposal,
+  getUnsyncedProposals,
+} from './services/projectStorageService';
 import { saveDraftSnapshot, purgeBloatedHistoricalSnapshots } from './services/localDatabase';
 
 const PROJECTS_STORAGE_KEY = 'prime_bidding_projects_v2';
@@ -1028,6 +1038,41 @@ export const App: React.FC = () => {
                   <FileDown size={17} />
                   <span>{isExporting ? 'กำลังสร้างเอกสาร...' : 'ดาวน์โหลด Word (.docx)'}</span>
                 </button>
+
+                {/* Close & Reset Workspace Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const unsynced = getUnsyncedProposals();
+                    const hasUnsyncedThis = unsynced.some(
+                      (p) => p.id === activeProjectId || (currentProject && p.id === currentProject.id)
+                    );
+                    if (hasUnsyncedThis) {
+                      if (!confirm('⚠️ เล่มนี้มีการแก้ไขที่ยังไม่ได้ซิงก์ขึ้น Google Cloud หากปิดและล้างเล่มการแก้ไขจะหายไป คุณแน่ใจหรือไม่ที่จะปิดเล่มนี้?')) {
+                        return;
+                      }
+                    } else {
+                      if (!confirm('ต้องการปิดเล่มและล้างข้อมูลเล่มนี้ออกจากเครื่องหรือไม่? (ข้อมูลบน Google Drive & Sheet ปลอดภัย 100%)')) {
+                        return;
+                      }
+                    }
+                    clearActiveSessionProposal();
+                    setCurrentView('dashboard');
+                  }}
+                  className="btn btn-outline"
+                  style={{
+                    backgroundColor: '#FEF2F2',
+                    color: '#DC2626',
+                    borderColor: '#FECACA',
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                  title="ปิดเล่มข้อเสนอนี้และล้างข้อมูลออกจากเครื่อง เพื่อให้เครื่องสะอาด (ข้อมูลบนคลาวด์ปลอดภัย)"
+                >
+                  <Trash2 size={15} /> ปิดเล่ม
+                </button>
               </>
             )}
 
@@ -1262,6 +1307,62 @@ export const App: React.FC = () => {
         <div>
           {/* Main Content Area */}
           <main className="main-wrapper">
+            {/* Unsynced Draft Warning Banner */}
+            {(() => {
+              const unsynced = getUnsyncedProposals();
+              const isCurrentUnsynced = unsynced.some(
+                (p) => p.id === activeProjectId || (currentProject && p.id === currentProject.id)
+              );
+              if (!isCurrentUnsynced) return null;
+              return (
+                <div
+                  style={{
+                    backgroundColor: '#FEF3C7',
+                    border: '1.5px solid #F59E0B',
+                    borderRadius: '10px',
+                    padding: '0.75rem 1.25rem',
+                    marginBottom: '1.25rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '0.75rem',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <AlertTriangle size={20} color="#D97706" style={{ flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontWeight: 700, color: '#92400E', fontSize: '0.875rem' }}>
+                        ⚠️ มีการแก้ไขเนื้อหาในเล่มนี้ที่ยังไม่ได้ซิงก์ขึ้น Google Cloud
+                      </div>
+                      <div style={{ fontSize: '0.78rem', color: '#B45309', marginTop: '2px' }}>
+                        ระบบสำรองข้อมูลฉุกเฉินไว้ในเครื่องชั่วคราวแล้ว เมื่อแก้ไขเสร็จกรุณากดปุ่มเพื่อส่งข้อมูลกลับเข้า Google Drive & Sheets
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowGoogleSyncModal(true)}
+                    className="btn btn-primary"
+                    style={{
+                      fontSize: '0.8rem',
+                      padding: '0.4rem 0.95rem',
+                      backgroundColor: '#D97706',
+                      borderColor: '#B45309',
+                      color: '#FFFFFF',
+                      fontWeight: 700,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                    }}
+                  >
+                    <CloudUpload size={15} /> ซิงก์ขึ้น Google Cloud ทันที
+                  </button>
+                </div>
+              );
+            })()}
+
             {/* Project Mini Summary Banner with Status and e-GP Link */}
             <div
               style={{

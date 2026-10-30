@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getGoogleClients, getGoogleCredentials } from './auth';
-import { setupProjectFolderHierarchy, uploadFileToDrive, getOrCreateFolder } from './driveService';
+import { setupProjectFolderHierarchy, uploadFileToDrive, getOrCreateFolder, downloadJsonFileFromDrive, findProjectFolderId } from './driveService';
 import type { UploadedFileResult } from './driveService';
-import { syncProjectToGoogleSheet, syncMasterLibraryToGoogleSheet, getMasterLibraryFromGoogleSheet, getProposalFromGoogleSheet } from './sheetsService';
+import { syncProjectToGoogleSheet, syncMasterLibraryToGoogleSheet, getMasterLibraryFromGoogleSheet, getProposalFromGoogleSheet, SHEET_TABS } from './sheetsService';
 import type { BiddingProject } from '../../src/types/proposal';
 
 export const maxDuration = 60;
@@ -83,6 +83,128 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         success: true,
         ...pullRes,
         message: `ดึงข้อมูลล่าสุดของโครงการ ${projectCode || projectTitle} จาก Google Sheet สำเร็จ (${pullRes.pastProjects.length} ผลงานอ้างอิง)`,
+      });
+    }
+
+    // กรณีขอรายชื่อข้อเสนอโครงการทั้งหมดบน Google Cloud (เพื่อแสดงให้ผู้ใช้เลือกหยิบเป็นเรื่องๆ)
+    if (req.body.action === 'list_cloud_proposals') {
+      const { masterSheetId } = getGoogleCredentials();
+      const { sheets } = await getGoogleClients();
+      if (!sheets || !masterSheetId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Google Sheets API หรือ Master Sheet ID ยังไม่ได้ตั้งค่า',
+        });
+      }
+
+      try {
+        const ovRes = await sheets.spreadsheets.values.get({
+          spreadsheetId: masterSheetId,
+          range: `'${SHEET_TABS.OVERVIEW}'!A2:M`,
+          valueRenderOption: 'FORMULA',
+        });
+        const ovDispRes = await sheets.spreadsheets.values.get({
+          spreadsheetId: masterSheetId,
+          range: `'${SHEET_TABS.OVERVIEW}'!A2:M`,
+        });
+
+        const formRows = ovRes.data.values || [];
+        const dispRows = ovDispRes.data.values || [];
+        const cloudProposals: any[] = [];
+
+        function extractUrl(val: any): string {
+          if (!val) return '';
+          const s = String(val).trim();
+          const m = s.match(/HYPERLINK\(\s*["']([^"']+)["']/i);
+          if (m && m[1]) return m[1];
+          if (s.startsWith('http')) return s;
+          return '';
+        }
+
+        for (let i = 0; i < dispRows.length; i++) {
+          const dRow = dispRows[i] || [];
+          const fRow = formRows[i] || [];
+          const pCode = String(dRow[0] || fRow[0] || '').trim();
+          const pTitle = String(dRow[1] || fRow[1] || '').trim();
+          if (!pCode && !pTitle) continue;
+
+          cloudProposals.push({
+            projectCode: pCode,
+            projectTitle: pTitle,
+            clientAgency: String(dRow[2] || '').trim(),
+            budgetAmount: Number(String(dRow[3] || '0').replace(/,/g, '')) || 0,
+            announcementDate: String(dRow[4] || '').trim(),
+            submissionDeadline: String(dRow[5] || '').trim(),
+            status: String(dRow[6] || 'draft').trim(),
+            assignedTo: String(dRow[7] || '').trim(),
+            progressPercent: Number(dRow[8]) || 0,
+            driveFolderUrl: extractUrl(fRow[9]) || extractUrl(dRow[9]),
+            docxUrl: extractUrl(fRow[10]) || extractUrl(dRow[10]),
+            torUrl: extractUrl(fRow[11]) || extractUrl(dRow[11]),
+            lastSyncedAt: String(dRow[12] || '').trim(),
+          });
+        }
+
+        return res.status(200).json({
+          success: true,
+          proposals: cloudProposals,
+          count: cloudProposals.length,
+          message: `พบข้อเสนอโครงการบน Google Cloud ทั้งหมด ${cloudProposals.length} เรื่อง`,
+        });
+      } catch (listErr: any) {
+        return res.status(500).json({
+          success: false,
+          error: `ไม่สามารถดึงรายชื่อโครงการจาก Google Sheet ได้: ${listErr?.message || listErr}`,
+        });
+      }
+    }
+
+    // กรณีขออ่านร่างข้อเสนอโครงการฉบับเต็ม (proposal_data.json จาก Drive หรือ fallback Sheet)
+    if (req.body.action === 'get_cloud_proposal_full') {
+      const { parentFolderId, masterSheetId } = getGoogleCredentials();
+      const { drive, sheets } = await getGoogleClients();
+      const { projectCode = '', projectTitle = '', driveFolderUrl = '' } = req.body;
+
+      let fullProjectData: any = null;
+
+      // 1. ลองค้นหาและดาวน์โหลด proposal_data.json จาก Google Drive โดยตรง
+      if (drive) {
+        try {
+          const folderId = await findProjectFolderId(drive, parentFolderId, projectCode, driveFolderUrl);
+          if (folderId) {
+            fullProjectData = await downloadJsonFileFromDrive(drive, folderId, 'proposal_data.json');
+          }
+        } catch (driveReadErr) {
+          console.warn('Could not read proposal_data.json directly from Drive:', driveReadErr);
+        }
+      }
+
+      // 2. หากพบ proposal_data.json ใน Drive ให้ส่งกลับทันที (ข้อมูลครบถ้วน 100% ทุก Section)
+      if (fullProjectData && typeof fullProjectData === 'object') {
+        return res.status(200).json({
+          success: true,
+          source: 'drive_json',
+          project: fullProjectData,
+          message: `กู้คืนเล่มข้อเสนอ "${projectCode || projectTitle}" จาก Google Drive สมบูรณ์แบบ 100%`,
+        });
+      }
+
+      // 3. Fallback: หากยังไม่มี proposal_data.json (เช่น ซิงค์รุ่นก่อน) ให้อ่านโครงสร้างจาก Google Sheet
+      if (sheets && masterSheetId) {
+        const pullRes = await getProposalFromGoogleSheet(sheets, masterSheetId, projectCode, projectTitle, drive);
+        return res.status(200).json({
+          success: true,
+          source: 'sheet_overview',
+          overview: pullRes.overview,
+          pastProjects: pullRes.pastProjects,
+          masterProjects: pullRes.masterProjects,
+          message: `ดึงข้อมูลโครงการ "${projectCode || projectTitle}" จาก Google Sheet สำเร็จ`,
+        });
+      }
+
+      return res.status(400).json({
+        success: false,
+        error: 'ไม่พบข้อมูลโครงการใน Google Drive หรือ Sheet',
       });
     }
 
@@ -665,6 +787,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'docx_output'
       );
       uploadedResults.push(uploadedDocx);
+    }
+
+    // 5.5 อัปโหลดไฟล์ก้อนข้อมูลโครงการฉบับเต็ม (proposal_data.json) ลงในโฟลเดอร์โครงการ เพื่อให้สลับไปเปิดเครื่องอื่นได้ครบ 100%
+    try {
+      const cleanProjectPayload = {
+        ...project,
+        driveFolderUrl: folderStructure.projectFolderUrl,
+        lastSyncedAt: new Date().toISOString(),
+      };
+      const jsonContent = Buffer.from(JSON.stringify(cleanProjectPayload, null, 2), 'utf-8');
+      const uploadedJson = await uploadFileToDrive(
+        drive,
+        folderStructure.projectFolderId,
+        'proposal_data.json',
+        'application/json',
+        jsonContent,
+        'proposal_json_snapshot'
+      );
+      uploadedResults.push(uploadedJson);
+    } catch (jsonErr) {
+      console.warn('Could not upload proposal_data.json:', jsonErr);
     }
 
     // 6. ซิงค์ข้อมูลทั้งหมดลง Google Sheets พร้อมผูกลิงก์ไฟล์ที่อัปโหลด

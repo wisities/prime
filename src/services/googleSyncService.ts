@@ -579,3 +579,130 @@ export async function fetchProposalFromGoogleSheet(
     };
   }
 }
+
+export interface CloudProposalSummary {
+  projectCode: string;
+  projectTitle: string;
+  clientAgency: string;
+  budgetAmount: number;
+  announcementDate: string;
+  submissionDeadline: string;
+  status: string;
+  assignedTo: string;
+  progressPercent: number;
+  driveFolderUrl: string;
+  docxUrl: string;
+  torUrl: string;
+  lastSyncedAt: string;
+}
+
+/**
+ * ดึงรายชื่อข้อเสนอโครงการทั้งหมดที่มีอยู่ใน Google Cloud (แท็บ Overview ใน Sheet)
+ * เพื่อแสดงให้ผู้ใช้เลือกหยิบลงมาทำงานทีละเรื่องในเซสชัน
+ */
+export async function fetchCloudProposalsList(): Promise<{
+  success: boolean;
+  proposals?: CloudProposalSummary[];
+  count?: number;
+  message?: string;
+  error?: string;
+}> {
+  try {
+    const res = await fetch('/api/google/sync-proposal', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'list_cloud_proposals',
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.proposals)) {
+        return {
+          success: true,
+          proposals: data.proposals,
+          count: data.count || data.proposals.length,
+          message: data.message,
+        };
+      }
+      return {
+        success: false,
+        error: data.error || 'ไม่สามารถดึงรายชื่อโครงการจาก Google Cloud ได้',
+      };
+    }
+
+    return {
+      success: false,
+      error: `Server responded with status ${res.status}`,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อ Google Cloud',
+    };
+  }
+}
+
+/**
+ * ดึงเล่มข้อเสนอโครงการฉบับสมบูรณ์ (proposal_data.json จาก Google Drive หรือโครงสร้างจาก Sheet)
+ * เพื่อนำมาเปิดทำงานบนเว็บในเซสชันใหม่แบบครบถ้วน 100% ทุก Section
+ */
+export async function fetchFullProposalFromCloud(
+  projectCode: string,
+  projectTitle?: string,
+  driveFolderUrl?: string
+): Promise<{
+  success: boolean;
+  source?: 'drive_json' | 'sheet_overview';
+  project?: BiddingProject;
+  overview?: any;
+  pastProjects?: PastProject[];
+  masterProjects?: PastProject[];
+  message?: string;
+  error?: string;
+}> {
+  try {
+    const res = await fetch('/api/google/sync-proposal', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'get_cloud_proposal_full',
+        projectCode,
+        projectTitle,
+        driveFolderUrl,
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success) {
+        return {
+          success: true,
+          source: data.source,
+          project: data.project,
+          overview: data.overview,
+          pastProjects: data.pastProjects,
+          masterProjects: data.masterProjects,
+          message: data.message,
+        };
+      }
+      return {
+        success: false,
+        error: data.error || 'ไม่พบข้อมูลโครงการใน Google Cloud',
+      };
+    }
+
+    // Fallback เก่า
+    return await fetchProposalFromGoogleSheet(projectCode, projectTitle);
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || 'เกิดข้อผิดพลาดในการดึงเล่มข้อเสนอจาก Google Cloud',
+    };
+  }
+}
