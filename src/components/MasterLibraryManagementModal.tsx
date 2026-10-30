@@ -34,6 +34,12 @@ import {
   importMasterTeamFromCsv,
   saveMasterProjectsLibrary,
   saveMasterTeamLibrary,
+  getUnsyncedProjectDrafts,
+  getUnsyncedTeamDrafts,
+  markProjectsAsSynced,
+  markTeamMembersAsSynced,
+  markProjectAsUnsynced,
+  markTeamMemberAsUnsynced,
 } from '../services/masterLibraryService';
 import { fetchMasterLibraryFromGoogleSheet } from '../services/googleSyncService';
 import { sortPastProjects } from './Section5Editor';
@@ -123,7 +129,14 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
   const currentYearBE = 2568;
 
   // Local Staging & Code Generation on Sync
-  const [modifiedProjectIds, setModifiedProjectIds] = useState<Set<string>>(new Set());
+  const [modifiedProjectIds, setModifiedProjectIds] = useState<Set<string>>(() => {
+    const drafts = getUnsyncedProjectDrafts();
+    return new Set(drafts.map((p) => p.id).filter(Boolean));
+  });
+  const [modifiedMemberIds, setModifiedMemberIds] = useState<Set<string>>(() => {
+    const drafts = getUnsyncedTeamDrafts();
+    return new Set(drafts.map((m) => m.id).filter(Boolean));
+  });
   const [autoGenCodeOnSync, setAutoGenCodeOnSync] = useState(true);
   const [showSyncCodeConfirmModal, setShowSyncCodeConfirmModal] = useState(false);
   const [syncCodeConfirmations, setSyncCodeConfirmations] = useState<Array<{
@@ -199,15 +212,32 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
       if (res.success) {
         setProjects(getMasterProjectsLibrary());
         setTeamMembers(getMasterTeamLibrary());
-        if (isIncremental && options?.targetProjects) {
-          const syncedIds = new Set(options.targetProjects.map((p) => p.id));
-          setModifiedProjectIds((prev) => {
-            const next = new Set(prev);
-            syncedIds.forEach((id) => next.delete(id));
-            return next;
-          });
-        } else if (!isIncremental) {
+        if (isIncremental) {
+          if (options?.targetProjects && options.targetProjects.length > 0) {
+            const syncedIds = options.targetProjects.map((p) => p.id);
+            markProjectsAsSynced(syncedIds);
+            setModifiedProjectIds((prev) => {
+              const next = new Set(prev);
+              syncedIds.forEach((id) => next.delete(id));
+              return next;
+            });
+          }
+          if (options?.targetTeam && options.targetTeam.length > 0) {
+            const syncedMIds = options.targetTeam.map((m) => m.id);
+            markTeamMembersAsSynced(syncedMIds);
+            setModifiedMemberIds((prev) => {
+              const next = new Set(prev);
+              syncedMIds.forEach((id) => next.delete(id));
+              return next;
+            });
+          }
+        } else {
+          const allPIds = projects.map((p) => p.id);
+          const allMIds = teamMembers.map((m) => m.id);
+          markProjectsAsSynced(allPIds);
+          markTeamMembersAsSynced(allMIds);
           setModifiedProjectIds(new Set());
+          setModifiedMemberIds(new Set());
         }
         showToast(res.message);
       } else {
@@ -310,12 +340,14 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
       return;
     }
 
-    // หากเลือกซิงค์เฉพาะโครงการที่มีการแก้ไข (Incremental Sync)
+    // หากเลือกซิงค์เฉพาะโครงการ/บุคลากรที่มีการแก้ไข (Incremental Sync)
     const modifiedList = projects.filter((p) => modifiedProjectIds.has(p.id));
-    if (incrementalOnly && modifiedList.length > 0) {
+    const modifiedTeamList = teamMembers.filter((m) => modifiedMemberIds.has(m.id));
+    if (incrementalOnly && (modifiedList.length > 0 || modifiedTeamList.length > 0)) {
       await executeFinalSyncToGoogle(projects, {
         incremental: true,
         targetProjects: modifiedList,
+        targetTeam: modifiedTeamList,
       });
       return;
     }
@@ -836,6 +868,7 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
     const { updatedLibrary, savedProject, isNew } = saveProjectToMasterLibraryResult(projToSave);
     setProjects(updatedLibrary);
     setModifiedProjectIds((prev) => new Set(prev).add(savedProject.id));
+    markProjectAsUnsynced(savedProject);
     setIsEditingProject(false);
     showToast(`💾 บันทึก${isNew ? 'โครงการใหม่' : 'การแก้ไข'} "${savedProject.projectName}" ลงในเครื่องแล้ว (รอซิงค์ลง Google Sheet)`);
   };
@@ -966,6 +999,8 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
 
     const { updatedLibrary, savedMember, isNew } = saveMemberToMasterLibraryResult(memberToSave);
     setTeamMembers(updatedLibrary);
+    setModifiedMemberIds((prev) => new Set(prev).add(savedMember.id));
+    markTeamMemberAsUnsynced(savedMember);
     setIsEditingMember(false);
     showToast(`${isNew ? 'บันทึกบุคลากรใหม่' : 'อัปเดตข้อมูลบุคลากรเดิม'} "${savedMember.name}" (รหัส: ${savedMember.memberCode}) ลงในคลังกลางสำเร็จ`);
   };
@@ -1271,6 +1306,62 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Unsynced Drafts Working Memory Warning Banner */}
+        {(modifiedProjectIds.size > 0 || modifiedMemberIds.size > 0) && (
+          <div
+            style={{
+              margin: '0 1.25rem 0.65rem 1.25rem',
+              padding: '0.65rem 1rem',
+              backgroundColor: '#FEF3C7',
+              border: '1.5px solid #F59E0B',
+              borderRadius: '8px',
+              color: '#92400E',
+              fontSize: '0.825rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '0.75rem',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '260px' }}>
+              <AlertTriangle size={18} color="#D97706" style={{ flexShrink: 0 }} />
+              <div>
+                <span style={{ fontWeight: 700 }}>⚠️ มีงานที่แก้ไขในเซสชันนี้แต่ยังไม่ได้ซิงก์ลง Google Sheet: </span>
+                {modifiedProjectIds.size > 0 && <span>โครงการ <strong>{modifiedProjectIds.size}</strong> รายการ </span>}
+                {modifiedProjectIds.size > 0 && modifiedMemberIds.size > 0 && <span>• </span>}
+                {modifiedMemberIds.size > 0 && <span>บุคลากร <strong>{modifiedMemberIds.size}</strong> ท่าน</span>}
+                <div style={{ fontSize: '0.75rem', color: '#B45309', marginTop: '2px' }}>
+                  ระบบสำรองข้อมูลที่แก้ค้างไว้นี้ในเครื่องชั่วคราวให้ปลอดภัยแล้ว แต่เมื่อทำเสร็จกรุณากดปุ่มซิงก์เพื่อบันทึกถาวรลงชีต
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button
+                type="button"
+                onClick={() => handleInitiateSyncToGoogle(true)}
+                disabled={isSyncingToGoogle}
+                className="btn btn-primary"
+                style={{
+                  fontSize: '0.78rem',
+                  padding: '0.35rem 0.85rem',
+                  backgroundColor: '#D97706',
+                  borderColor: '#B45309',
+                  color: '#FFFFFF',
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                }}
+              >
+                <CloudUpload size={14} /> ซิงก์งานที่ค้างทั้งหมดทันที
+              </button>
+            </div>
           </div>
         )}
 
@@ -2103,11 +2194,11 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleOpenSelectivePullModal('team')}
+                        onClick={() => handleOpenSelectivePullModal('projects')}
                         disabled={isPullingFromSheet}
                         className="btn btn-outline"
                         style={{ fontSize: '0.78rem', padding: '0.4rem 0.65rem', color: '#047857', borderColor: '#6EE7B7', backgroundColor: '#ECFDF5', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
-                        title="เปิดหน้าต่างเลือกดึงข้อมูลบุคลากรจาก Google Sheet ทีละท่านหรือทั้งหมด"
+                        title="เปิดหน้าต่างเลือกดึงข้อมูลผลงานโครงการจาก Google Sheet ทีละโครงการหรือทั้งหมด"
                       >
                         {isPullingFromSheet ? (
                           <>
@@ -2119,6 +2210,31 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                           </>
                         )}
                       </button>
+                      {projects.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (modifiedProjectIds.size > 0) {
+                              if (!confirm(`⚠️ มีผลงานโครงการที่แก้ไขแล้วแต่ยังไม่ได้ซิงก์ ${modifiedProjectIds.size} รายการ หากล้างเซสชันการแก้ไขนี้จะหายไป คุณแน่ใจหรือไม่ที่จะล้างโครงการในเซสชันนี้ออกจากหน้าจอ?`)) {
+                                return;
+                              }
+                            } else {
+                              if (!confirm('ต้องการล้างข้อมูลโครงการในเซสชันนี้ออกจากหน้าจอหรือไม่? (ข้อมูลบน Google Sheet ปลอดภัยไม่ได้รับผลกระทบใดๆ)')) {
+                                return;
+                              }
+                            }
+                            clearAllMasterProjects();
+                            setProjects([]);
+                            setModifiedProjectIds(new Set());
+                            showToast('ล้างข้อมูลโครงการในเซสชันนี้เรียบร้อยแล้ว');
+                          }}
+                          className="btn btn-outline"
+                          style={{ fontSize: '0.78rem', padding: '0.4rem 0.65rem', color: '#DC2626', borderColor: '#FECACA', backgroundColor: '#FEF2F2', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
+                          title="ล้างข้อมูลโครงการในเซสชันนี้ออกจากหน้าจอ เพื่อเริ่มต้นใหม่ (ข้อมูลใน Google Sheet ปลอดภัยไม่ถูกลบ)"
+                        >
+                          <Trash2 size={13} /> ล้างเซสชัน
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => fileInputProjectsCsvRef.current?.click()}
@@ -2260,15 +2376,77 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                   {/* List View */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     {filteredProjects.length === 0 ? (
-                      <div style={{ textAlign: 'center', padding: '2.5rem 1rem', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px dashed #CBD5E1' }}>
-                        <FileText size={36} color="#94A3B8" style={{ margin: '0 auto 0.5rem' }} />
-                        <div style={{ fontWeight: 600, color: '#475569', fontSize: '0.95rem' }}>
-                          ไม่พบรายการผลงานโครงการในคลังกลาง
+                      projects.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '3.5rem 1.5rem', backgroundColor: '#F8FAFC', borderRadius: '12px', border: '2px dashed #CBD5E1' }}>
+                          <div style={{ width: '56px', height: '56px', borderRadius: '50%', backgroundColor: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
+                            <CloudDownload size={28} color="#2563EB" />
+                          </div>
+                          <div style={{ fontWeight: 700, color: '#1E293B', fontSize: '1.05rem' }}>
+                            เซสชันคลังโครงการพร้อมใช้งาน (Cloud-First Session)
+                          </div>
+                          <div style={{ fontSize: '0.85rem', color: '#64748B', marginTop: '0.35rem', maxWidth: '520px', margin: '0.35rem auto 1.5rem auto', lineHeight: 1.5 }}>
+                            ระบบจะไม่เก็บข้อมูลค้างถาวรไว้ที่เครื่อง เพื่อให้ Google Sheet เป็นฐานข้อมูลหลักเสมอ (Single Source of Truth)
+                            ก่อนเริ่มทำงาน คุณสามารถเลือกหยิบเฉพาะบางโครงการที่ต้องการแก้ไขลงมา หรือดึงข้อมูลโครงการทั้งหมดลงมาทำงานในเซสชันนี้ได้
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenSelectivePullModal('projects')}
+                              disabled={isPullingFromSheet}
+                              className="btn btn-primary"
+                              style={{
+                                fontSize: '0.875rem',
+                                padding: '0.55rem 1.25rem',
+                                backgroundColor: '#16A34A',
+                                borderColor: '#16A34A',
+                                color: '#FFFFFF',
+                                fontWeight: 600,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                              }}
+                            >
+                              <ArrowDownToLine size={16} /> 📥 เลือกดึงเฉพาะบางโครงการ (แนะนำ)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handlePullFromGoogleSheet}
+                              disabled={isPullingFromSheet}
+                              className="btn btn-outline"
+                              style={{
+                                fontSize: '0.875rem',
+                                padding: '0.55rem 1.25rem',
+                                backgroundColor: '#FFFFFF',
+                                color: '#0F172A',
+                                fontWeight: 600,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                              }}
+                            >
+                              <Download size={16} /> ดึงโครงการทั้งหมดจาก Google Sheet
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleOpenAddProject}
+                              className="btn btn-outline"
+                              style={{ fontSize: '0.875rem', padding: '0.55rem 1rem', color: '#475569' }}
+                            >
+                              <Plus size={15} /> + เพิ่มโครงการใหม่
+                            </button>
+                          </div>
                         </div>
-                        <div style={{ fontSize: '0.8rem', color: '#64748B', marginTop: '0.25rem' }}>
-                          คุณสามารถคลิกปุ่ม "+ เพิ่มโครงการใหม่เข้าคลัง" ด้านบนเพื่อเริ่มบันทึกประวัติผลงาน
+                      ) : (
+                        <div style={{ textAlign: 'center', padding: '2.5rem 1rem', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px dashed #CBD5E1' }}>
+                          <FileText size={36} color="#94A3B8" style={{ margin: '0 auto 0.5rem' }} />
+                          <div style={{ fontWeight: 600, color: '#475569', fontSize: '0.95rem' }}>
+                            ไม่พบผลงานโครงการที่ตรงกับเงื่อนไขการค้นหา
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: '#64748B', marginTop: '0.25rem' }}>
+                            ลองเปลี่ยนคำค้นหา หรือเลือกตัวกรองประเภทผลงานเป็น "ทุกประเภท"
+                          </div>
                         </div>
-                      </div>
+                      )
                     ) : (
                       filteredProjects.map((item) => {
                         const isTorRef = (item.projectType || 'tor_reference') === 'tor_reference';
@@ -2992,6 +3170,31 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                           </>
                         )}
                       </button>
+                      {teamMembers.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (modifiedMemberIds.size > 0) {
+                              if (!confirm(`⚠️ มีบุคลากรที่แก้ไขแล้วแต่ยังไม่ได้ซิงก์ ${modifiedMemberIds.size} ท่าน หากล้างเซสชันการแก้ไขนี้จะหายไป คุณแน่ใจหรือไม่ที่จะล้างรายชื่อบุคลากรในเซสชันนี้ออกจากหน้าจอ?`)) {
+                                return;
+                              }
+                            } else {
+                              if (!confirm('ต้องการล้างข้อมูลบุคลากรในเซสชันนี้ออกจากหน้าจอหรือไม่? (ข้อมูลบน Google Sheet ปลอดภัยไม่ได้รับผลกระทบใดๆ)')) {
+                                return;
+                              }
+                            }
+                            clearAllMasterTeamMembers();
+                            setTeamMembers([]);
+                            setModifiedMemberIds(new Set());
+                            showToast('ล้างข้อมูลบุคลากรในเซสชันนี้เรียบร้อยแล้ว');
+                          }}
+                          className="btn btn-outline"
+                          style={{ fontSize: '0.78rem', padding: '0.4rem 0.65rem', color: '#DC2626', borderColor: '#FECACA', backgroundColor: '#FEF2F2', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
+                          title="ล้างข้อมูลบุคลากรในเซสชันนี้ออกจากหน้าจอ เพื่อเริ่มต้นใหม่ (ข้อมูลใน Google Sheet ปลอดภัยไม่ถูกลบ)"
+                        >
+                          <Trash2 size={13} /> ล้างเซสชัน
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => fileInputTeamCsvRef.current?.click()}
@@ -3046,15 +3249,77 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                   {/* Team List View */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     {filteredTeam.length === 0 ? (
-                      <div style={{ textAlign: 'center', padding: '2.5rem 1rem', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px dashed #CBD5E1' }}>
-                        <Users size={36} color="#94A3B8" style={{ margin: '0 auto 0.5rem' }} />
-                        <div style={{ fontWeight: 600, color: '#475569', fontSize: '0.95rem' }}>
-                          ไม่พบข้อมูลบุคลากรในคลังกลาง
+                      teamMembers.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '3.5rem 1.5rem', backgroundColor: '#F8FAFC', borderRadius: '12px', border: '2px dashed #CBD5E1' }}>
+                          <div style={{ width: '56px', height: '56px', borderRadius: '50%', backgroundColor: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
+                            <CloudDownload size={28} color="#2563EB" />
+                          </div>
+                          <div style={{ fontWeight: 700, color: '#1E293B', fontSize: '1.05rem' }}>
+                            เซสชันคลังบุคลากรพร้อมใช้งาน (Cloud-First Session)
+                          </div>
+                          <div style={{ fontSize: '0.85rem', color: '#64748B', marginTop: '0.35rem', maxWidth: '520px', margin: '0.35rem auto 1.5rem auto', lineHeight: 1.5 }}>
+                            ระบบจะไม่เก็บข้อมูลค้างถาวรไว้ที่เครื่อง เพื่อให้ Google Sheet เป็นฐานข้อมูลหลักเสมอ (Single Source of Truth)
+                            ก่อนเริ่มทำงาน คุณสามารถเลือกหยิบเฉพาะบางท่านที่ต้องการแก้ไขลงมา หรือดึงข้อมูลบุคลากรทั้งหมดลงมาทำงานในเซสชันนี้ได้
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenSelectivePullModal('team')}
+                              disabled={isPullingFromSheet}
+                              className="btn btn-primary"
+                              style={{
+                                fontSize: '0.875rem',
+                                padding: '0.55rem 1.25rem',
+                                backgroundColor: '#16A34A',
+                                borderColor: '#16A34A',
+                                color: '#FFFFFF',
+                                fontWeight: 600,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                              }}
+                            >
+                              <ArrowDownToLine size={16} /> 📥 เลือกดึงเฉพาะบางท่าน (แนะนำ)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handlePullFromGoogleSheet}
+                              disabled={isPullingFromSheet}
+                              className="btn btn-outline"
+                              style={{
+                                fontSize: '0.875rem',
+                                padding: '0.55rem 1.25rem',
+                                backgroundColor: '#FFFFFF',
+                                color: '#0F172A',
+                                fontWeight: 600,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                              }}
+                            >
+                              <Download size={16} /> ดึงบุคลากรทั้งหมดจาก Google Sheet
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleOpenAddMember}
+                              className="btn btn-outline"
+                              style={{ fontSize: '0.875rem', padding: '0.55rem 1rem', color: '#475569' }}
+                            >
+                              <Plus size={15} /> + เพิ่มบุคลากรใหม่
+                            </button>
+                          </div>
                         </div>
-                        <div style={{ fontSize: '0.8rem', color: '#64748B', marginTop: '0.25rem' }}>
-                          คลิกปุ่ม "+ เพิ่มบุคลากรใหม่เข้าคลัง" เพื่อสร้างประวัติทีมงานกลาง
+                      ) : (
+                        <div style={{ textAlign: 'center', padding: '2.5rem 1rem', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px dashed #CBD5E1' }}>
+                          <Users size={36} color="#94A3B8" style={{ margin: '0 auto 0.5rem' }} />
+                          <div style={{ fontWeight: 600, color: '#475569', fontSize: '0.95rem' }}>
+                            ไม่พบข้อมูลบุคลากรที่ตรงกับเงื่อนไขการค้นหา
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: '#64748B', marginTop: '0.25rem' }}>
+                            ลองเปลี่ยนคำค้นหา หรือเลือกตัวกรองเป็น "ทุกตำแหน่ง"
+                          </div>
                         </div>
-                      </div>
+                      )
                     ) : (
                       filteredTeam.map((member) => (
                         <div

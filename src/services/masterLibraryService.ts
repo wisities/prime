@@ -9,7 +9,134 @@ const PROJECTS_LIBRARY_KEY = 'prime_master_projects_library';
 const BOM_LIBRARY_KEY = 'prime_master_bom_catalog';
 const COMPANY_PROFILE_KEY = 'prime_master_company_profile';
 
-// In-memory runtime caches (always synchronous, hydrated from IndexedDB)
+export const UNSYNCED_PROJECTS_KEY = 'prime_unsynced_projects_drafts';
+export const UNSYNCED_TEAM_KEY = 'prime_unsynced_team_drafts';
+export const SESSION_PROJECTS_KEY = 'prime_session_projects_library';
+export const SESSION_TEAM_KEY = 'prime_session_team_library';
+
+/**
+ * ดึงรายการผลงานโครงการที่มีการแก้ไขค้างไว้แต่ยังไม่ได้ซิงค์ขึ้น Google Sheet
+ */
+export function getUnsyncedProjectDrafts(): PastProject[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(UNSYNCED_PROJECTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.warn('Could not read unsynced project drafts:', e);
+  }
+  return [];
+}
+
+/**
+ * บันทึก/อัปเดตรายการโครงการที่แก้ไขลงใน Unsynced Drafts Vault (LocalStorage)
+ */
+export function markProjectAsUnsynced(project: PastProject): void {
+  if (typeof window === 'undefined' || !project) return;
+  try {
+    const current = getUnsyncedProjectDrafts();
+    const norm = (s?: any) => String(s || '').trim().toLowerCase();
+    const idx = current.findIndex(
+      (p) =>
+        (p.id && (p.id === project.id || p.originalMasterId === project.id)) ||
+        (p.projectCode && norm(p.projectCode) === norm(project.projectCode)) ||
+        (p.projectName && norm(p.projectName) === norm(project.projectName))
+    );
+    if (idx >= 0) {
+      current[idx] = { ...current[idx], ...project };
+    } else {
+      current.push(project);
+    }
+    localStorage.setItem(UNSYNCED_PROJECTS_KEY, JSON.stringify(current));
+  } catch (e) {
+    console.warn('Could not mark project as unsynced:', e);
+  }
+}
+
+/**
+ * ปลดรายการโครงการออกจาก Unsynced Drafts เมื่อซิงค์ขึ้น Google Sheet & Drive สำเร็จแล้ว
+ */
+export function markProjectsAsSynced(projectIds: string[]): void {
+  if (typeof window === 'undefined' || !Array.isArray(projectIds) || projectIds.length === 0) return;
+  try {
+    const current = getUnsyncedProjectDrafts();
+    const targetSet = new Set(projectIds);
+    const remaining = current.filter((p) => !targetSet.has(p.id) && !targetSet.has(p.projectCode || ''));
+    if (remaining.length > 0) {
+      localStorage.setItem(UNSYNCED_PROJECTS_KEY, JSON.stringify(remaining));
+    } else {
+      localStorage.removeItem(UNSYNCED_PROJECTS_KEY);
+    }
+  } catch (e) {
+    console.warn('Could not mark projects as synced:', e);
+  }
+}
+
+/**
+ * ดึงรายการบุคลากรที่มีการแก้ไขค้างไว้แต่ยังไม่ได้ซิงค์ขึ้น Google Sheet
+ */
+export function getUnsyncedTeamDrafts(): TeamMember[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(UNSYNCED_TEAM_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.warn('Could not read unsynced team drafts:', e);
+  }
+  return [];
+}
+
+/**
+ * บันทึก/อัปเดตรายการบุคลากรที่แก้ไขลงใน Unsynced Drafts Vault (LocalStorage)
+ */
+export function markTeamMemberAsUnsynced(member: TeamMember): void {
+  if (typeof window === 'undefined' || !member) return;
+  try {
+    const current = getUnsyncedTeamDrafts();
+    const norm = (s?: any) => String(s || '').trim().toLowerCase();
+    const idx = current.findIndex(
+      (m) =>
+        (m.id && (m.id === member.id || m.originalMasterId === member.id)) ||
+        (m.memberCode && norm(m.memberCode) === norm(member.memberCode)) ||
+        (m.name && norm(m.name) === norm(member.name))
+    );
+    if (idx >= 0) {
+      current[idx] = { ...current[idx], ...member };
+    } else {
+      current.push(member);
+    }
+    localStorage.setItem(UNSYNCED_TEAM_KEY, JSON.stringify(current));
+  } catch (e) {
+    console.warn('Could not mark team member as unsynced:', e);
+  }
+}
+
+/**
+ * ปลดรายการบุคลากรออกจาก Unsynced Drafts เมื่อซิงค์ขึ้น Google Sheet สำเร็จแล้ว
+ */
+export function markTeamMembersAsSynced(memberIds: string[]): void {
+  if (typeof window === 'undefined' || !Array.isArray(memberIds) || memberIds.length === 0) return;
+  try {
+    const current = getUnsyncedTeamDrafts();
+    const targetSet = new Set(memberIds);
+    const remaining = current.filter((m) => !targetSet.has(m.id) && !targetSet.has(m.memberCode || ''));
+    if (remaining.length > 0) {
+      localStorage.setItem(UNSYNCED_TEAM_KEY, JSON.stringify(remaining));
+    } else {
+      localStorage.removeItem(UNSYNCED_TEAM_KEY);
+    }
+  } catch (e) {
+    console.warn('Could not mark team members as synced:', e);
+  }
+}
+
+// In-memory runtime caches (always synchronous, hydrated from SessionStorage/Drafts)
 let cachedProjects: PastProject[] | null = null;
 let cachedTeam: TeamMember[] | null = null;
 let cachedBom: MasterBomItem[] | null = null;
@@ -366,21 +493,19 @@ function cloudRowToCompanyProfile(row: any): MasterCompanyProfile {
 
 function saveLocalTeamLibrary(items: TeamMember[]): void {
   cachedTeam = items;
-  idbSet(IDB_STORES.MASTER_TEAM, 'current', items).catch(() => {});
-  try {
-    localStorage.setItem(TEAM_LIBRARY_KEY, JSON.stringify(items));
-  } catch (e) {
-    // Quota safe: IndexedDB stores the full data
+  if (typeof window !== 'undefined') {
+    try {
+      sessionStorage.setItem(SESSION_TEAM_KEY, JSON.stringify(items));
+    } catch (e) {}
   }
 }
 
 function saveLocalProjectsLibrary(items: PastProject[]): void {
   cachedProjects = items;
-  idbSet(IDB_STORES.MASTER_PROJECTS, 'current', items).catch(() => {});
-  try {
-    localStorage.setItem(PROJECTS_LIBRARY_KEY, JSON.stringify(items));
-  } catch (e) {
-    // Quota safe: IndexedDB stores the full data including high-res image blocks
+  if (typeof window !== 'undefined') {
+    try {
+      sessionStorage.setItem(SESSION_PROJECTS_KEY, JSON.stringify(items));
+    } catch (e) {}
   }
 }
 
@@ -898,28 +1023,43 @@ export function getMasterTeamLibrary(): TeamMember[] {
     if (cachedTeam && Array.isArray(cachedTeam)) {
       return cachedTeam;
     }
-    const raw = localStorage.getItem(TEAM_LIBRARY_KEY);
-    if (raw !== null && raw !== 'undefined' && raw !== 'null') {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        cachedTeam = parsed;
-        return cachedTeam;
+    if (typeof window !== 'undefined') {
+      // 1. ตรวจสอบใน sessionStorage (Session Working Memory)
+      const sessionRaw = sessionStorage.getItem(SESSION_TEAM_KEY);
+      if (sessionRaw !== null && sessionRaw !== 'undefined' && sessionRaw !== 'null') {
+        const parsed = JSON.parse(sessionRaw);
+        if (Array.isArray(parsed)) {
+          cachedTeam = parsed;
+          return cachedTeam;
+        }
       }
+
+      // 2. หากเพิ่งเปิดเบราว์เซอร์ใหม่ ให้ตรวจดูว่ามีบุคลากรที่แก้ไขค้างไว้แต่ยังไม่ได้ซิงก์หรือไม่
+      const unsyncedRaw = localStorage.getItem(UNSYNCED_TEAM_KEY);
+      if (unsyncedRaw !== null && unsyncedRaw !== 'undefined' && unsyncedRaw !== 'null') {
+        const parsedUnsynced = JSON.parse(unsyncedRaw);
+        if (Array.isArray(parsedUnsynced) && parsedUnsynced.length > 0) {
+          cachedTeam = normalizeMasterTeam(parsedUnsynced);
+          try {
+            sessionStorage.setItem(SESSION_TEAM_KEY, JSON.stringify(cachedTeam));
+          } catch (e) {}
+          return cachedTeam;
+        }
+      }
+
+      // 3. หากไม่มีงานค้างซิงก์ ให้เริ่มต้นด้วยคลังที่ว่างเปล่า (Empty Workspace)
+      try {
+        localStorage.removeItem(TEAM_LIBRARY_KEY);
+      } catch (e) {}
     }
   } catch (e) {
-    console.warn('Could not read master team library from localStorage:', e);
+    console.warn('Could not read master team library:', e);
   }
-  cachedTeam = normalizeMasterTeam([...MASTER_TEAM_LIBRARY]);
-  saveLocalTeamLibrary(cachedTeam);
+  cachedTeam = [];
   return cachedTeam;
 }
 
 export async function fetchMasterTeamLibraryFromCloud(): Promise<TeamMember[]> {
-  const fromIDB = await idbGet<TeamMember[]>(IDB_STORES.MASTER_TEAM, 'current');
-  if (fromIDB && Array.isArray(fromIDB)) {
-    cachedTeam = fromIDB;
-    return cachedTeam;
-  }
   return getMasterTeamLibrary();
 }
 
@@ -934,12 +1074,20 @@ export function deleteMasterTeamMember(id: string): TeamMember[] {
   const current = getMasterTeamLibrary();
   const updated = current.filter((m) => m.id !== id && m.memberCode !== id);
   saveLocalTeamLibrary(updated);
+  markTeamMembersAsSynced([id]);
   dispatchTeamUpdatedEvent(updated);
   return updated;
 }
 
 export function clearAllMasterTeamMembers(): TeamMember[] {
   saveLocalTeamLibrary([]);
+  if (typeof window !== 'undefined') {
+    try {
+      sessionStorage.removeItem(SESSION_TEAM_KEY);
+      localStorage.removeItem(UNSYNCED_TEAM_KEY);
+      localStorage.removeItem(TEAM_LIBRARY_KEY);
+    } catch (e) {}
+  }
   dispatchTeamUpdatedEvent([]);
   return [];
 }
@@ -1009,6 +1157,7 @@ export function saveMemberToMasterLibraryResult(member: TeamMember): {
 
   const deduped = deduplicateMasterTeam(updated);
   saveLocalTeamLibrary(deduped);
+  markTeamMemberAsUnsynced(updatedMember);
   dispatchTeamUpdatedEvent(deduped);
   return { updatedLibrary: deduped, savedMember: updatedMember, isNew };
 }
@@ -1068,6 +1217,9 @@ export function saveMultipleMembersToMasterLibraryResult(members: TeamMember[]):
 
   const deduped = deduplicateMasterTeam(current);
   saveLocalTeamLibrary(deduped);
+  for (const sm of savedMembers) {
+    markTeamMemberAsUnsynced(sm);
+  }
   dispatchTeamUpdatedEvent(deduped);
   return { updatedLibrary: deduped, savedMembers };
 }
@@ -1093,27 +1245,43 @@ export function getMasterProjectsLibrary(): PastProject[] {
     if (cachedProjects && Array.isArray(cachedProjects)) {
       return cachedProjects;
     }
-    const raw = localStorage.getItem(PROJECTS_LIBRARY_KEY);
-    if (raw !== null && raw !== 'undefined' && raw !== 'null') {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        cachedProjects = parsed;
-        return cachedProjects;
+    if (typeof window !== 'undefined') {
+      // 1. ตรวจสอบใน sessionStorage (Session Working Memory)
+      const sessionRaw = sessionStorage.getItem(SESSION_PROJECTS_KEY);
+      if (sessionRaw !== null && sessionRaw !== 'undefined' && sessionRaw !== 'null') {
+        const parsed = JSON.parse(sessionRaw);
+        if (Array.isArray(parsed)) {
+          cachedProjects = parsed;
+          return cachedProjects;
+        }
       }
+
+      // 2. หากเพิ่งเปิดเบราว์เซอร์ใหม่ ให้ตรวจดูว่ามีงานที่แก้ไขค้างไว้จากรอบก่อนและยังไม่ได้ซิงก์หรือไม่
+      const unsyncedRaw = localStorage.getItem(UNSYNCED_PROJECTS_KEY);
+      if (unsyncedRaw !== null && unsyncedRaw !== 'undefined' && unsyncedRaw !== 'null') {
+        const parsedUnsynced = JSON.parse(unsyncedRaw);
+        if (Array.isArray(parsedUnsynced) && parsedUnsynced.length > 0) {
+          cachedProjects = normalizeMasterProjects(parsedUnsynced);
+          try {
+            sessionStorage.setItem(SESSION_PROJECTS_KEY, JSON.stringify(cachedProjects));
+          } catch (e) {}
+          return cachedProjects;
+        }
+      }
+
+      // 3. หากไม่มีงานค้างซิงก์ ให้เริ่มต้นด้วยคลังที่ว่างเปล่า (Empty Workspace)
+      try {
+        localStorage.removeItem(PROJECTS_LIBRARY_KEY);
+      } catch (e) {}
     }
   } catch (e) {
-    console.warn('Could not read master projects library from localStorage:', e);
+    console.warn('Could not read master projects library:', e);
   }
-  cachedProjects = normalizeMasterProjects([...MASTER_PROJECTS_LIBRARY]);
+  cachedProjects = [];
   return cachedProjects;
 }
 
 export async function fetchMasterProjectsLibraryFromCloud(): Promise<PastProject[]> {
-  const fromIDB = await idbGet<PastProject[]>(IDB_STORES.MASTER_PROJECTS, 'current');
-  if (fromIDB && Array.isArray(fromIDB)) {
-    cachedProjects = fromIDB;
-    return cachedProjects;
-  }
   return getMasterProjectsLibrary();
 }
 
@@ -1127,12 +1295,20 @@ export function deleteMasterProject(id: string): PastProject[] {
   const current = getMasterProjectsLibrary();
   const updated = current.filter((p) => p.id !== id && p.projectCode !== id);
   saveLocalProjectsLibrary(updated);
+  markProjectsAsSynced([id]);
   dispatchProjectsUpdatedEvent(updated);
   return updated;
 }
 
 export function clearAllMasterProjects(): PastProject[] {
   saveLocalProjectsLibrary([]);
+  if (typeof window !== 'undefined') {
+    try {
+      sessionStorage.removeItem(SESSION_PROJECTS_KEY);
+      localStorage.removeItem(UNSYNCED_PROJECTS_KEY);
+      localStorage.removeItem(PROJECTS_LIBRARY_KEY);
+    } catch (e) {}
+  }
   dispatchProjectsUpdatedEvent([]);
   return [];
 }
@@ -1240,6 +1416,7 @@ export function saveProjectToMasterLibraryResult(project: PastProject): {
 
   const deduped = deduplicateMasterProjects(updated);
   saveLocalProjectsLibrary(deduped);
+  markProjectAsUnsynced(updatedProject);
   dispatchProjectsUpdatedEvent(deduped);
   return { updatedLibrary: deduped, savedProject: updatedProject, isNew };
 }
@@ -1328,6 +1505,9 @@ export function saveMultipleProjectsToMasterLibraryResult(projects: PastProject[
 
   const deduped = deduplicateMasterProjects(current);
   saveLocalProjectsLibrary(deduped);
+  for (const sp of savedProjects) {
+    markProjectAsUnsynced(sp);
+  }
   dispatchProjectsUpdatedEvent(deduped);
   return { updatedLibrary: deduped, savedProjects };
 }
