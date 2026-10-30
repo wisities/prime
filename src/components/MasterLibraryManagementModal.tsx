@@ -453,27 +453,36 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
 
   // Selective Pull State
   const [showSelectivePullModal, setShowSelectivePullModal] = useState(false);
+  const [selectivePullActiveTab, setSelectivePullActiveTab] = useState<'projects' | 'team'>('projects');
   const [sheetProjectsPool, setSheetProjectsPool] = useState<PastProject[]>([]);
   const [sheetTeamPool, setSheetTeamPool] = useState<TeamMember[]>([]);
   const [selectedPullProjectIds, setSelectedPullProjectIds] = useState<Set<string>>(new Set());
+  const [selectedPullTeamIds, setSelectedPullTeamIds] = useState<Set<string>>(new Set());
   const [pullMode, setPullMode] = useState<'replace' | 'merge'>('replace');
+  const [pullTeamMode, setPullTeamMode] = useState<'replace' | 'merge'>('replace');
   const [pullSearch, setPullSearch] = useState('');
+  const [pullTeamSearch, setPullTeamSearch] = useState('');
   const [pullingSingleId, setPullingSingleId] = useState<string | null>(null);
+  const [pullingSingleMemberId, setPullingSingleMemberId] = useState<string | null>(null);
 
   // -------------------------------------------------------------------------
   // Pull from Google Sheet & CSV Import Actions
   // -------------------------------------------------------------------------
-  const handleOpenSelectivePullModal = async () => {
+  const handleOpenSelectivePullModal = async (initialTab?: 'projects' | 'team') => {
     setIsPullingFromSheet(true);
     try {
       const res = await fetchMasterLibraryFromGoogleSheet();
       if (res.success && res.projects) {
         setSheetProjectsPool(res.projects);
         setSheetTeamPool(res.team || []);
-        // ค่าเริ่มต้น: ไม่ติ๊กทั้งหมด เพื่อให้ผู้ใช้เลือกเฉพาะโครงการที่ต้องการหยิบลงมาแก้ไข
+        // ค่าเริ่มต้น: ไม่ติ๊กทั้งหมด เพื่อให้ผู้ใช้เลือกเฉพาะรายการที่ต้องการหยิบลงมาแก้ไข
         setSelectedPullProjectIds(new Set());
+        setSelectedPullTeamIds(new Set());
         setPullSearch('');
+        setPullTeamSearch('');
         setPullMode('replace');
+        setPullTeamMode('replace');
+        setSelectivePullActiveTab(initialTab || (activeTab === 'team' ? 'team' : 'projects'));
         setShowSelectivePullModal(true);
       } else {
         alert(`⚠️ ไม่สามารถดึงข้อมูลจากชีตได้: ${res.error}`);
@@ -543,6 +552,64 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
     );
   };
 
+  const handleExecuteSelectiveTeamPull = (targetIds?: Set<string>, overrideMode?: 'replace' | 'merge') => {
+    const idsToPull = targetIds || selectedPullTeamIds;
+    if (idsToPull.size === 0) {
+      alert('กรุณาเลือกอย่างน้อย 1 ท่านที่ต้องการดึงข้อมูลลงมา');
+      return;
+    }
+
+    const teamFromSheet = sheetTeamPool.filter((m) => {
+      const mid = m.id || m.memberCode;
+      return mid ? idsToPull.has(mid) : false;
+    });
+    if (teamFromSheet.length === 0) return;
+
+    const mode = overrideMode || pullTeamMode;
+    let updatedTeam: TeamMember[] = [];
+
+    if (mode === 'replace') {
+      // แทนที่คลังบุคลากรบนเว็บด้วยเฉพาะบุคลากรที่เลือก
+      updatedTeam = [...teamFromSheet];
+    } else {
+      // ผสานเฉพาะบุคลากรที่เลือกลงในคลังบุคลากร Local เดิม
+      const current = getMasterTeamLibrary();
+      const norm = (s?: any) => String(s || '').trim().toLowerCase();
+
+      updatedTeam = current.map((localM) => {
+        const matched = teamFromSheet.find(
+          (sm) =>
+            (sm.id && (sm.id === localM.id || sm.originalMasterId === localM.id)) ||
+            (sm.memberCode && norm(sm.memberCode) === norm(localM.memberCode)) ||
+            (sm.name && norm(sm.name) === norm(localM.name))
+        );
+        return matched ? { ...localM, ...matched, id: localM.id } : localM;
+      });
+
+      // หากมีบุคลากรใหม่จากชีตที่ยังไม่มีใน Local เลย ให้เพิ่มเข้าไปด้วย
+      for (const sm of teamFromSheet) {
+        const exists = updatedTeam.some(
+          (um) =>
+            (sm.id && (um.id === sm.id || um.originalMasterId === sm.id)) ||
+            (sm.memberCode && norm(um.memberCode) === norm(sm.memberCode)) ||
+            (sm.name && norm(um.name) === norm(sm.name))
+        );
+        if (!exists) {
+          updatedTeam.push(sm);
+        }
+      }
+    }
+
+    saveMasterTeamLibrary(updatedTeam);
+    setTeamMembers(updatedTeam);
+    setShowSelectivePullModal(false);
+    showToast(
+      mode === 'replace'
+        ? `ดึงเฉพาะ ${teamFromSheet.length} ท่านที่เลือกมาขึ้นเว็บเรียบร้อยแล้ว`
+        : `ผสานข้อมูล ${teamFromSheet.length} ท่านจาก Google Sheet สำเร็จเรียบร้อย`
+    );
+  };
+
   const handlePullSingleProject = async (localProj: PastProject) => {
     setPullingSingleId(localProj.id);
     try {
@@ -577,6 +644,43 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
       alert(`เกิดข้อผิดพลาด: ${e.message}`);
     } finally {
       setPullingSingleId(null);
+    }
+  };
+
+  const handlePullSingleMember = async (localMember: TeamMember) => {
+    setPullingSingleMemberId(localMember.id);
+    try {
+      const res = await fetchMasterLibraryFromGoogleSheet();
+      if (!res.success || !res.team) {
+        alert(`⚠️ ไม่สามารถดึงข้อมูลจากชีตได้: ${res.error}`);
+        return;
+      }
+
+      const norm = (s?: any) => String(s || '').trim().toLowerCase();
+      const targetCode = norm(localMember.memberCode);
+      const targetName = norm(localMember.name);
+
+      const matched = res.team.find(
+        (sm) =>
+          (sm.id && (sm.id === localMember.id || sm.originalMasterId === localMember.id)) ||
+          (sm.memberCode && norm(sm.memberCode) === targetCode) ||
+          (sm.name && norm(sm.name) === targetName)
+      );
+
+      if (!matched) {
+        alert(`ไม่พบข้อมูลบุคลากร "${localMember.name || localMember.memberCode}" ใน Google Sheet ปัจจุบัน`);
+        return;
+      }
+
+      const current = getMasterTeamLibrary();
+      const updated = current.map((m) => (m.id === localMember.id ? { ...m, ...matched, id: m.id } : m));
+      saveMasterTeamLibrary(updated);
+      setTeamMembers(updated);
+      showToast(`ดึงข้อมูลบุคลากร "${matched.name || matched.memberCode}" จากชีตเรียบร้อยแล้ว`);
+    } catch (e: any) {
+      alert(`เกิดข้อผิดพลาด: ${e.message}`);
+    } finally {
+      setPullingSingleMemberId(null);
     }
   };
 
@@ -1999,11 +2103,11 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                       </button>
                       <button
                         type="button"
-                        onClick={handleOpenSelectivePullModal}
+                        onClick={() => handleOpenSelectivePullModal('team')}
                         disabled={isPullingFromSheet}
                         className="btn btn-outline"
                         style={{ fontSize: '0.78rem', padding: '0.4rem 0.65rem', color: '#047857', borderColor: '#6EE7B7', backgroundColor: '#ECFDF5', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
-                        title="เปิดหน้าต่างเลือกดึงข้อมูลโครงการจาก Google Sheet ทีละรายการหรือทั้งหมด"
+                        title="เปิดหน้าต่างเลือกดึงข้อมูลบุคลากรจาก Google Sheet ทีละท่านหรือทั้งหมด"
                       >
                         {isPullingFromSheet ? (
                           <>
@@ -2011,7 +2115,7 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                           </>
                         ) : (
                           <>
-                            <ArrowDownToLine size={13} /> 📥 เลือกดึงจาก Google Sheet
+                            <ArrowDownToLine size={13} /> 📥 ดึงจาก Google Sheet (Pull)
                           </>
                         )}
                       </button>
@@ -2872,11 +2976,11 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                       </button>
                       <button
                         type="button"
-                        onClick={handleOpenSelectivePullModal}
+                        onClick={() => handleOpenSelectivePullModal('team')}
                         disabled={isPullingFromSheet}
                         className="btn btn-outline"
                         style={{ fontSize: '0.78rem', padding: '0.4rem 0.65rem', color: '#047857', borderColor: '#6EE7B7', backgroundColor: '#ECFDF5', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
-                        title="เปิดหน้าต่างเลือกดึงข้อมูลโครงการจาก Google Sheet ทีละรายการหรือทั้งหมด"
+                        title="เปิดหน้าต่างเลือกดึงข้อมูลบุคลากรจาก Google Sheet ทีละท่านหรือทั้งหมด"
                       >
                         {isPullingFromSheet ? (
                           <>
@@ -2884,7 +2988,7 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                           </>
                         ) : (
                           <>
-                            <ArrowDownToLine size={13} /> 📥 เลือกดึงจาก Google Sheet
+                            <ArrowDownToLine size={13} /> 📥 ดึงจาก Google Sheet (Pull)
                           </>
                         )}
                       </button>
@@ -3016,6 +3120,34 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                           </div>
 
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                            <button
+                              type="button"
+                              disabled={pullingSingleMemberId === member.id}
+                              onClick={() => handlePullSingleMember(member)}
+                              className="btn btn-outline"
+                              style={{
+                                fontSize: '0.78rem',
+                                padding: '0.35rem 0.6rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                color: '#0D9488',
+                                borderColor: '#99F6E4',
+                                backgroundColor: '#F0FDFA',
+                                fontWeight: 600,
+                              }}
+                              title="ดึงข้อมูลและภาพถ่ายล่าสุดเฉพาะบุคลากรท่านนี้จาก Google Sheet & Drive ลงมายังเครื่อง"
+                            >
+                              {pullingSingleMemberId === member.id ? (
+                                <>
+                                  <Loader2 size={13} className="animate-spin" /> กำลังดึง...
+                                </>
+                              ) : (
+                                <>
+                                  <ArrowDownToLine size={13} /> ดึงจากชีต
+                                </>
+                              )}
+                            </button>
                             <button
                               type="button"
                               disabled={isSyncingGoogle}
@@ -3517,10 +3649,10 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
                 </div>
                 <div>
                   <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#166534' }}>
-                    เลือกดึงข้อมูลผลงานโครงการจาก Google Sheet & Drive
+                    เลือกดึงข้อมูลจาก Google Sheet & Drive ลงเครื่อง Local
                   </h3>
                   <div style={{ fontSize: '0.8rem', color: '#15803D', marginTop: '2px' }}>
-                    พบทั้งหมด {sheetProjectsPool.length} โครงการใน Google Sheet • เลือกเฉพาะรายการที่ต้องการนำมาอัปเดตลงเครื่อง
+                    พบผลงาน {sheetProjectsPool.length} รายการ, บุคลากร {sheetTeamPool.length} ท่าน • เลือกเฉพาะรายการที่ต้องการนำมาอัปเดตลงเครื่อง
                   </div>
                 </div>
               </div>
@@ -3540,300 +3672,654 @@ export const MasterLibraryManagementModal: React.FC<MasterLibraryManagementModal
               </button>
             </div>
 
-            {/* Mode Selection */}
-            <div
-              style={{
-                padding: '0.65rem 1.5rem',
-                backgroundColor: '#F0FDF4',
-                borderBottom: '1px solid #BBF7D0',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '12px',
-              }}
-            >
-              <div style={{ fontSize: '0.8rem', color: '#166534', fontWeight: 700 }}>
-                โหมดการดึงข้อมูลเข้าสู่หน้าเว็บ:
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '18px', flexWrap: 'wrap' }}>
-                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer', fontWeight: pullMode === 'replace' ? 700 : 400, color: pullMode === 'replace' ? '#15803D' : '#475569' }}>
-                  <input
-                    type="radio"
-                    name="pullMode"
-                    value="replace"
-                    checked={pullMode === 'replace'}
-                    onChange={() => setPullMode('replace')}
-                    style={{ cursor: 'pointer', accentColor: '#16A34A' }}
-                  />
-                  <span>แทนที่คลังบนเว็บด้วยเฉพาะโครงการที่เลือก (แนะนำ: แก้ไขสบายตา ไม่รก)</span>
-                </label>
-
-                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer', fontWeight: pullMode === 'merge' ? 700 : 400, color: pullMode === 'merge' ? '#15803D' : '#475569' }}>
-                  <input
-                    type="radio"
-                    name="pullMode"
-                    value="merge"
-                    checked={pullMode === 'merge'}
-                    onChange={() => setPullMode('merge')}
-                    style={{ cursor: 'pointer', accentColor: '#16A34A' }}
-                  />
-                  <span>ผสานเฉพาะโครงการที่เลือกลงในคลังเดิม (คงโครงการเดิมไว้)</span>
-                </label>
-              </div>
-            </div>
-
-            {/* Filter Toolbar */}
-            <div
-              style={{
-                padding: '0.75rem 1.5rem',
-                backgroundColor: '#F8FAFC',
-                borderBottom: '1px solid #E2E8F0',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '1rem',
-                flexWrap: 'wrap',
-              }}
-            >
-              <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
-                <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
-                <input
-                  type="text"
-                  className="form-input"
-                  style={{ paddingLeft: '32px', fontSize: '0.825rem' }}
-                  placeholder="ค้นหาชื่อโครงการ, รหัส หรือหน่วยงาน..."
-                  value={pullSearch}
-                  onChange={(e) => setPullSearch(e.target.value)}
-                />
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const allIds = sheetProjectsPool
-                      .map((p) => p.id || p.projectCode)
-                      .filter((id): id is string => Boolean(id));
-                    setSelectedPullProjectIds(new Set(allIds));
-                  }}
-                  className="btn btn-outline"
-                  style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
-                >
-                  เลือกทั้งหมด ({sheetProjectsPool.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedPullProjectIds(new Set())}
-                  className="btn btn-outline"
-                  style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
-                >
-                  ยกเลิกทั้งหมด
-                </button>
-                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#166534', marginLeft: '6px' }}>
-                  เลือกแล้ว: {selectedPullProjectIds.size} รายการ
-                </span>
-              </div>
-            </div>
-
-            {/* Project List */}
-            <div style={{ padding: '1rem 1.5rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-              {sheetProjectsPool
-                .filter((p) => {
-                  if (!pullSearch.trim()) return true;
-                  const q = pullSearch.toLowerCase();
-                  return (
-                    (p.projectCode && p.projectCode.toLowerCase().includes(q)) ||
-                    (p.projectName && p.projectName.toLowerCase().includes(q)) ||
-                    (p.clientName && p.clientName.toLowerCase().includes(q))
-                  );
-                })
-                .map((sp) => {
-                  const pKey = sp.id || sp.projectCode || '';
-                  if (!pKey) return null;
-                  const isChecked = selectedPullProjectIds.has(pKey);
-
-                  // ค้นหาโครงการเดียวกันใน Local เพื่อเปรียบเทียบ
-                  const norm = (s?: any) => String(s || '').trim().toLowerCase();
-                  const matchedLocal = projects.find(
-                    (lp) =>
-                      (sp.id && (lp.id === sp.id || lp.originalMasterId === sp.id)) ||
-                      (sp.projectCode && norm(lp.projectCode) === norm(sp.projectCode)) ||
-                      (sp.projectName && norm(lp.projectName) === norm(sp.projectName))
-                  );
-
-                  const codeChanged = matchedLocal && matchedLocal.projectCode !== sp.projectCode;
-
-                  const toggleItem = () => {
-                    setSelectedPullProjectIds((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(pKey)) next.delete(pKey);
-                      else next.add(pKey);
-                      return next;
-                    });
-                  };
-
-                  return (
-                    <div
-                      key={pKey}
-                      onClick={toggleItem}
-                      style={{
-                        padding: '0.75rem 1rem',
-                        borderRadius: '8px',
-                        border: isChecked ? '1.5px solid #16A34A' : '1px solid #E2E8F0',
-                        backgroundColor: isChecked ? '#F0FDF4' : '#FFFFFF',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'flex-start',
-                        gap: '12px',
-                        transition: 'all 0.15s ease',
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={(e) => {
-                          e.stopPropagation();
-                          toggleItem();
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                        style={{ marginTop: '4px', cursor: 'pointer', accentColor: '#16A34A', width: '16px', height: '16px' }}
-                      />
-
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                          <span
-                            style={{
-                              fontFamily: 'monospace',
-                              fontWeight: 700,
-                              fontSize: '0.8rem',
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              backgroundColor: '#DCFCE7',
-                              color: '#15803D',
-                              border: '1px solid #86EFAC',
-                            }}
-                          >
-                            {sp.projectCode}
-                          </span>
-
-                          <span
-                            style={{
-                              fontSize: '0.75rem',
-                              padding: '1px 6px',
-                              borderRadius: '4px',
-                              backgroundColor: '#F1F5F9',
-                              color: '#475569',
-                            }}
-                          >
-                            พ.ศ. {sp.contractYearBE || sp.completionYearBE}
-                          </span>
-
-                          {codeChanged && (
-                            <span
-                              style={{
-                                fontSize: '0.72rem',
-                                padding: '1px 6px',
-                                borderRadius: '4px',
-                                backgroundColor: '#FEF3C7',
-                                color: '#B45309',
-                                border: '1px solid #FDE68A',
-                                fontWeight: 600,
-                              }}
-                            >
-                              🔄 ในเครื่องเดิม: {matchedLocal?.projectCode}
-                            </span>
-                          )}
-
-                          {sp.imageBlocks && sp.imageBlocks.length > 0 && (
-                            <span
-                              style={{
-                                fontSize: '0.72rem',
-                                padding: '1px 6px',
-                                borderRadius: '4px',
-                                backgroundColor: '#EFF6FF',
-                                color: '#1D4ED8',
-                                fontWeight: 600,
-                              }}
-                            >
-                              📷 {sp.imageBlocks.length} บล็อกภาพ (
-                              {sp.imageBlocks.some((b) => b.type === 'pair') ? 'มีภาพคู่ 3 นิ้ว' : 'ภาพเดี่ยว'}
-                              )
-                            </span>
-                          )}
-                        </div>
-
-                        <div style={{ fontWeight: 600, fontSize: '0.875rem', color: '#1E293B', marginTop: '4px' }}>
-                          {sp.projectName}
-                        </div>
-
-                        <div style={{ fontSize: '0.8rem', color: '#64748B', marginTop: '2px' }}>
-                          {sp.clientName || 'ไม่ระบุหน่วยงาน'} • มูลค่า {(sp.contractValue || 0).toLocaleString()} บาท
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-            </div>
-
-            {/* Footer Buttons */}
-            <div
-              style={{
-                padding: '1rem 1.5rem',
-                backgroundColor: '#F8FAFC',
-                borderTop: '1px solid #E2E8F0',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: '0.75rem',
-              }}
-            >
+            {/* Tab Switcher inside Modal */}
+            <div style={{ display: 'flex', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', padding: '0 1.5rem', gap: '8px' }}>
               <button
                 type="button"
-                onClick={handlePullFromGoogleSheet}
-                className="btn btn-outline"
-                style={{ fontSize: '0.8rem', padding: '0.45rem 0.9rem', color: '#64748B' }}
-                title="ดึงข้อมูลทั้งหมดทั้งโครงการและบุคลากรลงมาทับ"
+                onClick={() => setSelectivePullActiveTab('projects')}
+                style={{
+                  padding: '0.65rem 1rem',
+                  border: 'none',
+                  borderBottom: selectivePullActiveTab === 'projects' ? '2.5px solid #16A34A' : '2.5px solid transparent',
+                  backgroundColor: 'transparent',
+                  color: selectivePullActiveTab === 'projects' ? '#166534' : '#64748B',
+                  fontWeight: selectivePullActiveTab === 'projects' ? 700 : 500,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
               >
-                ดึงทั้งหมดทุกรายการ (Full Overwrite)
+                <FolderKanban size={15} />
+                <span>📁 คลังผลงานโครงการ ({sheetProjectsPool.length})</span>
+                {selectedPullProjectIds.size > 0 && (
+                  <span style={{ fontSize: '0.72rem', backgroundColor: '#DCFCE7', color: '#15803D', padding: '1px 6px', borderRadius: '10px', fontWeight: 700 }}>
+                    {selectedPullProjectIds.size}
+                  </span>
+                )}
               </button>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <button
-                  type="button"
-                  onClick={() => setShowSelectivePullModal(false)}
-                  className="btn btn-outline"
-                  style={{ fontSize: '0.825rem', padding: '0.45rem 1rem' }}
-                >
-                  ยกเลิก
-                </button>
-                <button
-                  type="button"
-                  disabled={selectedPullProjectIds.size === 0}
-                  onClick={() => handleExecuteSelectivePull()}
-                  className="btn btn-primary"
+              <button
+                type="button"
+                onClick={() => setSelectivePullActiveTab('team')}
+                style={{
+                  padding: '0.65rem 1rem',
+                  border: 'none',
+                  borderBottom: selectivePullActiveTab === 'team' ? '2.5px solid #16A34A' : '2.5px solid transparent',
+                  backgroundColor: 'transparent',
+                  color: selectivePullActiveTab === 'team' ? '#166534' : '#64748B',
+                  fontWeight: selectivePullActiveTab === 'team' ? 700 : 500,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <Users size={15} />
+                <span>👥 คลังบุคลากรและผู้เชี่ยวชาญ ({sheetTeamPool.length})</span>
+                {selectedPullTeamIds.size > 0 && (
+                  <span style={{ fontSize: '0.72rem', backgroundColor: '#DCFCE7', color: '#15803D', padding: '1px 6px', borderRadius: '10px', fontWeight: 700 }}>
+                    {selectedPullTeamIds.size}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {selectivePullActiveTab === 'projects' ? (
+              <>
+                {/* Mode Selection */}
+                <div
                   style={{
-                    fontSize: '0.825rem',
-                    padding: '0.45rem 1.25rem',
-                    display: 'inline-flex',
+                    padding: '0.65rem 1.5rem',
+                    backgroundColor: '#F0FDF4',
+                    borderBottom: '1px solid #BBF7D0',
+                    display: 'flex',
                     alignItems: 'center',
-                    gap: '6px',
-                    backgroundColor: '#16A34A',
-                    borderColor: '#16A34A',
-                    color: '#FFFFFF',
-                    opacity: selectedPullProjectIds.size === 0 ? 0.5 : 1,
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '12px',
                   }}
                 >
-                  <ArrowDownToLine size={16} />
-                  <span>
-                    {pullMode === 'replace'
-                      ? `ดึงเฉพาะ ${selectedPullProjectIds.size} รายการที่เลือกมาขึ้นเว็บ`
-                      : `ผสาน ${selectedPullProjectIds.size} รายการที่เลือกลงในคลัง`}
-                  </span>
-                </button>
-              </div>
-            </div>
+                  <div style={{ fontSize: '0.8rem', color: '#166534', fontWeight: 700 }}>
+                    โหมดการดึงข้อมูลเข้าสู่หน้าเว็บ:
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '18px', flexWrap: 'wrap' }}>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer', fontWeight: pullMode === 'replace' ? 700 : 400, color: pullMode === 'replace' ? '#15803D' : '#475569' }}>
+                      <input
+                        type="radio"
+                        name="pullMode"
+                        value="replace"
+                        checked={pullMode === 'replace'}
+                        onChange={() => setPullMode('replace')}
+                        style={{ cursor: 'pointer', accentColor: '#16A34A' }}
+                      />
+                      <span>แทนที่คลังบนเว็บด้วยเฉพาะโครงการที่เลือก (แนะนำ: แก้ไขสบายตา ไม่รก)</span>
+                    </label>
+
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer', fontWeight: pullMode === 'merge' ? 700 : 400, color: pullMode === 'merge' ? '#15803D' : '#475569' }}>
+                      <input
+                        type="radio"
+                        name="pullMode"
+                        value="merge"
+                        checked={pullMode === 'merge'}
+                        onChange={() => setPullMode('merge')}
+                        style={{ cursor: 'pointer', accentColor: '#16A34A' }}
+                      />
+                      <span>ผสานเฉพาะโครงการที่เลือกลงในคลังเดิม (คงโครงการเดิมไว้)</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Filter Toolbar */}
+                <div
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    backgroundColor: '#F8FAFC',
+                    borderBottom: '1px solid #E2E8F0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '1rem',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
+                    <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+                    <input
+                      type="text"
+                      className="form-input"
+                      style={{ paddingLeft: '32px', fontSize: '0.825rem' }}
+                      placeholder="ค้นหาชื่อโครงการ, รหัส หรือหน่วยงาน..."
+                      value={pullSearch}
+                      onChange={(e) => setPullSearch(e.target.value)}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allIds = sheetProjectsPool
+                          .map((p) => p.id || p.projectCode)
+                          .filter((id): id is string => Boolean(id));
+                        setSelectedPullProjectIds(new Set(allIds));
+                      }}
+                      className="btn btn-outline"
+                      style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
+                    >
+                      เลือกทั้งหมด ({sheetProjectsPool.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPullProjectIds(new Set())}
+                      className="btn btn-outline"
+                      style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
+                    >
+                      ยกเลิกทั้งหมด
+                    </button>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#166534', marginLeft: '6px' }}>
+                      เลือกแล้ว: {selectedPullProjectIds.size} รายการ
+                    </span>
+                  </div>
+                </div>
+
+                {/* Project List */}
+                <div style={{ padding: '1rem 1.5rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                  {sheetProjectsPool
+                    .filter((p) => {
+                      if (!pullSearch.trim()) return true;
+                      const q = pullSearch.toLowerCase();
+                      return (
+                        (p.projectCode && p.projectCode.toLowerCase().includes(q)) ||
+                        (p.projectName && p.projectName.toLowerCase().includes(q)) ||
+                        (p.clientName && p.clientName.toLowerCase().includes(q))
+                      );
+                    })
+                    .map((sp) => {
+                      const pKey = sp.id || sp.projectCode || '';
+                      if (!pKey) return null;
+                      const isChecked = selectedPullProjectIds.has(pKey);
+
+                      // ค้นหาโครงการเดียวกันใน Local เพื่อเปรียบเทียบ
+                      const norm = (s?: any) => String(s || '').trim().toLowerCase();
+                      const matchedLocal = projects.find(
+                        (lp) =>
+                          (sp.id && (lp.id === sp.id || lp.originalMasterId === sp.id)) ||
+                          (sp.projectCode && norm(lp.projectCode) === norm(sp.projectCode)) ||
+                          (sp.projectName && norm(lp.projectName) === norm(sp.projectName))
+                      );
+
+                      const codeChanged = matchedLocal && matchedLocal.projectCode !== sp.projectCode;
+
+                      const toggleItem = () => {
+                        setSelectedPullProjectIds((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(pKey)) next.delete(pKey);
+                          else next.add(pKey);
+                          return next;
+                        });
+                      };
+
+                      return (
+                        <div
+                          key={pKey}
+                          onClick={toggleItem}
+                          style={{
+                            padding: '0.75rem 1rem',
+                            borderRadius: '8px',
+                            border: isChecked ? '1.5px solid #16A34A' : '1px solid #E2E8F0',
+                            backgroundColor: isChecked ? '#F0FDF4' : '#FFFFFF',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '12px',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              toggleItem();
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ marginTop: '4px', cursor: 'pointer', accentColor: '#16A34A', width: '16px', height: '16px' }}
+                          />
+
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span
+                                style={{
+                                  fontFamily: 'monospace',
+                                  fontWeight: 700,
+                                  fontSize: '0.8rem',
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  backgroundColor: '#DCFCE7',
+                                  color: '#15803D',
+                                  border: '1px solid #86EFAC',
+                                }}
+                              >
+                                {sp.projectCode}
+                              </span>
+
+                              <span
+                                style={{
+                                  fontSize: '0.75rem',
+                                  padding: '1px 6px',
+                                  borderRadius: '4px',
+                                  backgroundColor: '#F1F5F9',
+                                  color: '#475569',
+                                }}
+                              >
+                                พ.ศ. {sp.contractYearBE || sp.completionYearBE}
+                              </span>
+
+                              {codeChanged && (
+                                <span
+                                  style={{
+                                    fontSize: '0.72rem',
+                                    padding: '1px 6px',
+                                    borderRadius: '4px',
+                                    backgroundColor: '#FEF3C7',
+                                    color: '#B45309',
+                                    border: '1px solid #FDE68A',
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  🔄 ในเครื่องเดิม: {matchedLocal?.projectCode}
+                                </span>
+                              )}
+
+                              {sp.imageBlocks && sp.imageBlocks.length > 0 && (
+                                <span
+                                  style={{
+                                    fontSize: '0.72rem',
+                                    padding: '1px 6px',
+                                    borderRadius: '4px',
+                                    backgroundColor: '#EFF6FF',
+                                    color: '#1D4ED8',
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  📷 {sp.imageBlocks.length} บล็อกภาพ (
+                                  {sp.imageBlocks.some((b) => b.type === 'pair') ? 'มีภาพคู่ 3 นิ้ว' : 'ภาพเดี่ยว'}
+                                  )
+                                </span>
+                              )}
+                            </div>
+
+                            <div style={{ fontWeight: 600, fontSize: '0.875rem', color: '#1E293B', marginTop: '4px' }}>
+                              {sp.projectName}
+                            </div>
+
+                            <div style={{ fontSize: '0.8rem', color: '#64748B', marginTop: '2px' }}>
+                              {sp.clientName || 'ไม่ระบุหน่วยงาน'} • มูลค่า {(sp.contractValue || 0).toLocaleString()} บาท
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+
+                {/* Footer Buttons */}
+                <div
+                  style={{
+                    padding: '1rem 1.5rem',
+                    backgroundColor: '#F8FAFC',
+                    borderTop: '1px solid #E2E8F0',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '0.75rem',
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={handlePullFromGoogleSheet}
+                    className="btn btn-outline"
+                    style={{ fontSize: '0.8rem', padding: '0.45rem 0.9rem', color: '#64748B' }}
+                    title="ดึงข้อมูลทั้งหมดทั้งโครงการและบุคลากรลงมาทับ"
+                  >
+                    ดึงทั้งหมดทุกรายการ (Full Overwrite)
+                  </button>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowSelectivePullModal(false)}
+                      className="btn btn-outline"
+                      style={{ fontSize: '0.825rem', padding: '0.45rem 1rem' }}
+                    >
+                      ยกเลิก
+                    </button>
+                    <button
+                      type="button"
+                      disabled={selectedPullProjectIds.size === 0}
+                      onClick={() => handleExecuteSelectivePull()}
+                      className="btn btn-primary"
+                      style={{
+                        fontSize: '0.825rem',
+                        padding: '0.45rem 1.25rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        backgroundColor: '#16A34A',
+                        borderColor: '#16A34A',
+                        color: '#FFFFFF',
+                        opacity: selectedPullProjectIds.size === 0 ? 0.5 : 1,
+                      }}
+                    >
+                      <ArrowDownToLine size={16} />
+                      <span>
+                        {pullMode === 'replace'
+                          ? `ดึงเฉพาะ ${selectedPullProjectIds.size} รายการที่เลือกมาขึ้นเว็บ`
+                          : `ผสาน ${selectedPullProjectIds.size} รายการที่เลือกลงในคลัง`}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Mode Selection Team */}
+                <div
+                  style={{
+                    padding: '0.65rem 1.5rem',
+                    backgroundColor: '#F0FDF4',
+                    borderBottom: '1px solid #BBF7D0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '12px',
+                  }}
+                >
+                  <div style={{ fontSize: '0.8rem', color: '#166534', fontWeight: 700 }}>
+                    โหมดการดึงบุคลากรเข้าสู่หน้าเว็บ:
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '18px', flexWrap: 'wrap' }}>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer', fontWeight: pullTeamMode === 'replace' ? 700 : 400, color: pullTeamMode === 'replace' ? '#15803D' : '#475569' }}>
+                      <input
+                        type="radio"
+                        name="pullTeamMode"
+                        value="replace"
+                        checked={pullTeamMode === 'replace'}
+                        onChange={() => setPullTeamMode('replace')}
+                        style={{ cursor: 'pointer', accentColor: '#16A34A' }}
+                      />
+                      <span>แทนที่คลังบนเว็บด้วยเฉพาะบุคลากรที่เลือก (แนะนำ: แก้ไขสบายตา ไม่รก)</span>
+                    </label>
+
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer', fontWeight: pullTeamMode === 'merge' ? 700 : 400, color: pullTeamMode === 'merge' ? '#15803D' : '#475569' }}>
+                      <input
+                        type="radio"
+                        name="pullTeamMode"
+                        value="merge"
+                        checked={pullTeamMode === 'merge'}
+                        onChange={() => setPullTeamMode('merge')}
+                        style={{ cursor: 'pointer', accentColor: '#16A34A' }}
+                      />
+                      <span>ผสานเฉพาะบุคลากรที่เลือกลงในคลังเดิม (คงบุคลากรเดิมไว้)</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Filter Toolbar Team */}
+                <div
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    backgroundColor: '#F8FAFC',
+                    borderBottom: '1px solid #E2E8F0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '1rem',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
+                    <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+                    <input
+                      type="text"
+                      className="form-input"
+                      style={{ paddingLeft: '32px', fontSize: '0.825rem' }}
+                      placeholder="ค้นหาชื่อบุคลากร, ตำแหน่ง, รหัส หรือการศึกษา..."
+                      value={pullTeamSearch}
+                      onChange={(e) => setPullTeamSearch(e.target.value)}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allIds = sheetTeamPool
+                          .map((m) => m.id || m.memberCode)
+                          .filter((id): id is string => Boolean(id));
+                        setSelectedPullTeamIds(new Set(allIds));
+                      }}
+                      className="btn btn-outline"
+                      style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
+                    >
+                      เลือกทั้งหมด ({sheetTeamPool.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPullTeamIds(new Set())}
+                      className="btn btn-outline"
+                      style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
+                    >
+                      ยกเลิกทั้งหมด
+                    </button>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#166534', marginLeft: '6px' }}>
+                      เลือกแล้ว: {selectedPullTeamIds.size} ท่าน
+                    </span>
+                  </div>
+                </div>
+
+                {/* Team List */}
+                <div style={{ padding: '1rem 1.5rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                  {sheetTeamPool
+                    .filter((m) => {
+                      if (!pullTeamSearch.trim()) return true;
+                      const q = pullTeamSearch.toLowerCase();
+                      return (
+                        (m.name && m.name.toLowerCase().includes(q)) ||
+                        (m.memberCode && m.memberCode.toLowerCase().includes(q)) ||
+                        (m.proposedRole && m.proposedRole.toLowerCase().includes(q)) ||
+                        (m.education && m.education.toLowerCase().includes(q)) ||
+                        (m.certifications && m.certifications.toLowerCase().includes(q))
+                      );
+                    })
+                    .map((sm) => {
+                      const mKey = sm.id || sm.memberCode || '';
+                      if (!mKey) return null;
+                      const isChecked = selectedPullTeamIds.has(mKey);
+
+                      const norm = (s?: any) => String(s || '').trim().toLowerCase();
+                      const matchedLocal = teamMembers.find(
+                        (lm) =>
+                          (sm.id && (lm.id === sm.id || lm.originalMasterId === sm.id)) ||
+                          (sm.memberCode && norm(lm.memberCode) === norm(sm.memberCode)) ||
+                          (sm.name && norm(lm.name) === norm(sm.name))
+                      );
+
+                      const codeChanged = matchedLocal && matchedLocal.memberCode !== sm.memberCode;
+
+                      const toggleItem = () => {
+                        setSelectedPullTeamIds((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(mKey)) next.delete(mKey);
+                          else next.add(mKey);
+                          return next;
+                        });
+                      };
+
+                      return (
+                        <div
+                          key={mKey}
+                          onClick={toggleItem}
+                          style={{
+                            padding: '0.75rem 1rem',
+                            borderRadius: '8px',
+                            border: isChecked ? '1.5px solid #16A34A' : '1px solid #E2E8F0',
+                            backgroundColor: isChecked ? '#F0FDF4' : '#FFFFFF',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              toggleItem();
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ cursor: 'pointer', accentColor: '#16A34A', width: '16px', height: '16px' }}
+                          />
+
+                          {sm.photoUrl ? (
+                            <img
+                              src={sm.photoUrl}
+                              alt={sm.name}
+                              style={{ height: '42px', width: '38px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #CBD5E1', flexShrink: 0 }}
+                            />
+                          ) : (
+                            <div style={{ height: '42px', width: '38px', borderRadius: '4px', backgroundColor: '#F1F5F9', border: '1px solid #CBD5E1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              <Users size={16} color="#94A3B8" />
+                            </div>
+                          )}
+
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span
+                                style={{
+                                  fontFamily: 'monospace',
+                                  fontWeight: 700,
+                                  fontSize: '0.8rem',
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  backgroundColor: '#E0F2FE',
+                                  color: '#0369A1',
+                                  border: '1px solid #BAE6FD',
+                                }}
+                              >
+                                {sm.memberCode}
+                              </span>
+
+                              <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1E293B' }}>
+                                {sm.name}
+                              </span>
+
+                              {sm.proposedRole && (
+                                <span style={{ fontSize: '0.75rem', backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                                  {sm.proposedRole}
+                                </span>
+                              )}
+
+                              {codeChanged && (
+                                <span
+                                  style={{
+                                    fontSize: '0.72rem',
+                                    padding: '1px 6px',
+                                    borderRadius: '4px',
+                                    backgroundColor: '#FEF3C7',
+                                    color: '#B45309',
+                                    border: '1px solid #FDE68A',
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  🔄 ในเครื่องเดิม: {matchedLocal?.memberCode}
+                                </span>
+                              )}
+
+                              {sm.photoUrl && (
+                                <span style={{ fontSize: '0.72rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#ECFDF5', color: '#047857', fontWeight: 600 }}>
+                                  📷 มีรูปถ่าย
+                                </span>
+                              )}
+                            </div>
+
+                            <div style={{ fontSize: '0.78rem', color: '#64748B', marginTop: '2px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                              {sm.education && <span>🎓 {sm.education}</span>}
+                              {sm.experienceYears !== undefined && <span>💼 ประสบการณ์ {sm.experienceYears} ปี</span>}
+                              {sm.certifications && <span>📜 {sm.certifications}</span>}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+
+                {/* Footer Buttons Team */}
+                <div
+                  style={{
+                    padding: '1rem 1.5rem',
+                    backgroundColor: '#F8FAFC',
+                    borderTop: '1px solid #E2E8F0',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '0.75rem',
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={handlePullFromGoogleSheet}
+                    className="btn btn-outline"
+                    style={{ fontSize: '0.8rem', padding: '0.45rem 0.9rem', color: '#64748B' }}
+                    title="ดึงข้อมูลทั้งหมดทั้งโครงการและบุคลากรลงมาทับ"
+                  >
+                    ดึงทั้งหมดทุกรายการ (Full Overwrite)
+                  </button>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowSelectivePullModal(false)}
+                      className="btn btn-outline"
+                      style={{ fontSize: '0.825rem', padding: '0.45rem 1rem' }}
+                    >
+                      ยกเลิก
+                    </button>
+                    <button
+                      type="button"
+                      disabled={selectedPullTeamIds.size === 0}
+                      onClick={() => handleExecuteSelectiveTeamPull()}
+                      className="btn btn-primary"
+                      style={{
+                        fontSize: '0.825rem',
+                        padding: '0.45rem 1.25rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        backgroundColor: '#16A34A',
+                        borderColor: '#16A34A',
+                        color: '#FFFFFF',
+                        opacity: selectedPullTeamIds.size === 0 ? 0.5 : 1,
+                      }}
+                    >
+                      <ArrowDownToLine size={16} />
+                      <span>
+                        {pullTeamMode === 'replace'
+                          ? `ดึงเฉพาะ ${selectedPullTeamIds.size} ท่านที่เลือกมาขึ้นเว็บ`
+                          : `ผสาน ${selectedPullTeamIds.size} ท่านที่เลือกลงในคลัง`}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

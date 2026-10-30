@@ -895,22 +895,15 @@ export function normalizeMasterTeam(members: TeamMember[]): TeamMember[] {
 
 export function getMasterTeamLibrary(): TeamMember[] {
   try {
-    if (cachedTeam && Array.isArray(cachedTeam) && cachedTeam.length > 0) {
-      const clean = cachedTeam.filter((m) => !isSampleTeamMember(m));
-      if (clean.length > 0) {
-        return normalizeMasterTeam(clean);
-      }
+    if (cachedTeam && Array.isArray(cachedTeam)) {
+      return cachedTeam;
     }
     const raw = localStorage.getItem(TEAM_LIBRARY_KEY);
     if (raw !== null && raw !== 'undefined' && raw !== 'null') {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        const clean = parsed.filter((m) => !isSampleTeamMember(m));
-        if (clean.length > 0) {
-          cachedTeam = normalizeMasterTeam(clean);
-          saveLocalTeamLibrary(cachedTeam);
-          return cachedTeam;
-        }
+      if (Array.isArray(parsed)) {
+        cachedTeam = parsed;
+        return cachedTeam;
       }
     }
   } catch (e) {
@@ -924,19 +917,15 @@ export function getMasterTeamLibrary(): TeamMember[] {
 export async function fetchMasterTeamLibraryFromCloud(): Promise<TeamMember[]> {
   const fromIDB = await idbGet<TeamMember[]>(IDB_STORES.MASTER_TEAM, 'current');
   if (fromIDB && Array.isArray(fromIDB)) {
-    const clean = fromIDB.filter((m) => !isSampleTeamMember(m));
-    if (clean.length > 0) {
-      cachedTeam = normalizeMasterTeam(clean);
-      saveLocalTeamLibrary(cachedTeam);
-      return cachedTeam;
-    }
+    cachedTeam = fromIDB;
+    return cachedTeam;
   }
   return getMasterTeamLibrary();
 }
 
 export function saveMasterTeamLibrary(items: TeamMember[]): void {
   const clean = (items || []).filter((m) => !isSampleTeamMember(m));
-  const normalized = normalizeMasterTeam(clean.length > 0 ? clean : [...MASTER_TEAM_LIBRARY]);
+  const normalized = normalizeMasterTeam(clean);
   saveLocalTeamLibrary(normalized);
   dispatchTeamUpdatedEvent(normalized);
 }
