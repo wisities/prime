@@ -832,7 +832,7 @@ export async function syncMasterLibraryToGoogleSheet(
   try {
     const getExistProj = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `'${MASTER_SHEET_TABS.PROJECTS}'!A1:AG`,
+      range: `'${MASTER_SHEET_TABS.PROJECTS}'`,
       valueRenderOption: 'FORMULA',
     });
     existingProjRows = getExistProj.data.values || [];
@@ -843,7 +843,10 @@ export async function syncMasterLibraryToGoogleSheet(
     ) {
       existingProjRows.pop();
     }
-  } catch {
+  } catch (readProjErr) {
+    if (incremental) {
+      throw readProjErr;
+    }
     existingProjRows = [];
   }
 
@@ -969,8 +972,11 @@ export async function syncMasterLibraryToGoogleSheet(
   if (masterProjects.length > 0) {
     const builtRowsByIndex: any[][] = [];
 
-    if (incremental && existingProjRows.length > 1) {
-      // โหมด Incremental Upsert: อัปเดตเฉพาะแถวของโครงการที่มีการแก้ไข หรือต่อท้ายโครงการใหม่ที่แถวถัดไป
+    if (incremental) {
+      if (existingProjRows.length === 0) {
+        existingProjRows = [projHeaders];
+      }
+      // โหมด Incremental Upsert: อัปเดตเฉพาะแถวของโครงการที่มีการแก้ไข หรือต่อท้ายโครงการใหม่ที่แถวถัดไป (ไม่ล้างแถวอื่นเด็ดขาด)
       const rowsToAppend: any[][] = [];
       for (let j = 0; j < masterProjects.length; j++) {
         const mp = masterProjects[j];
@@ -1011,7 +1017,7 @@ export async function syncMasterLibraryToGoogleSheet(
       }
 
       if (rowsToAppend.length > 0) {
-        const startRow = existingProjRows.length + 1;
+        const startRow = Math.max(existingProjRows.length + 1, 2);
         const endRow = startRow + rowsToAppend.length - 1;
         await sheets.spreadsheets.values.update({
           spreadsheetId,
@@ -1021,7 +1027,7 @@ export async function syncMasterLibraryToGoogleSheet(
         });
       }
     } else {
-      // โหมด Full Sync: ผสานข้อมูลจากแถวเดิมในชีตเพื่อไม่ให้ลิงก์ Drive สูญหาย
+      // โหมด Full Sync: ผสานข้อมูลจากแถวเดิมในชีตเพื่อไม่ให้ลิงก์ Drive หรือโครงการที่มีอยู่แล้วในชีตสูญหาย
       const projRows: any[][] = [projHeaders];
       const matchedExistingIndices = new Set<number>();
 
@@ -1052,6 +1058,13 @@ export async function syncMasterLibraryToGoogleSheet(
         builtRowsByIndex[j] = built;
       }
 
+      // เก็บแถวเดิมในชีตที่อาจไม่ได้อยู่ใน masterProjects รอบนี้ไว้ด้วย เพื่อป้องกันข้อมูลในชีตหาย
+      for (let r = 1; r < existingProjRows.length; r++) {
+        if (!matchedExistingIndices.has(r) && (existingProjRows[r]?.[0] || existingProjRows[r]?.[2])) {
+          projRows.push(existingProjRows[r]);
+        }
+      }
+
       await sheets.spreadsheets.values.clear({
         spreadsheetId,
         range: `'${MASTER_SHEET_TABS.PROJECTS}'!A:AG`,
@@ -1068,7 +1081,7 @@ export async function syncMasterLibraryToGoogleSheet(
     try {
       const contractsRes = await sheets.spreadsheets.values.get({
         spreadsheetId,
-        range: `'${SHEET_TABS.CONTRACTS}'!A1:AC`,
+        range: `'${SHEET_TABS.CONTRACTS}'`,
         valueRenderOption: 'FORMULA',
       });
       const cRows = contractsRes.data.values || [];
@@ -1149,7 +1162,7 @@ export async function syncMasterLibraryToGoogleSheet(
     try {
       const getExistTeam = await sheets.spreadsheets.values.get({
         spreadsheetId,
-        range: `'${MASTER_SHEET_TABS.TEAM}'!A1:Q`,
+        range: `'${MASTER_SHEET_TABS.TEAM}'`,
         valueRenderOption: 'FORMULA',
       });
       existingTeamRows = getExistTeam.data.values || [];
@@ -1160,7 +1173,10 @@ export async function syncMasterLibraryToGoogleSheet(
       ) {
         existingTeamRows.pop();
       }
-    } catch {
+    } catch (readTeamErr) {
+      if (incremental) {
+        throw readTeamErr;
+      }
       existingTeamRows = [];
     }
 
@@ -1231,7 +1247,10 @@ export async function syncMasterLibraryToGoogleSheet(
 
     const builtTeamRowsByIndex: Record<number, any[]> = {};
 
-    if (incremental && existingTeamRows.length > 1) {
+    if (incremental) {
+      if (existingTeamRows.length === 0) {
+        existingTeamRows = [teamHeaders];
+      }
       const teamToAppend: any[][] = [];
       for (let k = 0; k < masterTeam.length; k++) {
         const tm = masterTeam[k];
@@ -1262,7 +1281,7 @@ export async function syncMasterLibraryToGoogleSheet(
         }
       }
       if (teamToAppend.length > 0) {
-        const startTRow = existingTeamRows.length + 1;
+        const startTRow = Math.max(existingTeamRows.length + 1, 2);
         const endTRow = startTRow + teamToAppend.length - 1;
         await sheets.spreadsheets.values.update({
           spreadsheetId,
@@ -1273,16 +1292,29 @@ export async function syncMasterLibraryToGoogleSheet(
       }
     } else if (!incremental) {
       const teamRows: any[][] = [teamHeaders];
+      const matchedTeamIndices = new Set<number>();
       for (let k = 0; k < masterTeam.length; k++) {
         const tm = masterTeam[k];
         const tCode = normStr(tm.memberCode);
         const tName = normStr(tm.name);
-        const existingRow = existingTeamRows.slice(1).find(
-          (r) => (tCode && normStr(r?.[0]) === tCode) || (tName && normStr(r?.[2]) === tName)
-        );
+        let existingRow: any[] | undefined;
+        for (let r = 1; r < existingTeamRows.length; r++) {
+          if (matchedTeamIndices.has(r)) continue;
+          if ((tCode && normStr(existingTeamRows[r]?.[0]) === tCode) || (tName && normStr(existingTeamRows[r]?.[2]) === tName)) {
+            existingRow = existingTeamRows[r];
+            matchedTeamIndices.add(r);
+            break;
+          }
+        }
         const built = buildTeamRow(tm, k, existingRow);
         builtTeamRowsByIndex[k] = built;
         teamRows.push(built);
+      }
+
+      for (let r = 1; r < existingTeamRows.length; r++) {
+        if (!matchedTeamIndices.has(r) && (existingTeamRows[r]?.[0] || existingTeamRows[r]?.[2])) {
+          teamRows.push(existingTeamRows[r]);
+        }
       }
 
       await sheets.spreadsheets.values.clear({
@@ -1301,7 +1333,7 @@ export async function syncMasterLibraryToGoogleSheet(
     try {
       const teamTabRes = await sheets.spreadsheets.values.get({
         spreadsheetId,
-        range: `'${SHEET_TABS.TEAM}'!A1:N`,
+        range: `'${SHEET_TABS.TEAM}'`,
         valueRenderOption: 'FORMULA',
       });
       const tRows = teamTabRes.data.values || [];

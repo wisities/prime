@@ -367,75 +367,33 @@ export async function syncMasterLibraryToGoogle(options?: {
         return false;
       });
 
-    const appsScriptUrl = getEffectiveAppsScriptUrl();
-    let data: any;
+    const response = await fetch('/api/google/sync-proposal', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'sync_master_library',
+        sheetOnly: !hasNewBase64Files,
+        incremental: isIncremental,
+        masterProjects,
+        masterTeam,
+        masterBom,
+        masterCompany,
+      }),
+    });
 
-    onProgress(
-      hasNewBase64Files
-        ? `กำลังอัปโหลดไฟล์ภาพ/สัญญาใหม่ขึ้น Google Drive และอัปเดตทุกคอลัมน์ใน Google Sheet...`
-        : isIncremental
-        ? `กำลังอัปเดต${incrementalSummary} ใน Google Sheet...`
-        : 'กำลังเชื่อมต่อ Google Sheets API...',
-      55
-    );
-
-    try {
-      const response = await fetch('/api/google/sync-proposal', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'sync_master_library',
-          sheetOnly: !hasNewBase64Files,
-          incremental: isIncremental,
-          masterProjects,
-          masterTeam,
-          masterBom,
-          masterCompany,
-        }),
-      });
-
-      onProgress('กำลังบันทึกลงแท็บคลังกลางและตารางอ้างอิงใน Google Sheet...', 85);
-      const parsed = await response.json();
-      if (response.ok && parsed?.success) {
-        data = parsed;
-        if (Array.isArray(parsed.updatedProjects) && parsed.updatedProjects.length > 0) {
-          saveMultipleProjectsToMasterLibrary(parsed.updatedProjects);
-        }
-        if (Array.isArray(parsed.updatedTeam) && parsed.updatedTeam.length > 0) {
-          saveMultipleMembersToMasterLibrary(parsed.updatedTeam);
-        }
-      } else {
-        console.warn('Backend API sync_master_library returned error:', parsed?.error);
-      }
-    } catch (apiErr) {
-      console.warn('Backend API sync_master_library failed, falling back to Apps Script if available:', apiErr);
+    onProgress('กำลังบันทึกลงแท็บคลังกลางและตารางอ้างอิงใน Google Sheet...', 85);
+    const parsed = await response.json();
+    if (!response.ok || !parsed?.success) {
+      throw new Error(parsed?.error || `การซิงค์ผ่านเซิร์ฟเวอร์ล้มเหลว (HTTP ${response.status})`);
     }
-
-    // Fallback ไปยัง Apps Script เฉพาะกรณีที่ไม่มี Backend API เท่านั้น
-    if (!data && appsScriptUrl && appsScriptUrl.startsWith('https://script.google.com/')) {
-      onProgress('กำลังซิงค์ผ่าน Google Apps Script สำรอง...', 70);
-      const response = await fetch(appsScriptUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8',
-        },
-        body: JSON.stringify({
-          action: 'sync_master_library',
-          incremental: isIncremental,
-          masterProjects,
-          masterTeam,
-          masterBom,
-          masterCompany,
-        }),
-      });
-      const rawText = await response.text();
-      data = JSON.parse(rawText);
+    const data = parsed;
+    if (Array.isArray(parsed.updatedProjects) && parsed.updatedProjects.length > 0) {
+      saveMultipleProjectsToMasterLibrary(parsed.updatedProjects);
     }
-
-    if (!data || !data.success) {
-      throw new Error(data?.error || 'การซิงค์ข้อมูลคลังกลางล้มเหลว');
+    if (Array.isArray(parsed.updatedTeam) && parsed.updatedTeam.length > 0) {
+      saveMultipleMembersToMasterLibrary(parsed.updatedTeam);
     }
 
     onProgress('ซิงค์ข้อมูลสำเร็จสมบูรณ์ 100%', 100);

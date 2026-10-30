@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getGoogleClients, getGoogleCredentials } from './auth';
-import { setupProjectFolderHierarchy, uploadFileToDrive, UploadedFileResult } from './driveService';
+import { setupProjectFolderHierarchy, uploadFileToDrive, getOrCreateFolder, UploadedFileResult } from './driveService';
 import { syncProjectToGoogleSheet, syncMasterLibraryToGoogleSheet, getMasterLibraryFromGoogleSheet, getProposalFromGoogleSheet } from './sheetsService';
 import { BiddingProject } from '../../src/types/proposal';
 
@@ -101,7 +101,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (parentFolderId) {
           try {
-            const { getOrCreateFolder } = await import('./driveService');
             const masterFolder = await getOrCreateFolder(drive, parentFolderId, '00_คลังข้อมูลกลาง_Master_Library');
             const certsFolder = await getOrCreateFolder(drive, masterFolder.id, '01_สำเนาสัญญาและใบรับรองผลงานกลาง');
             const projImagesFolder = await getOrCreateFolder(drive, masterFolder.id, '02_ภาพผลงานโครงการกลาง');
