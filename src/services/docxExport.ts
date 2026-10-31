@@ -31,6 +31,7 @@ import { normalizeDocumentStructure } from '../data/defaultData';
 import { normalizeTorItemImageBlocks } from '../utils/imageBlockUtils';
 import { generateDefaultConceptualDiagram } from '../utils/ganttRenderer';
 import { getRecoveredTeamPhoto } from '../data/defaultMediaAssets';
+import { ensureImageFromCertificate } from './pdfToImageService';
 
 function base64ToUint8Array(base64: string): Uint8Array {
   if (!base64 || typeof base64 !== 'string') return new Uint8Array(0);
@@ -327,6 +328,51 @@ function renderImageBlocksToDocx(
   });
 
   return elements;
+}
+
+// Helper to convert Certificate of Completion (PDF or Image) into an inline Word ImageRun
+async function createCertificateImageParagraphs(
+  certUrl?: string,
+  projectName?: string
+): Promise<(Paragraph | Table)[]> {
+  if (!certUrl) return [];
+  const imgDataUrl = await ensureImageFromCertificate(certUrl);
+  if (!imgDataUrl) return [];
+
+  try {
+    const imgBytes = base64ToUint8Array(imgDataUrl);
+    if (!imgBytes || imgBytes.length === 0) return [];
+    // Standard A4 portrait width is ~576 pt (6 inches), height proportional
+    const height = getImageProportionalHeight(imgBytes, 576, 750);
+
+    return [
+      new Paragraph({
+        spacing: { before: 180, after: 60, line: 240, lineRule: LineRuleType.AUTO },
+        children: [
+          new TextRun({
+            text: `ภาพสำเนาหนังสือรับรองผลงาน: ${projectName || ''}`,
+            font: FONT_FAMILY,
+            size: 26, // 13pt
+            bold: true,
+            color: COLOR_PRIMARY,
+          }),
+        ],
+      }),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 60, after: 180 },
+        children: [
+          new ImageRun({
+            data: imgBytes,
+            transformation: { width: 576, height: height },
+          } as any),
+        ],
+      }),
+    ];
+  } catch (err) {
+    console.warn('Failed to embed certificate image in docx:', err);
+    return [];
+  }
 }
 
 // Helper for Thai standard body paragraphs (มีย่อหน้า 0.5 นิ้ว / 720 twips, AlignmentType.LEFT ป้องกันตัวอักษรยืด, Line Spacing = Single)
@@ -2473,7 +2519,8 @@ export async function generateProposalDocxBlob(data: ProposalData): Promise<{ bl
       );
     }
 
-    activeS5Headings.forEach((h, hIdx) => {
+    for (let hIdx = 0; hIdx < activeS5Headings.length; hIdx++) {
+      const h = activeS5Headings[hIdx];
       const numPrefix = autoRenumber ? `5.${hIdx + 1}` : h.originalCode;
       if (h.id === 's5_profile') {
         part5AChildren.push(
@@ -2602,7 +2649,8 @@ export async function generateProposalDocxBlob(data: ProposalData): Promise<{ bl
 
         // 2) รายละเอียดโครงการแต่ละโครงการตามตารางข้างต้น จัดวางเป็นเอกสารแนวตั้งปกติ (PORTRAIT)
         //    (ชื่อโครงการ -> โลโกหน่วยงาน ตรงกลางหน้า -> รายละเอียดโครงการ -> ภาพประกอบ)
-        torReferenceProjects.forEach((proj, idx) => {
+        for (let idx = 0; idx < torReferenceProjects.length; idx++) {
+          const proj = torReferenceProjects[idx];
           // (ก) ชื่อโครงการ
           part5C_torDetailsChildren.push(
             new Paragraph({
@@ -2671,7 +2719,16 @@ export async function generateProposalDocxBlob(data: ProposalData): Promise<{ bl
               ...renderImageBlocksToDocx(blocksToRender, `ภาพที่ 5-1.${idx + 1}`)
             );
           }
-        });
+
+          // (จ) ภาพสำเนาหนังสือรับรองผลงาน (ถ้ามี ให้แปลงเป็นรูปแล้วแปะต่อท้ายรายละเอียดโครงการนั้นๆ ทันที)
+          if (proj.certificateFileUrl) {
+            const certImageElements = await createCertificateImageParagraphs(
+              proj.certificateFileUrl,
+              proj.projectName
+            );
+            part5C_torDetailsChildren.push(...certImageElements);
+          }
+        }
       } else if (h.id === 's5_supplementary') {
         if (supplementaryProjects.length > 0) {
           // ตารางรายชื่อโครงการอื่นๆ จัดวางเป็นเอกสารแนวนอน (LANDSCAPE)
@@ -2726,7 +2783,8 @@ export async function generateProposalDocxBlob(data: ProposalData): Promise<{ bl
           );
 
           // 2) รายละเอียดโครงการแต่ละโครงการอื่นๆ จัดวางเป็นเอกสารแนวตั้งปกติ (PORTRAIT)
-          supplementaryProjects.forEach((proj, idx) => {
+          for (let idx = 0; idx < supplementaryProjects.length; idx++) {
+            const proj = supplementaryProjects[idx];
             // (ก) ชื่อโครงการ
             part5E_suppDetailsChildren.push(
               new Paragraph({
@@ -2796,7 +2854,16 @@ export async function generateProposalDocxBlob(data: ProposalData): Promise<{ bl
                 ...renderImageBlocksToDocx(blocksToRender, `ภาพที่ 5-2.${idx + 1}`)
               );
             }
-          });
+
+            // (จ) ภาพสำเนาหนังสือรับรองผลงาน (ถ้ามี ให้แปลงเป็นรูปแล้วแปะต่อท้ายรายละเอียดโครงการนั้นๆ ทันที)
+            if (proj.certificateFileUrl) {
+              const certImageElements = await createCertificateImageParagraphs(
+                proj.certificateFileUrl,
+                proj.projectName
+              );
+              part5E_suppDetailsChildren.push(...certImageElements);
+            }
+          }
         }
       } else if (h.id === 's5_appendix_certs') {
         const projectsWithCerts = torReferenceProjects.filter((p) => !!p.certificateFileUrl);
@@ -2920,7 +2987,7 @@ export async function generateProposalDocxBlob(data: ProposalData): Promise<{ bl
           });
         }
       }
-    });
+    }
   }
 
   // 1. หน้าปก A4 เต็มหน้า (แทรกก่อนหน้าหัวข้อโครงการ)

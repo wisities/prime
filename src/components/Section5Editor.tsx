@@ -28,7 +28,8 @@ import {
   saveMasterProjectsLibrary,
 } from '../services/masterLibraryService';
 import { syncMasterLibraryToGoogle, fetchMasterLibraryFromGoogleSheet } from '../services/googleSyncService';
-import { Building2, Plus, Trash2, Library, Filter, Calendar, AlertTriangle, CheckCircle, Upload, Image, FileText, Paperclip, FileCheck, BookmarkCheck, RotateCcw, ArrowUp, ArrowDown, ArrowUpDown, BookmarkPlus, Check, Database, Save, Download, List, Table as TableIcon, ChevronDown, ChevronUp, ChevronRight, ExternalLink, CloudUpload, Loader2 } from 'lucide-react';
+import { exportAppendixZip } from '../services/appendixZipService';
+import { Building2, Plus, Trash2, Library, Filter, Calendar, AlertTriangle, CheckCircle, Upload, Image, FileText, Paperclip, FileCheck, BookmarkCheck, RotateCcw, ArrowUp, ArrowDown, ArrowUpDown, BookmarkPlus, Check, Database, Save, Download, List, Table as TableIcon, ChevronDown, ChevronUp, ChevronRight, ExternalLink, CloudUpload, Loader2, FolderArchive } from 'lucide-react';
 
 /**
  * ฟังก์ชันจัดเรียงรายการผลงานโครงการตามเงื่อนไข:
@@ -253,6 +254,34 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
     } catch (err) {
       console.warn('Certificate file processing error:', err);
       alert('เกิดข้อผิดพลาดในการประมวลผลไฟล์เอกสาร');
+    }
+  };
+
+  const [isExportingAppendix, setIsExportingAppendix] = useState(false);
+
+  const handleQuickExportAppendixZip = async () => {
+    const selected = (section5.pastProjects || []).filter((p) => p.isSelected);
+    if (selected.length === 0) {
+      alert('กรุณาเลือกผลงานโครงการอย่างน้อย 1 รายการเพื่อส่งออกเอกสารภาคผนวก');
+      return;
+    }
+    const hasAnyDocs = selected.some((p) => !!p.certificateFileUrl || !!p.contractFileUrl);
+    if (!hasAnyDocs) {
+      alert('โครงการที่เลือกไว้ยังไม่มีการแนบสำเนาสัญญาจ้างหรือหนังสือรับรองผลงาน');
+      return;
+    }
+
+    try {
+      setIsExportingAppendix(true);
+      const res = await exportAppendixZip(selected, 'ภาคผนวก_สัญญาและหนังสือรับรองผลงาน');
+      if (!res.success && res.message) {
+        alert(res.message);
+      }
+    } catch (e) {
+      console.error(e);
+      alert('เกิดข้อผิดพลาดในการสร้างไฟล์ ZIP ภาคผนวก');
+    } finally {
+      setIsExportingAppendix(false);
     }
   };
 
@@ -483,6 +512,8 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
           contractYearBE: savedProject.contractYearBE,
           certificateFileUrl: savedProject.certificateFileUrl || p.certificateFileUrl,
           certificateFileName: savedProject.certificateFileName || p.certificateFileName,
+          contractFileUrl: savedProject.contractFileUrl || p.contractFileUrl,
+          contractFileName: savedProject.contractFileName || p.contractFileName,
         };
       }
       return p;
@@ -593,6 +624,9 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                 projectCode: syncedProj.projectCode || savedProject.projectCode,
                 contractYearBE: syncedProj.contractYearBE || savedProject.contractYearBE,
                 certificateFileUrl: syncedProj.certificateFileUrl || p.certificateFileUrl,
+                certificateFileName: syncedProj.certificateFileName || p.certificateFileName,
+                contractFileUrl: syncedProj.contractFileUrl || p.contractFileUrl,
+                contractFileName: syncedProj.contractFileName || p.contractFileName,
                 clientLogoUrl: syncedProj.clientLogoUrl || p.clientLogoUrl,
                 projectImageUrl: syncedProj.projectImageUrl || p.projectImageUrl,
                 imageBlocks: syncedProj.imageBlocks || p.imageBlocks,
@@ -646,6 +680,8 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
           contractYearBE: match.contractYearBE,
           certificateFileUrl: match.certificateFileUrl || p.certificateFileUrl,
           certificateFileName: match.certificateFileName || p.certificateFileName,
+          contractFileUrl: match.contractFileUrl || p.contractFileUrl,
+          contractFileName: match.contractFileName || p.contractFileName,
         };
       }
       return p;
@@ -1216,6 +1252,35 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                 title="ขยายรายละเอียดผลงานทั้งหมด"
               >
                 <ChevronDown size={13} /> ขยายทุกโครงการ
+              </button>
+              <button
+                type="button"
+                disabled={isExportingAppendix}
+                onClick={handleQuickExportAppendixZip}
+                className="btn btn-outline"
+                style={{
+                  fontSize: '0.78rem',
+                  padding: '0.3rem 0.65rem',
+                  backgroundColor: '#EFF6FF',
+                  color: '#1D4ED8',
+                  borderColor: '#BFDBFE',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontWeight: 600,
+                  cursor: isExportingAppendix ? 'not-allowed' : 'pointer',
+                }}
+                title="ส่งออกเอกสารสำเนาสัญญาและหนังสือรับรองผลงานเป็นไฟล์ ZIP แยกรายโครงการ"
+              >
+                {isExportingAppendix ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" /> กำลังสร้าง ZIP...
+                  </>
+                ) : (
+                  <>
+                    <FolderArchive size={13} /> 📦 ส่งออก ZIP ภาคผนวกผลงาน
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -1830,201 +1895,394 @@ export const Section5Editor: React.FC<Section5EditorProps> = ({ section5, onChan
                   /* 1. สำหรับผลงานอ้างอิงหลักตาม TOR: ต้องแทรกไฟล์สำเนาสัญญา หรือใบรับรองผลงาน ไว้ในภาคผนวก */
                   <div
                     style={{
-                      backgroundColor: '#EFF6FF',
-                      border: '1px solid #BFDBFE',
-                      borderRadius: '6px',
-                      padding: '0.85rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.75rem',
                       marginBottom: '0.75rem',
                     }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <FileCheck size={16} color="var(--primary-800)" />
-                        <span style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--primary-900)' }}>
-                          เอกสารสำเนาสัญญาจ้าง หรือหนังสือรับรองผลงาน (สำหรับแทรกในภาคผนวก ก)
+                    {/* 1. หนังสือรับรองผลงาน (Certificate of Completion) */}
+                    <div
+                      style={{
+                        backgroundColor: '#F0FDF4',
+                        border: '1.5px solid #BBF7D0',
+                        borderRadius: '8px',
+                        padding: '0.85rem',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <FileCheck size={16} color="#15803D" />
+                          <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#166534' }}>
+                            1. หนังสือรับรองผลงาน (Certificate of Completion)
+                          </span>
+                        </div>
+                        <span style={{ fontSize: '0.725rem', color: '#15803D', fontStyle: 'italic' }}>
+                          * แปลงเป็นรูปภาพแปะต่อท้ายรายละเอียดโครงการในเล่ม Word และวางไว้หน้าแรกใน ZIP ภาคผนวก
                         </span>
                       </div>
-                      <span style={{ fontSize: '0.75rem', color: '#1E40AF', fontStyle: 'italic' }}>
-                        * เอกสารนี้จะถูกนำไปจัดวางใน ภาคผนวก ก: สำเนาสัญญาและหนังสือรับรองผลงาน ท้ายเล่ม Word อัตโนมัติ
-                      </span>
+
+                      {p.certificateFileUrl ? (
+                        (() => {
+                          const isPdf =
+                            p.certificateFileUrl.startsWith('data:application/pdf') ||
+                            (p.certificateFileName || '').toLowerCase().endsWith('.pdf');
+
+                          const handleOpenDoc = () => {
+                            try {
+                              const pureBase64 = p.certificateFileUrl!.includes(',')
+                                ? p.certificateFileUrl!.split(',')[1]
+                                : p.certificateFileUrl!;
+                              const binary = atob(pureBase64);
+                              const bytes = new Uint8Array(binary.length);
+                              for (let i = 0; i < binary.length; i++) {
+                                bytes[i] = binary.charCodeAt(i);
+                              }
+                              const blob = new Blob([bytes], { type: isPdf ? 'application/pdf' : 'image/png' });
+                              const url = URL.createObjectURL(blob);
+                              window.open(url, '_blank');
+                            } catch {
+                              window.open(p.certificateFileUrl, '_blank');
+                            }
+                          };
+
+                          return (
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '1rem',
+                                backgroundColor: '#FFFFFF',
+                                padding: '0.65rem 0.85rem',
+                                borderRadius: '6px',
+                                border: '1px solid #86EFAC',
+                              }}
+                            >
+                              {isPdf ? (
+                                <div
+                                  style={{
+                                    height: '46px',
+                                    width: '40px',
+                                    backgroundColor: '#DCFCE7',
+                                    borderRadius: '4px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    border: '1px solid #BBF7D0',
+                                    color: '#166534',
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  <FileText size={18} />
+                                  <span style={{ fontSize: '0.58rem', fontWeight: 800, marginTop: '2px' }}>PDF</span>
+                                </div>
+                              ) : (
+                                <img
+                                  src={p.certificateFileUrl}
+                                  alt="Certificate"
+                                  style={{
+                                    height: '46px',
+                                    width: '40px',
+                                    objectFit: 'cover',
+                                    borderRadius: '3px',
+                                    border: '1px solid #CBD5E1',
+                                    flexShrink: 0,
+                                  }}
+                                />
+                              )}
+
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div
+                                  style={{
+                                    fontSize: '0.85rem',
+                                    fontWeight: 600,
+                                    color: '#14532D',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                  }}
+                                >
+                                  ✓ แนบหนังสือรับรองแล้ว: {p.certificateFileName || (isPdf ? 'หนังสือรับรองผลงาน (PDF)' : 'หนังสือรับรอง (รูปภาพ)')}
+                                </div>
+                                <div
+                                  style={{
+                                    fontSize: '0.73rem',
+                                    color: '#15803D',
+                                    marginTop: '2px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.65rem',
+                                    flexWrap: 'wrap',
+                                  }}
+                                >
+                                  <span>{isPdf ? 'ระบบจะแปลง PDF เป็นรูปแปะใน Word อัตโนมัติ' : 'ภาพหนังสือรับรองพร้อมพิมพ์ในเล่ม Word'}</span>
+                                  <button
+                                    type="button"
+                                    onClick={handleOpenDoc}
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      color: '#15803D',
+                                      cursor: 'pointer',
+                                      padding: 0,
+                                      textDecoration: 'underline',
+                                      fontSize: '0.75rem',
+                                      fontWeight: 600,
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '2px',
+                                    }}
+                                  >
+                                    <ExternalLink size={11} /> เปิดดูเอกสาร
+                                  </button>
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleProjectFieldsChange(p.id, {
+                                    certificateFileUrl: undefined,
+                                    certificateFileName: undefined,
+                                  });
+                                }}
+                                className="btn btn-outline"
+                                style={{
+                                  color: 'var(--danger)',
+                                  borderColor: 'var(--danger-bg)',
+                                  padding: '0.3rem 0.6rem',
+                                  fontSize: '0.75rem',
+                                  flexShrink: 0,
+                                }}
+                              >
+                                <Trash2 size={13} /> ลบ
+                              </button>
+                            </div>
+                          );
+                        })()
+                      ) : (
+                        <label
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '0.5rem',
+                            padding: '0.75rem',
+                            border: '1.5px dashed #16A34A',
+                            borderRadius: '6px',
+                            backgroundColor: '#FFFFFF',
+                            cursor: 'pointer',
+                            fontSize: '0.825rem',
+                            color: '#15803D',
+                            fontWeight: 600,
+                          }}
+                        >
+                          <input
+                            type="file"
+                            accept="image/*,.pdf,application/pdf"
+                            style={{ display: 'none' }}
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) {
+                                handleCertificateFileUpload(f, (b64, name) => {
+                                  handleProjectFieldsChange(p.id, {
+                                    certificateFileUrl: b64,
+                                    certificateFileName: name,
+                                  });
+                                });
+                                e.target.value = '';
+                              }
+                            }}
+                          />
+                          <Paperclip size={16} /> แนบไฟล์หนังสือรับรองผลงาน (Certificate PDF หรือ รูปภาพ)
+                        </label>
+                      )}
                     </div>
 
-                    {p.certificateFileUrl ? (
-                      (() => {
-                        const isPdf =
-                          p.certificateFileUrl.startsWith('data:application/pdf') ||
-                          (p.certificateFileName || '').toLowerCase().endsWith('.pdf');
+                    {/* 2. สำเนาสัญญาจ้าง หรือใบสั่งจ้าง (Contract / Purchase Order) */}
+                    <div
+                      style={{
+                        backgroundColor: '#EFF6FF',
+                        border: '1.5px solid #BFDBFE',
+                        borderRadius: '8px',
+                        padding: '0.85rem',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <FileText size={16} color="#1D4ED8" />
+                          <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1E40AF' }}>
+                            2. สำเนาสัญญาจ้าง หรือใบสั่งจ้าง (Contract / Purchase Order)
+                          </span>
+                        </div>
+                        <span style={{ fontSize: '0.725rem', color: '#1D4ED8', fontStyle: 'italic' }}>
+                          * สำเนาสัญญานี้จะถูกจัดรวมต่อท้ายหนังสือรับรองผลงานในไฟล์ PDF ประจำโครงการใน ZIP ภาคผนวก
+                        </span>
+                      </div>
 
-                        const handleOpenDoc = () => {
-                          try {
-                            const pureBase64 = p.certificateFileUrl!.includes(',')
-                              ? p.certificateFileUrl!.split(',')[1]
-                              : p.certificateFileUrl!;
-                            const binary = atob(pureBase64);
-                            const bytes = new Uint8Array(binary.length);
-                            for (let i = 0; i < binary.length; i++) {
-                              bytes[i] = binary.charCodeAt(i);
+                      {p.contractFileUrl ? (
+                        (() => {
+                          const isPdf =
+                            p.contractFileUrl.startsWith('data:application/pdf') ||
+                            (p.contractFileName || '').toLowerCase().endsWith('.pdf');
+
+                          const handleOpenContract = () => {
+                            try {
+                              const pureBase64 = p.contractFileUrl!.includes(',')
+                                ? p.contractFileUrl!.split(',')[1]
+                                : p.contractFileUrl!;
+                              const binary = atob(pureBase64);
+                              const bytes = new Uint8Array(binary.length);
+                              for (let i = 0; i < binary.length; i++) {
+                                bytes[i] = binary.charCodeAt(i);
+                              }
+                              const blob = new Blob([bytes], { type: isPdf ? 'application/pdf' : 'image/png' });
+                              const url = URL.createObjectURL(blob);
+                              window.open(url, '_blank');
+                            } catch {
+                              window.open(p.contractFileUrl, '_blank');
                             }
-                            const blob = new Blob([bytes], { type: isPdf ? 'application/pdf' : 'image/png' });
-                            const url = URL.createObjectURL(blob);
-                            window.open(url, '_blank');
-                          } catch {
-                            window.open(p.certificateFileUrl, '_blank');
-                          }
-                        };
+                          };
 
-                        return (
-                          <div
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '1rem',
-                              backgroundColor: '#FFFFFF',
-                              padding: '0.65rem 0.85rem',
-                              borderRadius: '6px',
-                              border: isPdf ? '1.5px solid #FCA5A5' : '1px solid #93C5FD',
-                            }}
-                          >
-                            {isPdf ? (
+                          return (
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '1rem',
+                                backgroundColor: '#FFFFFF',
+                                padding: '0.65rem 0.85rem',
+                                borderRadius: '6px',
+                                border: '1px solid #93C5FD',
+                              }}
+                            >
                               <div
                                 style={{
-                                  height: '52px',
-                                  width: '45px',
-                                  backgroundColor: '#FEE2E2',
+                                  height: '46px',
+                                  width: '40px',
+                                  backgroundColor: isPdf ? '#FEE2E2' : '#EFF6FF',
                                   borderRadius: '4px',
                                   display: 'flex',
                                   flexDirection: 'column',
                                   alignItems: 'center',
                                   justifyContent: 'center',
-                                  border: '1px solid #FECACA',
-                                  color: '#DC2626',
+                                  border: isPdf ? '1px solid #FECACA' : '1px solid #BFDBFE',
+                                  color: isPdf ? '#DC2626' : '#2563EB',
                                   flexShrink: 0,
                                 }}
                               >
-                                <FileText size={22} />
-                                <span style={{ fontSize: '0.6rem', fontWeight: 800, marginTop: '2px' }}>PDF</span>
+                                <FileText size={18} />
+                                <span style={{ fontSize: '0.58rem', fontWeight: 800, marginTop: '2px' }}>{isPdf ? 'PDF' : 'IMG'}</span>
                               </div>
-                            ) : (
-                              <img
-                                src={p.certificateFileUrl}
-                                alt="Certificate"
-                                style={{
-                                  height: '52px',
-                                  width: '45px',
-                                  objectFit: 'cover',
-                                  borderRadius: '3px',
-                                  border: '1px solid #CBD5E1',
-                                  flexShrink: 0,
-                                }}
-                              />
-                            )}
 
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div
-                                style={{
-                                  fontSize: '0.85rem',
-                                  fontWeight: 600,
-                                  color: 'var(--primary-900)',
-                                  whiteSpace: 'nowrap',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                }}
-                              >
-                                ✓ แนบไฟล์สำเร็จ: {p.certificateFileName || (isPdf ? 'สำเนาสัญญา/หนังสือรับรอง (PDF)' : 'สำเนาสัญญา (ภาพ)')}
-                              </div>
-                              <div
-                                style={{
-                                  fontSize: '0.75rem',
-                                  color: isPdf ? '#DC2626' : 'var(--slate-500)',
-                                  marginTop: '2px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '0.65rem',
-                                  flexWrap: 'wrap',
-                                }}
-                              >
-                                <span>{isPdf ? 'เอกสารรูปแบบ PDF พร้อมรวมในภาคผนวก ก' : 'ภาพสแกนพร้อมพิมพ์ในภาคผนวก ก'}</span>
-                                <button
-                                  type="button"
-                                  onClick={handleOpenDoc}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div
                                   style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    color: '#2563EB',
-                                    cursor: 'pointer',
-                                    padding: 0,
-                                    textDecoration: 'underline',
-                                    fontSize: '0.75rem',
+                                    fontSize: '0.85rem',
                                     fontWeight: 600,
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '2px',
+                                    color: '#1E3A8A',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
                                   }}
                                 >
-                                  <ExternalLink size={11} /> เปิดดูเอกสาร
-                                </button>
+                                  ✓ แนบสำเนาสัญญาแล้ว: {p.contractFileName || (isPdf ? 'สำเนาสัญญาจ้าง (PDF)' : 'สำเนาสัญญาจ้าง (รูปภาพ)')}
+                                </div>
+                                <div
+                                  style={{
+                                    fontSize: '0.73rem',
+                                    color: '#2563EB',
+                                    marginTop: '2px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.65rem',
+                                    flexWrap: 'wrap',
+                                  }}
+                                >
+                                  <span>เอกสารสัญญาพร้อมรวมในไฟล์ PDF ประจำโครงการใน ZIP ภาคผนวก</span>
+                                  <button
+                                    type="button"
+                                    onClick={handleOpenContract}
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      color: '#2563EB',
+                                      cursor: 'pointer',
+                                      padding: 0,
+                                      textDecoration: 'underline',
+                                      fontSize: '0.75rem',
+                                      fontWeight: 600,
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '2px',
+                                    }}
+                                  >
+                                    <ExternalLink size={11} /> เปิดดูเอกสาร
+                                  </button>
+                                </div>
                               </div>
-                            </div>
 
-                            <button
-                              type="button"
-                              onClick={() => {
-                                handleProjectFieldsChange(p.id, {
-                                  certificateFileUrl: undefined,
-                                  certificateFileName: undefined,
-                                });
-                              }}
-                              className="btn btn-outline"
-                              style={{
-                                color: 'var(--danger)',
-                                borderColor: 'var(--danger-bg)',
-                                padding: '0.3rem 0.6rem',
-                                fontSize: '0.75rem',
-                                flexShrink: 0,
-                              }}
-                            >
-                              <Trash2 size={13} /> ลบเอกสาร
-                            </button>
-                          </div>
-                        );
-                      })()
-                    ) : (
-                      <label
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '0.5rem',
-                          padding: '0.85rem',
-                          border: '1.5px dashed #3B82F6',
-                          borderRadius: '6px',
-                          backgroundColor: '#FFFFFF',
-                          cursor: 'pointer',
-                          fontSize: '0.825rem',
-                          color: '#1D4ED8',
-                          fontWeight: 500,
-                        }}
-                      >
-                        <input
-                          type="file"
-                          accept="image/*,.pdf,application/pdf"
-                          style={{ display: 'none' }}
-                          onChange={(e) => {
-                            const f = e.target.files?.[0];
-                            if (f) {
-                              handleCertificateFileUpload(f, (b64, name) => {
-                                handleProjectFieldsChange(p.id, {
-                                  certificateFileUrl: b64,
-                                  certificateFileName: name,
-                                });
-                              });
-                              e.target.value = '';
-                            }
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleProjectFieldsChange(p.id, {
+                                    contractFileUrl: undefined,
+                                    contractFileName: undefined,
+                                  });
+                                }}
+                                className="btn btn-outline"
+                                style={{
+                                  color: 'var(--danger)',
+                                  borderColor: 'var(--danger-bg)',
+                                  padding: '0.3rem 0.6rem',
+                                  fontSize: '0.75rem',
+                                  flexShrink: 0,
+                                }}
+                              >
+                                <Trash2 size={13} /> ลบ
+                              </button>
+                            </div>
+                          );
+                        })()
+                      ) : (
+                        <label
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '0.5rem',
+                            padding: '0.75rem',
+                            border: '1.5px dashed #3B82F6',
+                            borderRadius: '6px',
+                            backgroundColor: '#FFFFFF',
+                            cursor: 'pointer',
+                            fontSize: '0.825rem',
+                            color: '#1D4ED8',
+                            fontWeight: 600,
                           }}
-                        />
-                        <Paperclip size={16} /> แนบไฟล์สำเนาสัญญาจ้าง หรือหนังสือรับรองผลงาน (รองรับทั้งไฟล์ PDF และรูปภาพ)
-                      </label>
-                    )}
+                        >
+                          <input
+                            type="file"
+                            accept="image/*,.pdf,application/pdf"
+                            style={{ display: 'none' }}
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) {
+                                handleCertificateFileUpload(f, (b64, name) => {
+                                  handleProjectFieldsChange(p.id, {
+                                    contractFileUrl: b64,
+                                    contractFileName: name,
+                                  });
+                                });
+                                e.target.value = '';
+                              }
+                            }}
+                          />
+                          <Paperclip size={16} /> แนบไฟล์สำเนาสัญญาจ้าง หรือใบสั่งจ้าง (PDF หรือ รูปภาพ)
+                        </label>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   /* 2. สำหรับโครงการอื่นๆ: มีช่องให้เขียนโน้ตกำกับกิจกรรมใดที่สอดคล้อง ไม่จำเป็นต้องแนบสำเนาสัญญา */

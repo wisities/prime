@@ -176,8 +176,10 @@ export interface PastProject {
   isSelected: boolean;
   projectType?: ProjectTrackType; // 'tor_reference' (ผลงานอ้างอิงหลักตาม TOR) หรือ 'supplementary' (โครงการอื่นๆ ที่เกี่ยวข้อง)
   relevanceNote?: string; // โน้ตกำกับกิจกรรมใดที่สอดคล้องกับงานจ้างโครงการนี้ (สำหรับโครงการอื่นๆ)
-  certificateFileUrl?: string; // ภาพสำเนาสัญญาจ้าง หรือใบรับรองผลงาน (สำหรับแทรกในภาคผนวก)
+  certificateFileUrl?: string; // ภาพหรือ PDF หนังสือรับรองผลงาน (Certificate of Completion)
   certificateFileName?: string;
+  contractFileUrl?: string; // สำเนาสัญญาจ้าง หรือใบสั่งจ้าง (Contract / Purchase Order)
+  contractFileName?: string;
   projectImageUrl?: string; // ภาพประกอบผลงาน / หน้าจอระบบ (legacy)
   projectImageCaption?: string;
   imageBlocks?: ReportImageBlock[]; // ภาพประกอบผลงาน/หน้าจอระบบ (ไม่จำกัดจำนวน: รองรับภาพคู่ 3 นิ้ว 2 คอลัมน์ และภาพเดี่ยว 6 นิ้ว)
